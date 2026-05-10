@@ -9,10 +9,10 @@ declare(strict_types=1);
 
 const UPLOAD_BUCKETS = [
     'events'       => ['max' => 5_000_000, 'mimes' => ['image/jpeg','image/png','image/webp']],
-    'content'      => ['max' => 50_000_000,'mimes' => ['audio/mpeg','audio/mp4','audio/wav','audio/x-wav','audio/ogg','image/jpeg','image/png','image/webp']],
+    'content'      => ['max' => 16_000_000,'mimes' => ['audio/mpeg','audio/mp4','audio/wav','audio/x-wav','audio/ogg','image/jpeg','image/png','image/webp']],
     'testimonials' => ['max' => 3_000_000, 'mimes' => ['image/jpeg','image/png','image/webp']],
     'avatars'      => ['max' => 2_000_000, 'mimes' => ['image/jpeg','image/png','image/webp']],
-    'home'         => ['max' => 25_000_000,'mimes' => ['image/jpeg','image/png','image/webp','audio/mpeg','audio/mp4','audio/wav','audio/x-wav','audio/ogg']],
+    'home'         => ['max' => 8_000_000, 'mimes' => ['image/jpeg','image/png','image/webp','audio/mpeg','audio/mp4','audio/wav','audio/x-wav','audio/ogg']],
 ];
 
 function handle_upload(string $field, string $bucket): ?string

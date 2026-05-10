@@ -14,10 +14,13 @@ DirectoryIndex index.php
 RedirectMatch 403 ^/?(config|includes|logs|database)(/|$)
 RedirectMatch 403 ^/?\.env
 
-# Force HTTPS when behind a reverse proxy.
-<IfModule mod_rewrite.c>
-    RewriteEngine On
-    RewriteCond %{HTTPS} !=on
-    RewriteCond %{HTTP:X-Forwarded-Proto} !https
-    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-</IfModule>
+# Force HTTPS at the Apache layer.
+# Disabled on Hostinger because nginx already terminates SSL — leaving this
+# active turned POST submissions on /admin/* into 301s, which nginx then
+# served as 405 Method Not Allowed. Re-enable only for non-Hostinger Apache.
+#<IfModule mod_rewrite.c>
+#    RewriteEngine On
+#    RewriteCond %{HTTPS} !=on
+#    RewriteCond %{HTTP:X-Forwarded-Proto} !https
+#    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+#</IfModule>

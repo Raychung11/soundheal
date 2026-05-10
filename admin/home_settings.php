@@ -36,9 +36,9 @@ if (is_post()) {
 
     // File uploads → /uploads/home/...
     foreach ([
-        ['hero_image_file', 'hero_image_path'],
-        ['hero_audio_file', 'hero_audio_path'],
-        ['trial_audio_file','trial_audio_path'],
+        ['hero_image_path_file', 'hero_image_path'],
+        ['hero_audio_path_file', 'hero_audio_path'],
+        ['trial_audio_path_file','trial_audio_path'],
     ] as [$field, $settingKey]) {
         try {
             $uploaded = handle_upload($field, 'home');
@@ -126,7 +126,7 @@ function media_block(string $key, string $label, string $accept, string $type = 
   <p class="mt-3 text-red-300/80 text-sm"><?= e($err) ?></p>
 <?php endforeach; ?>
 
-<form method="post" enctype="multipart/form-data" class="mt-8 space-y-10 max-w-4xl">
+<form method="post" enctype="multipart/form-data" action="<?= url('/admin/home_settings.php') ?>" class="mt-8 space-y-10 max-w-4xl">
   <?= csrf_field() ?>
 
   <section class="border border-white/5 rounded-3xl p-6 bg-navy-900/40 space-y-5">
