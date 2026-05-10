@@ -138,7 +138,9 @@ require __DIR__ . '/../includes/header.php';
         <div class="absolute inset-0 opacity-30 pointer-events-none">
           <?php $featuredCover = $featured['cover_image'] ? media_src((string) $featured['cover_image']) : ''; ?>
           <?php if ($featuredCover): ?>
-            <img src="<?= e($featuredCover) ?>" alt="" class="w-full h-full object-cover">
+            <img src="<?= e($featuredCover) ?>" alt=""
+                 onerror="this.style.display='none'"
+                 class="w-full h-full object-cover">
           <?php else: ?>
             <div class="w-full h-full bg-gradient-to-br from-gold-500/30 via-navy-800 to-navy-950"></div>
           <?php endif; ?>
@@ -193,7 +195,9 @@ require __DIR__ . '/../includes/header.php';
             <div class="relative h-14 w-14 rounded-xl overflow-hidden bg-gradient-to-br from-navy-800 to-navy-950 flex-shrink-0 flex items-center justify-center border border-white/5">
               <?php $rc = $r['cover_image'] ? media_src((string) $r['cover_image']) : ''; ?>
               <?php if ($rc): ?>
-                <img src="<?= e($rc) ?>" alt="" class="w-full h-full object-cover">
+                <img src="<?= e($rc) ?>" alt=""
+                     onerror="this.outerHTML='<span class=\'text-gold-400/40 font-serif text-xl\'>◯</span>'"
+                     class="w-full h-full object-cover">
               <?php else: ?>
                 <span class="text-gold-400/40 font-serif text-xl">◯</span>
               <?php endif; ?>
@@ -245,7 +249,9 @@ require __DIR__ . '/../includes/header.php';
         <article class="group rounded-3xl border border-white/5 bg-navy-900/40 hover:border-gold-500/30 transition overflow-hidden flex flex-col">
           <div class="relative aspect-[4/3] bg-gradient-to-br from-navy-800 to-navy-950 overflow-hidden">
             <template x-if="track.cover">
-              <img :src="track.cover" alt="" class="w-full h-full object-cover transition group-hover:scale-105">
+              <img :src="track.cover" alt=""
+                   @error="track.cover = ''"
+                   class="w-full h-full object-cover transition group-hover:scale-105">
             </template>
             <template x-if="!track.cover">
               <div class="w-full h-full flex items-center justify-center">
