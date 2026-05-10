@@ -86,7 +86,7 @@ UPDATE site_settings SET `value` = (SELECT file_path FROM wellness_content WHERE
 -- Seed three calm testimonials so the home page feels populated.
 INSERT INTO testimonials (author_name, author_title, quote, rating, is_published, sort_order)
 SELECT * FROM (
-  SELECT 'Aisha R.'   AS author_name, 'Founder, Studio Lila'        AS author_title, 'I came in tense and left feeling like I'd had a long swim. The container is special.'                              AS quote, 5 AS rating, 1 AS is_published, 1 AS sort_order UNION ALL
+  SELECT 'Aisha R.'   AS author_name, 'Founder, Studio Lila'        AS author_title, 'I came in tense and left feeling like I''d had a long swim. The container is special.'                             AS quote, 5 AS rating, 1 AS is_published, 1 AS sort_order UNION ALL
   SELECT 'Daniel T.', 'Software engineer',                                          'It''s the only hour of the week my mind genuinely quiets. Worth the membership on its own.',                              5, 1, 2 UNION ALL
   SELECT 'Mei L.',    'New mother',                                                  'A soft, held space. I cried twice and slept eleven hours that night. Thank you.',                                          5, 1, 3
 ) AS seed
