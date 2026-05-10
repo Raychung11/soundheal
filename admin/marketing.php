@@ -76,6 +76,21 @@ $revenue = (float) $safeFetch(
     0.0
 );
 
+$referralSignups = (int) $safeFetch(
+    "SELECT COUNT(*) FROM referrals WHERE signed_up_at >= NOW() - INTERVAL :r DAY",
+    [':r' => $range]
+);
+$topReferrers = $safeRows(
+    "SELECT u.id, u.full_name, u.email, COUNT(r.id) AS total
+       FROM referrals r
+       JOIN users u ON u.id = r.referrer_user_id
+      WHERE r.signed_up_at >= NOW() - INTERVAL :r DAY
+      GROUP BY u.id
+      ORDER BY total DESC
+      LIMIT 8",
+    [':r' => $range]
+);
+
 // Funnel rates
 $signupRate  = $visitors > 0 ? ($registrations / $visitors) * 100 : 0;
 $bookingRate = $registrations > 0 ? ($paidBookings / $registrations) * 100 : 0;
@@ -181,6 +196,7 @@ foreach ($daily as $d) { $maxViews = max($maxViews, (int)$d['views']); }
     ['Revenue',        format_money($revenue)],
     ['Visitor → sign-up', number_format($signupRate, 1) . '%'],
     ['Sign-up → booking', number_format($bookingRate, 1) . '%'],
+    ['Referral sign-ups', number_format($referralSignups)],
   ];
   foreach ($kpis as $k): ?>
     <div class="border border-white/5 rounded-2xl p-5 bg-navy-900/40">
@@ -320,6 +336,29 @@ foreach ($daily as $d) { $maxViews = max($maxViews, (int)$d['views']); }
             </td>
             <td class="text-beige-100/70"><?= e($l['email']) ?></td>
             <td class="text-beige-100/55"><?= e($l['topic'] ?? '—') ?></td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  <?php endif; ?>
+</div>
+
+<!-- Top referring members -->
+<div class="mt-6 border border-white/5 rounded-3xl bg-navy-900/40 p-6">
+  <h2 class="font-serif text-xl text-gold-400">Top referring members</h2>
+  <?php if (!$topReferrers): ?>
+    <p class="text-sm text-beige-100/60 mt-3">No referral sign-ups in this window.</p>
+  <?php else: ?>
+    <table class="mt-4 w-full text-sm">
+      <thead class="text-left text-beige-100/50 text-xs uppercase tracking-wider">
+        <tr><th class="py-2">Member</th><th>Email</th><th class="text-right">Friends joined</th></tr>
+      </thead>
+      <tbody class="divide-y divide-white/5">
+        <?php foreach ($topReferrers as $tr): ?>
+          <tr>
+            <td class="py-2 text-beige-100/85"><?= e($tr['full_name']) ?></td>
+            <td class="text-beige-100/65"><?= e($tr['email']) ?></td>
+            <td class="text-right font-serif text-gold-400"><?= number_format((int)$tr['total']) ?></td>
           </tr>
         <?php endforeach; ?>
       </tbody>

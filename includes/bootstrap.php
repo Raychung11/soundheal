@@ -44,3 +44,4 @@ require_once __DIR__ . '/upload.php';
 require_once __DIR__ . '/throttle.php';
 require_once __DIR__ . '/site_settings.php';
 require_once __DIR__ . '/marketing.php';
+require_once __DIR__ . '/referrals.php';

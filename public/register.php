@@ -1,9 +1,21 @@
 <?php
 require_once __DIR__ . '/../includes/bootstrap.php';
 
-$isTrial   = !empty(input('trial')) && (bool) setting('trial_enabled', true);
+// If the visitor arrived via /public/register.php?ref=ABCD12, store it.
+capture_referral_cookie();
+
+$refCode    = get_referral_cookie();
+$refUserId  = referrer_id_for_code($refCode);
+$refName    = '';
+if ($refUserId) {
+    $stmt = db()->prepare('SELECT full_name FROM users WHERE id = :id');
+    $stmt->execute([':id' => $refUserId]);
+    $refName = (string) ($stmt->fetchColumn() ?: '');
+}
+
+$isTrial   = (!empty(input('trial')) || $refUserId) && (bool) setting('trial_enabled', true);
 $trialDays = (int) setting('trial_duration_days', 7);
-$pageTitle = $isTrial ? 'Begin your free trial' : 'Begin your journey';
+$pageTitle = $refUserId ? 'A friend has invited you' : ($isTrial ? 'Begin your free trial' : 'Begin your journey');
 $errors = [];
 
 if (is_post()) {
@@ -36,6 +48,9 @@ if (is_post()) {
     if (!$errors) {
         $userId = register_user($name, $email, $pass, $phone ?: null, $isTrial ? $trialDays : null);
 
+        // Credit a referrer if the new user arrived via a share link.
+        apply_referral_on_signup($userId, $refCode);
+
         // Issue an email verification token (one-time, 7-day window).
         $verifyToken = generate_token(32);
         db()->prepare(
@@ -65,7 +80,18 @@ if (is_post()) {
 require __DIR__ . '/../includes/header.php';
 ?>
 <section class="max-w-md mx-auto px-6 py-24">
-  <?php if ($isTrial): ?>
+  <?php if ($refUserId && $refName !== ''): ?>
+    <div class="mb-8 border border-gold-500/30 rounded-3xl p-5 bg-navy-900/40 text-center">
+      <p class="text-[11px] uppercase tracking-[0.3em] text-gold-400/80">A quiet invitation</p>
+      <p class="mt-2 font-serif text-xl text-beige-100"><?= e(explode(' ', $refName)[0] ?? 'A friend') ?> invited you to SoundHeal.</p>
+      <p class="text-xs text-beige-100/60 mt-2">You'll both receive an extra <?= (int) setting('referral_signup_trial_days', 7) ?> days of trial access when you sign up.</p>
+    </div>
+  <?php endif; ?>
+
+  <?php if ($refUserId): ?>
+    <p class="text-gold-400/80 tracking-[0.3em] uppercase text-xs text-center">Friend's invite · trial included</p>
+    <h1 class="font-serif text-4xl text-beige-100 mt-4 text-center">Welcome, gently</h1>
+  <?php elseif ($isTrial): ?>
     <p class="text-gold-400/80 tracking-[0.3em] uppercase text-xs text-center">Free trial · <?= (int) $trialDays ?> days</p>
     <h1 class="font-serif text-4xl text-beige-100 mt-4 text-center">A gentle first step</h1>
     <p class="mt-3 text-center text-beige-100/60 text-sm">No payment required. Your trial begins the moment you sign up.</p>

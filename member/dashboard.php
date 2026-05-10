@@ -90,6 +90,14 @@ $firstName = trim(explode(' ', $user['full_name'])[0]);
       <p class="font-serif text-2xl text-beige-100 mt-3">Talk with Aria</p>
       <p class="text-sm text-beige-100/60 mt-1">Your calm wellness concierge</p>
     </a>
+    <a href="<?= url('/member/refer.php') ?>" class="sm:col-span-2 lg:col-span-3 border border-gold-500/30 rounded-3xl p-6 bg-navy-900/60 hover:bg-navy-900/80 transition flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <p class="text-xs uppercase tracking-widest text-gold-400/80">Refer a friend</p>
+        <p class="font-serif text-2xl text-beige-100 mt-2">Share the sanctuary</p>
+        <p class="text-sm text-beige-100/60 mt-1">You and your friend each receive an extra <?= (int) setting('referral_signup_trial_days', 7) ?> days of trial when they sign up.</p>
+      </div>
+      <span class="text-gold-400 text-sm">Get my link →</span>
+    </a>
   </div>
 
   <div class="mt-16 grid md:grid-cols-2 gap-8">
