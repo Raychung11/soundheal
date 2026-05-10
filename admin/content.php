@@ -16,6 +16,8 @@ if (is_post()) {
                 flash('content', $e->getMessage(), 'error');
                 redirect('/admin/content.php');
             }
+            // External cover URL falls back when no file was uploaded.
+            $coverUrl = trim((string) input('cover_url', ''));
             $stmt = db()->prepare(
                 "INSERT INTO wellness_content (slug, title, description, type, file_path, cover_image, duration_seconds, access, is_published)
                  VALUES (:slug, :title, :desc, :type, :file, :cover, :dur, :access, :pub)"
@@ -26,7 +28,7 @@ if (is_post()) {
                 ':desc' => trim((string) input('description', '')),
                 ':type' => input('type', 'audio'),
                 ':file' => $audioPath ?: trim((string) input('file_path', '')),
-                ':cover'=> $coverPath ?: null,
+                ':cover'=> $coverPath ?: ($coverUrl !== '' ? $coverUrl : null),
                 ':dur'  => max(0, (int) input('duration_seconds', 0)),
                 ':access' => input('access', 'member'),
                 ':pub'  => input('is_published') ? 1 : 0,
@@ -59,7 +61,15 @@ if (is_post()) {
                 $title = trim((string) input('title', $row['title']));
                 $extUrl = trim((string) input('file_path', ''));
                 $newFilePath = $audioPath ?: ($extUrl !== '' ? $extUrl : $row['file_path']);
-                $newCover    = $coverPath ?: $row['cover_image'];
+
+                // Cover: uploaded file > pasted URL > unchanged.
+                $coverUrl = trim((string) input('cover_url', ''));
+                $newCover = $coverPath
+                    ?: ($coverUrl !== '' ? $coverUrl : $row['cover_image']);
+                // If swapping to a URL, drop the old uploaded file.
+                if (!$coverPath && $coverUrl !== '' && str_starts_with((string) ($row['cover_image'] ?? ''), '/uploads/')) {
+                    delete_upload($row['cover_image']);
+                }
 
                 $stmt = db()->prepare(
                     "UPDATE wellness_content SET
@@ -123,10 +133,18 @@ require __DIR__ . '/../includes/admin_layout.php';
     Audio file
     <input type="file" name="audio_file" accept="audio/*" class="mt-1 w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-gold-500/20 file:text-gold-400 hover:file:bg-gold-500/30">
   </label>
-  <label class="text-sm text-beige-100/70 sm:col-span-2">
-    Cover image (optional)
-    <input type="file" name="cover_file" accept="image/*" class="mt-1 w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-gold-500/20 file:text-gold-400 hover:file:bg-gold-500/30">
-  </label>
+  <div class="sm:col-span-2 grid sm:grid-cols-[1fr_auto_1fr] gap-3 items-center">
+    <label class="text-sm text-beige-100/70">
+      Cover image (upload)
+      <input type="file" name="cover_file" accept="image/*" class="mt-1 w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-gold-500/20 file:text-gold-400 hover:file:bg-gold-500/30">
+    </label>
+    <span class="text-[11px] text-beige-100/40 uppercase tracking-widest text-center">or</span>
+    <label class="text-sm text-beige-100/70">
+      Paste image URL
+      <input type="url" name="cover_url" placeholder="https://images.unsplash.com/…" class="mt-1 w-full rounded-full bg-navy-950 border border-white/5 px-4 py-2 text-sm">
+    </label>
+  </div>
+  <p class="sm:col-span-2 text-[11px] text-beige-100/40 -mt-2">Recommended: 1200 × 900 px (4:3), JPEG or WebP, under ~500 KB.</p>
   <input name="file_path" placeholder="…or paste an external URL" class="sm:col-span-2 rounded-full bg-navy-950 border border-white/5 px-4 py-2">
   <input name="duration_seconds" type="number" min="0" placeholder="Duration (seconds)" class="rounded-full bg-navy-950 border border-white/5 px-4 py-2">
   <select name="access" class="rounded-full bg-navy-950 border border-white/5 px-4 py-2">
@@ -236,6 +254,8 @@ require __DIR__ . '/../includes/admin_layout.php';
                 <img src="<?= e($cs) ?>" class="mt-2 h-24 w-auto rounded-xl object-cover border border-white/10" alt="">
               <?php endif; ?>
               <input type="file" name="cover_file" accept="image/*" class="mt-2 w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-gold-500/20 file:text-gold-400 hover:file:bg-gold-500/30">
+              <input type="url" name="cover_url" placeholder="…or paste an image URL" class="mt-2 w-full rounded-full bg-navy-900 border border-white/5 px-4 py-2 text-sm">
+              <p class="text-[11px] text-beige-100/40 mt-1">Recommended: 1200 × 900 px (4:3), JPEG/WebP, under ~500 KB.</p>
             </div>
           </div>
 
