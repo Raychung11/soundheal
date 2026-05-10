@@ -1,44 +1,147 @@
 <?php
 require_once __DIR__ . '/../includes/bootstrap.php';
 $pageTitle = 'About';
+
+$heroEyebrow  = (string) setting('about_hero_eyebrow', 'Our story');
+$heroHeadline = (string) setting('about_hero_headline', 'A sanctuary built on listening.');
+$heroImage    = media_src((string) setting('about_hero_image_path', ''));
+
+$storyParas = (string) setting('about_story_paragraphs',
+    "SoundHeal began as a quiet practice between friends.\n\nToday we hold space for a wider community.\n\nWe are a sanctuary."
+);
+$storyParagraphs = array_values(array_filter(array_map('trim', preg_split('/\n\s*\n/', $storyParas))));
+$storyImage      = media_src((string) setting('about_story_image_path', ''));
+
+$principles = [];
+for ($i = 1; $i <= 3; $i++) {
+    $principles[] = [
+        'label' => (string) setting("about_principle_{$i}_label", ''),
+        'body'  => (string) setting("about_principle_{$i}_body", ''),
+        'image' => media_src((string) setting("about_principle_{$i}_image_path", '')),
+    ];
+}
+
+$closingImage    = media_src((string) setting('about_closing_image_path', ''));
+$closingEyebrow  = (string) setting('about_closing_eyebrow', 'Quietly, with care');
+$closingHeadline = (string) setting('about_closing_headline', 'Founded in Kuala Lumpur, 2024');
+$closingBody     = (string) setting('about_closing_body', '');
+
 require __DIR__ . '/../includes/header.php';
 ?>
+
+<!-- Hero -->
 <section class="relative overflow-hidden">
-  <div class="absolute inset-0 bg-gradient-to-b from-navy-950 to-transparent"></div>
-  <div class="relative max-w-3xl mx-auto px-6 py-24 md:py-32">
-    <p class="text-gold-400/80 tracking-[0.4em] uppercase text-[11px]">Our story</p>
-    <h1 class="font-serif text-5xl md:text-6xl text-beige-100 mt-6 leading-[1.05]">A sanctuary built on<br><span class="italic text-gold-400">listening</span>.</h1>
+  <?php if ($heroImage): ?>
+    <div class="absolute inset-0">
+      <img src="<?= e($heroImage) ?>" alt="" loading="eager"
+           onerror="this.style.display='none'"
+           class="w-full h-full object-cover opacity-55 scale-105" data-parallax>
+      <div class="absolute inset-0 bg-gradient-to-b from-navy-950/80 via-navy-950/55 to-navy-950"></div>
+    </div>
+  <?php else: ?>
+    <div class="absolute inset-0 bg-gradient-to-b from-navy-950 via-navy-900 to-navy-950"></div>
+  <?php endif; ?>
+
+  <div class="relative max-w-3xl mx-auto px-6 py-32 md:py-44">
+    <p class="text-gold-400/80 tracking-[0.4em] uppercase text-[11px]"><?= e($heroEyebrow) ?></p>
+    <h1 class="font-serif text-5xl md:text-7xl text-beige-100 mt-6 leading-[1.05]"><?= nl2br(e($heroHeadline)) ?></h1>
   </div>
 </section>
 
-<section class="max-w-3xl mx-auto px-6 pb-16">
-  <div class="space-y-7 text-beige-100/80 leading-[1.95] font-light text-lg">
-    <p><?= e(config('app.name')) ?> began as a quiet practice between friends — gathering once a week with bowls and breath, holding space for the noise of the city to settle.</p>
-    <p>Today we carry that same intention into a wider community: in-person sessions, a curated audio library, and an AI concierge designed to soften the path back to yourself.</p>
-    <p>We are not a clinic. We are not a fad. We are a sanctuary — small enough to know your name, intentional enough to honour your stillness.</p>
+<!-- Story (text + portrait image) -->
+<section class="max-w-6xl mx-auto px-6 py-20 md:py-28">
+  <div class="grid md:grid-cols-2 gap-12 lg:gap-16 items-center">
+    <div class="space-y-6 text-beige-100/80 leading-[1.95] font-light text-lg order-2 md:order-1">
+      <?php foreach ($storyParagraphs as $para): ?>
+        <p><?= nl2br(e($para)) ?></p>
+      <?php endforeach; ?>
+    </div>
+    <div class="order-1 md:order-2">
+      <?php if ($storyImage): ?>
+        <div class="relative">
+          <div class="absolute -inset-4 rounded-[2rem] border border-gold-500/15 pointer-events-none"></div>
+          <img src="<?= e($storyImage) ?>" alt=""
+               onerror="this.parentElement.style.display='none'"
+               loading="lazy"
+               class="rounded-[1.75rem] border border-white/5 w-full aspect-[4/5] object-cover">
+        </div>
+      <?php else: ?>
+        <div class="rounded-[1.75rem] border border-white/5 w-full aspect-[4/5] bg-gradient-to-br from-gold-500/15 via-navy-800 to-navy-950 flex items-center justify-center">
+          <span class="font-serif text-6xl text-gold-400/30">◯</span>
+        </div>
+      <?php endif; ?>
+    </div>
   </div>
 </section>
 
-<section class="border-t border-white/5 bg-navy-900/30">
-  <div class="max-w-5xl mx-auto px-6 py-20 grid md:grid-cols-3 gap-12">
-    <?php foreach ([
-      ['Listen', 'We begin every session by listening — to your breath, your body, the room.'],
-      ['Hold',   'Held space is the work. The container is more important than the technique.'],
-      ['Return', 'Wellness is not a destination. We help you return to yourself, gently, often.'],
-    ] as [$h, $b]): ?>
-      <div>
-        <p class="text-[11px] uppercase tracking-[0.3em] text-gold-400/60">Principle</p>
-        <h3 class="font-serif text-3xl text-gold-400 mt-2"><?= e($h) ?></h3>
-        <p class="mt-4 text-beige-100/70 leading-relaxed"><?= e($b) ?></p>
-      </div>
-    <?php endforeach; ?>
+<!-- Principles with imagery -->
+<section class="border-t border-white/5 bg-navy-900/40">
+  <div class="max-w-6xl mx-auto px-6 py-20">
+    <p class="text-gold-400/80 tracking-[0.3em] uppercase text-[11px] text-center">How we hold space</p>
+    <h2 class="font-serif text-4xl md:text-5xl text-beige-100 mt-3 text-center">Three quiet principles</h2>
+
+    <div class="mt-14 grid md:grid-cols-3 gap-6">
+      <?php foreach ($principles as $i => $p):
+        if ($p['label'] === '' && $p['body'] === '') continue;
+      ?>
+        <article class="group rounded-3xl border border-white/5 bg-navy-950/40 overflow-hidden hover:border-gold-500/30 transition flex flex-col">
+          <div class="relative aspect-[4/3] bg-gradient-to-br from-navy-800 to-navy-950 overflow-hidden">
+            <?php if ($p['image']): ?>
+              <img src="<?= e($p['image']) ?>" alt="<?= e($p['label']) ?>"
+                   onerror="this.style.display='none'"
+                   loading="lazy"
+                   class="absolute inset-0 w-full h-full object-cover transition duration-700 group-hover:scale-[1.04]">
+              <div class="absolute inset-0 bg-gradient-to-t from-navy-950/80 to-transparent"></div>
+            <?php else: ?>
+              <div class="absolute inset-0 flex items-center justify-center">
+                <span class="font-serif text-5xl text-gold-400/30">◯</span>
+              </div>
+            <?php endif; ?>
+            <span class="absolute top-4 left-4 text-[10px] uppercase tracking-[0.4em] text-gold-400/80">Principle 0<?= $i + 1 ?></span>
+          </div>
+          <div class="p-7">
+            <h3 class="font-serif text-3xl text-gold-400"><?= e($p['label']) ?></h3>
+            <p class="mt-4 text-beige-100/70 leading-relaxed text-sm"><?= nl2br(e($p['body'])) ?></p>
+          </div>
+        </article>
+      <?php endforeach; ?>
+    </div>
   </div>
 </section>
 
-<section class="max-w-3xl mx-auto px-6 py-24 text-center">
-  <p class="text-gold-400/80 tracking-[0.3em] uppercase text-[11px]">Quietly, with care</p>
-  <h2 class="font-serif text-4xl text-beige-100 mt-4">Founded in Kuala Lumpur, 2024</h2>
-  <p class="mt-6 text-beige-100/70 leading-relaxed">By a small circle of practitioners and operators who believe wellness should be calm, premium, and within reach.</p>
+<!-- Closing -->
+<section class="relative overflow-hidden border-t border-white/5">
+  <?php if ($closingImage): ?>
+    <div class="absolute inset-0">
+      <img src="<?= e($closingImage) ?>" alt=""
+           onerror="this.style.display='none'"
+           loading="lazy"
+           class="w-full h-full object-cover opacity-40">
+      <div class="absolute inset-0 bg-gradient-to-b from-navy-950/85 via-navy-950/70 to-navy-950"></div>
+    </div>
+  <?php endif; ?>
+  <div class="relative max-w-3xl mx-auto px-6 py-24 md:py-32 text-center">
+    <p class="text-gold-400/80 tracking-[0.3em] uppercase text-[11px]"><?= e($closingEyebrow) ?></p>
+    <h2 class="font-serif text-4xl md:text-5xl text-beige-100 mt-4"><?= e($closingHeadline) ?></h2>
+    <?php if ($closingBody !== ''): ?>
+      <p class="mt-6 text-beige-100/75 leading-[1.95] font-light max-w-2xl mx-auto"><?= nl2br(e($closingBody)) ?></p>
+    <?php endif; ?>
+
+    <div class="mt-12 flex flex-col sm:flex-row gap-4 justify-center">
+      <a href="<?= url('/public/events.php') ?>" class="px-7 py-3.5 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition">Browse upcoming sessions</a>
+      <a href="<?= url('/public/membership.php') ?>" class="px-7 py-3.5 rounded-full border border-gold-500/40 text-gold-400 hover:bg-gold-500/10 transition">Become a member</a>
+    </div>
+  </div>
 </section>
+
+<script>
+// Soft parallax on the hero image (matches the home page).
+document.addEventListener('scroll', () => {
+  document.querySelectorAll('[data-parallax]').forEach((el) => {
+    const y = window.scrollY * 0.18;
+    el.style.transform = `translate3d(0, ${y}px, 0) scale(1.05)`;
+  });
+}, { passive: true });
+</script>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>
