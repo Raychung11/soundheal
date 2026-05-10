@@ -1,0 +1,156 @@
+<?php
+require_once __DIR__ . '/../includes/bootstrap.php';
+require_staff_or_admin();
+
+$id = (int) input('id', 0);
+$event = ['id' => 0, 'slug' => '', 'title' => '', 'subtitle' => '', 'description' => '',
+          'cover_image' => '', 'location' => '', 'starts_at' => '', 'ends_at' => '',
+          'capacity' => 30, 'price_public' => 0, 'price_member' => 0,
+          'facilitator' => '', 'category' => '', 'status' => 'draft'];
+
+if ($id) {
+    $stmt = db()->prepare("SELECT * FROM events WHERE id = :id LIMIT 1");
+    $stmt->execute([':id' => $id]);
+    if ($row = $stmt->fetch()) {
+        $event = $row;
+    }
+}
+$pageTitle = $id ? 'Edit Event' : 'New Event';
+$errors = [];
+
+if (is_post()) {
+    csrf_verify();
+    $event = array_merge($event, [
+        'title'        => trim((string)input('title', '')),
+        'subtitle'     => trim((string)input('subtitle', '')),
+        'description'  => trim((string)input('description', '')),
+        'cover_image'  => trim((string)input('cover_image', '')),
+        'location'     => trim((string)input('location', '')),
+        'starts_at'    => input('starts_at', ''),
+        'ends_at'      => input('ends_at', ''),
+        'capacity'     => max(1, (int)input('capacity', 30)),
+        'price_public' => (float)input('price_public', 0),
+        'price_member' => (float)input('price_member', 0),
+        'facilitator'  => trim((string)input('facilitator', '')),
+        'category'     => trim((string)input('category', '')),
+        'status'       => in_array(input('status'), ['draft','published','archived','cancelled'], true) ? input('status') : 'draft',
+    ]);
+    if ($event['title'] === '' || !$event['starts_at'] || !$event['ends_at']) {
+        $errors[] = 'Title, start and end time are required.';
+    }
+    if (!$errors) {
+        $slug = $event['slug'] ?: slugify($event['title']);
+        if ($id) {
+            $stmt = db()->prepare(
+                "UPDATE events SET title=:t, subtitle=:st, description=:d, cover_image=:ci,
+                 location=:l, starts_at=:s, ends_at=:e, capacity=:c, price_public=:pp,
+                 price_member=:pm, facilitator=:f, category=:cat, status=:status
+                 WHERE id=:id"
+            );
+            $stmt->execute([
+                ':t' => $event['title'], ':st' => $event['subtitle'], ':d' => $event['description'],
+                ':ci' => $event['cover_image'], ':l' => $event['location'],
+                ':s' => $event['starts_at'], ':e' => $event['ends_at'],
+                ':c' => $event['capacity'], ':pp' => $event['price_public'], ':pm' => $event['price_member'],
+                ':f' => $event['facilitator'], ':cat' => $event['category'], ':status' => $event['status'],
+                ':id' => $id,
+            ]);
+            audit_log('event.update', 'events', $id);
+        } else {
+            $stmt = db()->prepare(
+                "INSERT INTO events (slug, title, subtitle, description, cover_image, location, starts_at, ends_at,
+                                     capacity, price_public, price_member, facilitator, category, status, created_by)
+                 VALUES (:slug, :t, :st, :d, :ci, :l, :s, :e, :c, :pp, :pm, :f, :cat, :status, :uid)"
+            );
+            $stmt->execute([
+                ':slug' => $slug, ':t' => $event['title'], ':st' => $event['subtitle'],
+                ':d' => $event['description'], ':ci' => $event['cover_image'], ':l' => $event['location'],
+                ':s' => $event['starts_at'], ':e' => $event['ends_at'],
+                ':c' => $event['capacity'], ':pp' => $event['price_public'], ':pm' => $event['price_member'],
+                ':f' => $event['facilitator'], ':cat' => $event['category'], ':status' => $event['status'],
+                ':uid' => current_user_id(),
+            ]);
+            $id = (int) db()->lastInsertId();
+            audit_log('event.create', 'events', $id);
+        }
+        flash('event', 'Saved.', 'success');
+        redirect('/admin/events.php');
+    }
+}
+
+require __DIR__ . '/../includes/admin_layout.php';
+?>
+<h1 class="font-serif text-3xl text-beige-100"><?= $id ? 'Edit session' : 'New session' ?></h1>
+
+<?php foreach ($errors as $err): ?>
+  <p class="mt-3 text-red-300/80"><?= e($err) ?></p>
+<?php endforeach; ?>
+
+<form method="post" class="mt-8 space-y-5 max-w-3xl">
+  <?= csrf_field() ?>
+  <label class="block">
+    <span class="text-xs uppercase tracking-widest text-beige-100/60">Title</span>
+    <input name="title" required value="<?= e($event['title']) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+  </label>
+  <label class="block">
+    <span class="text-xs uppercase tracking-widest text-beige-100/60">Subtitle</span>
+    <input name="subtitle" value="<?= e($event['subtitle']) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+  </label>
+  <label class="block">
+    <span class="text-xs uppercase tracking-widest text-beige-100/60">Description</span>
+    <textarea name="description" rows="4" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3"><?= e($event['description']) ?></textarea>
+  </label>
+
+  <div class="grid sm:grid-cols-2 gap-5">
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Starts at</span>
+      <input name="starts_at" type="datetime-local" required value="<?= e(str_replace(' ', 'T', substr((string)$event['starts_at'], 0, 16))) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Ends at</span>
+      <input name="ends_at" type="datetime-local" required value="<?= e(str_replace(' ', 'T', substr((string)$event['ends_at'], 0, 16))) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Location</span>
+      <input name="location" value="<?= e($event['location']) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Facilitator</span>
+      <input name="facilitator" value="<?= e($event['facilitator']) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Capacity</span>
+      <input name="capacity" type="number" min="1" value="<?= (int)$event['capacity'] ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Category</span>
+      <input name="category" value="<?= e($event['category']) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Public price (MYR)</span>
+      <input name="price_public" type="number" step="0.01" value="<?= e((string)$event['price_public']) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Member price (MYR)</span>
+      <input name="price_member" type="number" step="0.01" value="<?= e((string)$event['price_member']) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Cover image URL</span>
+      <input name="cover_image" value="<?= e($event['cover_image']) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Status</span>
+      <select name="status" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+        <?php foreach (['draft','published','archived','cancelled'] as $opt): ?>
+          <option value="<?= $opt ?>" <?= $event['status'] === $opt ? 'selected' : '' ?>><?= $opt ?></option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+  </div>
+
+  <div class="flex gap-3">
+    <button class="px-6 py-3 rounded-full bg-gold-500 text-navy-950 hover:bg-gold-400 transition">Save</button>
+    <a href="<?= url('/admin/events.php') ?>" class="px-6 py-3 rounded-full border border-white/10 text-beige-100/70 hover:border-white/20">Cancel</a>
+  </div>
+</form>
+<?php require __DIR__ . '/../includes/admin_layout_end.php'; ?>

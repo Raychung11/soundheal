@@ -1,0 +1,37 @@
+/* SoundHeal app stylesheet — gentle additions on top of Tailwind. */
+
+html { scroll-behavior: smooth; }
+
+body {
+    background: radial-gradient(ellipse at top, rgba(201, 164, 106, 0.06), transparent 60%) #0a1027;
+}
+
+::selection {
+    background: rgba(201, 164, 106, 0.35);
+    color: #f6efe5;
+}
+
+/* Subtle scroll bars */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(201, 164, 106, 0.18); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(201, 164, 106, 0.35); }
+
+.flash {
+    border-radius: 1rem;
+    padding: 0.85rem 1.25rem;
+    margin-bottom: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(15, 23, 42, 0.6);
+    color: #f6efe5;
+    font-size: 0.9rem;
+}
+.flash-success { border-color: rgba(201, 164, 106, 0.4); color: #e7d2a3; }
+.flash-error   { border-color: rgba(248, 113, 113, 0.4); color: #fecaca; }
+.flash-info    { border-color: rgba(255, 255, 255, 0.08); }
+
+input:focus, select:focus, textarea:focus, button:focus { outline: none; }
+
+/* Soft fade-in for content */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+section { animation: fadeUp 0.6s ease-out both; }

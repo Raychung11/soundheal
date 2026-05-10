@@ -1,0 +1,72 @@
+<?php
+require_once __DIR__ . '/../includes/bootstrap.php';
+$pageTitle = 'Begin your journey';
+$errors = [];
+
+if (is_post()) {
+    csrf_verify();
+    $name  = trim((string) input('full_name', ''));
+    $email = filter_var(input('email', ''), FILTER_VALIDATE_EMAIL);
+    $phone = trim((string) input('phone', ''));
+    $pass  = (string) input('password', '');
+    $confirm = (string) input('password_confirm', '');
+
+    if ($name === '')                    { $errors[] = 'Please share your full name.'; }
+    if (!$email)                         { $errors[] = 'Please provide a valid email.'; }
+    if (strlen($pass) < 8)               { $errors[] = 'Password must be at least 8 characters.'; }
+    if ($pass !== $confirm)              { $errors[] = 'Passwords do not match.'; }
+
+    if (!$errors) {
+        $exists = db()->prepare('SELECT id FROM users WHERE email = :e LIMIT 1');
+        $exists->execute([':e' => $email]);
+        if ($exists->fetch()) {
+            $errors[] = 'An account with this email already exists. Please sign in.';
+        }
+    }
+
+    if (!$errors) {
+        $userId = register_user($name, $email, $pass, $phone ?: null);
+        attempt_login($email, $pass);
+        flash('welcome', 'Welcome to ' . config('app.name') . '. Your sanctuary is ready.', 'success');
+        redirect('/member/dashboard.php');
+    }
+}
+
+require __DIR__ . '/../includes/header.php';
+?>
+<section class="max-w-md mx-auto px-6 py-24">
+  <p class="text-gold-400/80 tracking-[0.3em] uppercase text-xs text-center">Create your sanctuary</p>
+  <h1 class="font-serif text-4xl text-beige-100 mt-4 text-center">Begin gently</h1>
+
+  <?php foreach ($errors as $err): ?>
+    <p class="mt-4 text-red-300/80 text-center"><?= e($err) ?></p>
+  <?php endforeach; ?>
+
+  <form method="post" class="mt-10 space-y-5">
+    <?= csrf_field() ?>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Full name</span>
+      <input name="full_name" required class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3 focus:border-gold-500/50 focus:outline-none">
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Email</span>
+      <input name="email" type="email" required class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3 focus:border-gold-500/50 focus:outline-none">
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Phone (optional)</span>
+      <input name="phone" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3 focus:border-gold-500/50 focus:outline-none">
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Password</span>
+      <input name="password" type="password" minlength="8" required class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3 focus:border-gold-500/50 focus:outline-none">
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Confirm password</span>
+      <input name="password_confirm" type="password" minlength="8" required class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3 focus:border-gold-500/50 focus:outline-none">
+    </label>
+    <button class="w-full px-5 py-3 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition">Create account</button>
+  </form>
+
+  <p class="mt-8 text-center text-sm text-beige-100/60">Already with us? <a href="<?= url('/public/login.php') ?>" class="text-gold-400 hover:text-gold-300">Sign in</a></p>
+</section>
+<?php require __DIR__ . '/../includes/footer.php'; ?>
