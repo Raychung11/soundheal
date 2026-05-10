@@ -13,8 +13,15 @@ CREATE TABLE IF NOT EXISTS site_settings (
     `updated_at` DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-ALTER TABLE users
-    ADD COLUMN trial_ends_at DATETIME DEFAULT NULL AFTER status;
+-- Add users.trial_ends_at if it doesn't already exist (idempotent).
+SET @col_exists = (
+  SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'trial_ends_at'
+);
+SET @sql = IF(@col_exists = 0,
+  'ALTER TABLE users ADD COLUMN trial_ends_at DATETIME DEFAULT NULL AFTER status',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- Seed homepage defaults.
 INSERT INTO site_settings (`key`, `value`, `value_type`) VALUES

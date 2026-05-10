@@ -28,6 +28,17 @@ CREATE TABLE IF NOT EXISTS content_plays (
     CONSTRAINT fk_plays_content FOREIGN KEY (content_id) REFERENCES wellness_content(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-ALTER TABLE event_bookings
-    ADD COLUMN cancelled_at DATETIME DEFAULT NULL AFTER updated_at,
-    ADD COLUMN refunded_at  DATETIME DEFAULT NULL AFTER cancelled_at;
+-- Add event_bookings.cancelled_at / refunded_at if they don't already exist (idempotent).
+SET @c1 = (SELECT COUNT(*) FROM information_schema.COLUMNS
+           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'event_bookings' AND COLUMN_NAME = 'cancelled_at');
+SET @sql = IF(@c1 = 0,
+  'ALTER TABLE event_bookings ADD COLUMN cancelled_at DATETIME DEFAULT NULL AFTER updated_at',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c2 = (SELECT COUNT(*) FROM information_schema.COLUMNS
+           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'event_bookings' AND COLUMN_NAME = 'refunded_at');
+SET @sql = IF(@c2 = 0,
+  'ALTER TABLE event_bookings ADD COLUMN refunded_at DATETIME DEFAULT NULL AFTER cancelled_at',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
