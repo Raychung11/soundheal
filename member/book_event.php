@@ -78,6 +78,12 @@ if (is_post()) {
         audit_log('booking.create', 'event_bookings', $bookingId, ['ref' => $bookingRef, 'total' => $total]);
 
         if ($unitPrice <= 0) {
+            send_mail($user['email'], $user['full_name'], 'Your SoundHeal seat is held', 'booking_confirm', [
+                'event_title' => $event['title'],
+                'starts_at'   => format_datetime($event['starts_at']),
+                'location'    => $event['location'] ?? 'Location TBA',
+                'booking_ref' => $bookingRef,
+            ]);
             flash('booking', 'Your seat is held. We can\'t wait to welcome you.', 'success');
             redirect('/member/my_bookings.php');
         }

@@ -24,20 +24,26 @@ require __DIR__ . '/../includes/header.php';
 
 <section class="relative overflow-hidden">
   <div class="absolute inset-0 bg-gradient-to-b from-navy-950 via-navy-900 to-navy-950"></div>
-  <div class="absolute inset-0 opacity-30 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gold-500/30 via-transparent to-transparent"></div>
-  <div class="relative max-w-5xl mx-auto px-6 py-28 md:py-40 text-center">
-    <p class="text-gold-400/80 tracking-[0.4em] uppercase text-xs">A sanctuary for stillness</p>
-    <h1 class="font-serif text-5xl md:text-7xl text-beige-100 mt-6 leading-tight">
+  <div class="absolute inset-0 opacity-40 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gold-500/40 via-transparent to-transparent"></div>
+  <div class="absolute inset-x-0 top-0 h-[80vh] pointer-events-none overflow-hidden">
+    <div class="ripple ripple-1"></div>
+    <div class="ripple ripple-2"></div>
+    <div class="ripple ripple-3"></div>
+  </div>
+  <div class="relative max-w-5xl mx-auto px-6 py-32 md:py-44 text-center">
+    <p class="text-gold-400/80 tracking-[0.5em] uppercase text-[11px]">A sanctuary for stillness</p>
+    <h1 class="font-serif text-5xl md:text-7xl lg:text-8xl text-beige-100 mt-8 leading-[1.05]">
       Return to the<br><span class="text-gold-400 italic">sound</span> of yourself.
     </h1>
-    <p class="mt-8 text-lg md:text-xl text-beige-100/80 max-w-2xl mx-auto leading-relaxed">
+    <p class="mt-10 text-lg md:text-xl text-beige-100/80 max-w-2xl mx-auto leading-[1.85] font-light">
       Curated sound healing sessions, breathwork journeys and a quiet audio sanctuary —
       held with intention, designed for the modern soul.
     </p>
-    <div class="mt-12 flex flex-col sm:flex-row gap-4 justify-center">
-      <a href="<?= url('/public/events.php') ?>" class="px-8 py-4 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition">Reserve a session</a>
+    <div class="mt-14 flex flex-col sm:flex-row gap-4 justify-center items-center">
+      <a href="<?= url('/public/events.php') ?>" class="px-8 py-4 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition shadow-[0_8px_30px_-10px_rgba(201,164,106,0.4)]">Reserve a session</a>
       <a href="<?= url('/public/membership.php') ?>" class="px-8 py-4 rounded-full border border-gold-500/50 text-gold-400 hover:bg-gold-500/10 transition">Become a member</a>
     </div>
+    <p class="mt-12 text-xs text-beige-100/40 tracking-widest uppercase">Held in Kuala Lumpur · open to the world</p>
   </div>
 </section>
 

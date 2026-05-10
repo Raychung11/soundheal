@@ -26,6 +26,7 @@ $nav = [
         <?php if ($user['role'] === 'admin' || $user['role'] === 'staff'): ?>
           <a href="<?= url('/admin/dashboard.php') ?>" class="text-sm text-gold-400 hover:text-gold-300">Admin</a>
         <?php endif; ?>
+        <a href="<?= url('/member/content.php') ?>" class="text-sm text-beige-100/80 hover:text-gold-400">Library</a>
         <a href="<?= url('/member/dashboard.php') ?>" class="text-sm text-beige-100/90 hover:text-gold-400">My Sanctuary</a>
         <form method="post" action="<?= url('/public/logout.php') ?>" class="inline">
           <?= csrf_field() ?>

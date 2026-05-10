@@ -3,6 +3,8 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 require_login();
 $pageTitle = 'Wellness Journey';
 $user = current_user();
+$mood = trim((string) input('mood', ''));
+$mood = preg_replace('/[^a-z]/', '', strtolower($mood));
 require __DIR__ . '/../includes/header.php';
 ?>
 <section class="max-w-3xl mx-auto px-6 py-16">
@@ -33,9 +35,13 @@ require __DIR__ . '/../includes/header.php';
 
 <script>
 function ariaChat() {
+  const initialMood = <?= json_encode($mood) ?>;
+  const opening = initialMood
+    ? `Thank you for naming that — \"${initialMood}\". Take a slow breath in… and out. Tell me a little more about how that's showing up for you today?`
+    : "Welcome back, <?= e(addslashes($user['full_name'])) ?>. Take a slow breath in… and out. How are you arriving today?";
   return {
-    messages: [{ id: 0, role: 'assistant', content: "Welcome back, <?= e($user['full_name']) ?>. Take a slow breath in… and out. How are you arriving today?" }],
-    draft: '',
+    messages: [{ id: 0, role: 'assistant', content: opening }],
+    draft: initialMood ? `I'm feeling ${initialMood} today.` : '',
     loading: false,
     counter: 1,
     async send() {

@@ -34,10 +34,25 @@ $content = db()->query(
 
 require __DIR__ . '/../includes/header.php';
 ?>
+<?php
+$hour = (int) (new DateTimeImmutable('now'))->format('G');
+$greeting = $hour < 5  ? 'Still awake'
+         : ($hour < 12 ? 'Good morning'
+         : ($hour < 18 ? 'Good afternoon'
+         :              'Good evening'));
+$firstName = trim(explode(' ', $user['full_name'])[0]);
+?>
 <section class="max-w-6xl mx-auto px-6 py-16">
-  <p class="text-gold-400/80 tracking-[0.3em] uppercase text-xs">Welcome back</p>
-  <h1 class="font-serif text-5xl text-beige-100 mt-4"><?= e($user['full_name']) ?></h1>
-  <p class="mt-3 text-beige-100/60">A quiet check-in: how is your nervous system today?</p>
+  <p class="text-gold-400/80 tracking-[0.3em] uppercase text-xs"><?= e($greeting) ?></p>
+  <h1 class="font-serif text-5xl text-beige-100 mt-4"><?= e($firstName) ?>.</h1>
+  <p class="mt-4 text-beige-100/60 max-w-xl leading-relaxed">A quiet check-in: how is your nervous system today? Choose a single word — Aria will meet you there.</p>
+
+  <div class="mt-6 flex flex-wrap gap-2">
+    <?php foreach (['anxious','tired','peaceful','overwhelmed','curious','heavy','open'] as $mood): ?>
+      <a href="<?= url('/member/wellness_journey.php?mood=' . urlencode($mood)) ?>"
+         class="px-4 py-2 rounded-full border border-white/10 text-sm text-beige-100/70 hover:border-gold-500/40 hover:text-gold-400 hover:bg-gold-500/5 transition capitalize"><?= e($mood) ?></a>
+    <?php endforeach; ?>
+  </div>
 
   <div class="mt-12 grid md:grid-cols-3 gap-6">
     <div class="border border-white/5 rounded-3xl p-6 bg-navy-900/40">
@@ -84,7 +99,10 @@ require __DIR__ . '/../includes/header.php';
     </div>
 
     <div class="border border-white/5 rounded-3xl p-8 bg-navy-900/40">
-      <h2 class="font-serif text-2xl text-gold-400">Audio sanctuary</h2>
+      <div class="flex items-center justify-between">
+        <h2 class="font-serif text-2xl text-gold-400">Audio sanctuary</h2>
+        <a href="<?= url('/member/content.php') ?>" class="text-sm text-gold-400/80 hover:text-gold-300">Open library →</a>
+      </div>
       <?php if (!$content): ?>
         <p class="mt-4 text-beige-100/60">New audio journeys coming soon.</p>
       <?php else: ?>
@@ -92,7 +110,7 @@ require __DIR__ . '/../includes/header.php';
           <?php foreach ($content as $c): ?>
             <li class="flex items-center justify-between">
               <div>
-                <p class="text-beige-100"><?= e($c['title']) ?></p>
+                <a href="<?= url('/member/content.php#track-' . (int)$c['id']) ?>" class="text-beige-100 hover:text-gold-400 transition"><?= e($c['title']) ?></a>
                 <p class="text-xs text-beige-100/50 capitalize"><?= e($c['type']) ?> · <?= max(1, (int)round(((int)$c['duration_seconds'])/60)) ?> min</p>
               </div>
               <span class="text-gold-400 text-sm">▶</span>

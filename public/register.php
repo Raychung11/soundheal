@@ -25,9 +25,32 @@ if (is_post()) {
     }
 
     if (!$errors) {
+        if (!throttle('register:' . client_ip(), 5, 600)) {
+            $errors[] = 'Too many sign-ups from this network. Please try again shortly.';
+        }
+    }
+
+    if (!$errors) {
         $userId = register_user($name, $email, $pass, $phone ?: null);
+
+        // Issue an email verification token (one-time, 7-day window).
+        $verifyToken = generate_token(32);
+        db()->prepare(
+            "INSERT INTO user_tokens (user_id, purpose, token_hash, expires_at)
+             VALUES (:u, 'email_verify', :h, :e)"
+        )->execute([
+            ':u' => $userId,
+            ':h' => hash('sha256', $verifyToken),
+            ':e' => (new DateTimeImmutable('+7 days'))->format('Y-m-d H:i:s'),
+        ]);
+
+        send_mail($email, $name, 'Welcome to SoundHeal', 'welcome', ['full_name' => $name]);
+        send_mail($email, $name, 'Confirm your email', 'verify_email', [
+            'verify_url' => url('/public/verify_email.php?token=' . $verifyToken),
+        ]);
+
         attempt_login($email, $pass);
-        flash('welcome', 'Welcome to ' . config('app.name') . '. Your sanctuary is ready.', 'success');
+        flash('welcome', 'Welcome to ' . config('app.name') . '. Your sanctuary is ready — please confirm your email when you have a moment.', 'success');
         redirect('/member/dashboard.php');
     }
 }

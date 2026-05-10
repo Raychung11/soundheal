@@ -9,21 +9,41 @@ if (is_post()) {
     if ($action === 'create') {
         $title = trim((string) input('title', ''));
         if ($title !== '') {
+            try {
+                $audioPath = handle_upload('audio_file', 'content');
+                $coverPath = handle_upload('cover_file', 'content');
+            } catch (RuntimeException $e) {
+                flash('content', $e->getMessage(), 'error');
+                redirect('/admin/content.php');
+            }
             $stmt = db()->prepare(
-                "INSERT INTO wellness_content (slug, title, description, type, file_path, duration_seconds, access, is_published)
-                 VALUES (:slug, :title, :desc, :type, :file, :dur, :access, :pub)"
+                "INSERT INTO wellness_content (slug, title, description, type, file_path, cover_image, duration_seconds, access, is_published)
+                 VALUES (:slug, :title, :desc, :type, :file, :cover, :dur, :access, :pub)"
             );
             $stmt->execute([
                 ':slug' => slugify($title) . '-' . substr(bin2hex(random_bytes(2)), 0, 4),
                 ':title' => $title,
                 ':desc' => trim((string) input('description', '')),
                 ':type' => input('type', 'audio'),
-                ':file' => trim((string) input('file_path', '')),
+                ':file' => $audioPath ?: trim((string) input('file_path', '')),
+                ':cover'=> $coverPath ?: null,
                 ':dur'  => max(0, (int) input('duration_seconds', 0)),
                 ':access' => input('access', 'member'),
                 ':pub'  => input('is_published') ? 1 : 0,
             ]);
             audit_log('content.create', 'wellness_content', (int) db()->lastInsertId());
+        }
+    } elseif ($action === 'delete') {
+        $id = (int) input('id', 0);
+        if ($id) {
+            $row = db()->prepare('SELECT file_path, cover_image FROM wellness_content WHERE id = :id');
+            $row->execute([':id' => $id]);
+            if ($r = $row->fetch()) {
+                delete_upload($r['file_path']);
+                delete_upload($r['cover_image']);
+            }
+            db()->prepare('DELETE FROM wellness_content WHERE id = :id')->execute([':id' => $id]);
+            audit_log('content.delete', 'wellness_content', $id);
         }
     } elseif ($action === 'toggle') {
         $id = (int) input('id', 0);
@@ -41,7 +61,7 @@ require __DIR__ . '/../includes/admin_layout.php';
 ?>
 <h1 class="font-serif text-3xl text-beige-100">Content library</h1>
 
-<form method="post" class="mt-6 grid sm:grid-cols-2 gap-4 max-w-3xl border border-white/5 rounded-2xl p-5 bg-navy-900/40">
+<form method="post" enctype="multipart/form-data" class="mt-6 grid sm:grid-cols-2 gap-4 max-w-3xl border border-white/5 rounded-2xl p-5 bg-navy-900/40">
   <?= csrf_field() ?>
   <input type="hidden" name="action" value="create">
   <input name="title" placeholder="Title" required class="rounded-full bg-navy-950 border border-white/5 px-4 py-2">
@@ -50,7 +70,15 @@ require __DIR__ . '/../includes/admin_layout.php';
       <option><?= $t ?></option>
     <?php endforeach; ?>
   </select>
-  <input name="file_path" placeholder="File path / URL" class="rounded-full bg-navy-950 border border-white/5 px-4 py-2">
+  <label class="text-sm text-beige-100/70 sm:col-span-2">
+    Audio file
+    <input type="file" name="audio_file" accept="audio/*" class="mt-1 w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-gold-500/20 file:text-gold-400 hover:file:bg-gold-500/30">
+  </label>
+  <label class="text-sm text-beige-100/70 sm:col-span-2">
+    Cover image (optional)
+    <input type="file" name="cover_file" accept="image/*" class="mt-1 w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-gold-500/20 file:text-gold-400 hover:file:bg-gold-500/30">
+  </label>
+  <input name="file_path" placeholder="…or paste an external URL" class="sm:col-span-2 rounded-full bg-navy-950 border border-white/5 px-4 py-2">
   <input name="duration_seconds" type="number" min="0" placeholder="Duration (seconds)" class="rounded-full bg-navy-950 border border-white/5 px-4 py-2">
   <select name="access" class="rounded-full bg-navy-950 border border-white/5 px-4 py-2">
     <?php foreach (['public','member','premium'] as $a): ?>
@@ -76,12 +104,18 @@ require __DIR__ . '/../includes/admin_layout.php';
           <td><?= e($r['type']) ?></td>
           <td><?= e($r['access']) ?></td>
           <td><?= $r['is_published'] ? 'Yes' : 'No' ?></td>
-          <td class="text-right pr-4">
+          <td class="text-right pr-4 space-x-3">
             <form method="post" class="inline">
               <?= csrf_field() ?>
               <input type="hidden" name="action" value="toggle">
               <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
               <button class="text-gold-400 text-sm"><?= $r['is_published'] ? 'Unpublish' : 'Publish' ?></button>
+            </form>
+            <form method="post" class="inline" onsubmit="return confirm('Delete this audio?');">
+              <?= csrf_field() ?>
+              <input type="hidden" name="action" value="delete">
+              <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+              <button class="text-red-300/80 text-sm">Delete</button>
             </form>
           </td>
         </tr>

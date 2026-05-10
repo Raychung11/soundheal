@@ -39,3 +39,6 @@ require_once __DIR__ . '/session.php';
 require_once __DIR__ . '/csrf.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/role.php';
+require_once __DIR__ . '/mail.php';
+require_once __DIR__ . '/upload.php';
+require_once __DIR__ . '/throttle.php';

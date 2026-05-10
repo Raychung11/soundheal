@@ -59,6 +59,13 @@ if (!$conversationId) {
     $conversationId = (int) db()->lastInsertId();
 }
 
+// Capture an early mood signal if the user opens with "I'm feeling X today.".
+if (preg_match('/i\s+am\s+feeling\s+([a-z]+)|i\'?m\s+feeling\s+([a-z]+)/i', $message, $m)) {
+    $detected = strtolower($m[1] ?: $m[2]);
+    db()->prepare("UPDATE ai_conversations SET mood = COALESCE(mood, :mood) WHERE id = :id")
+        ->execute([':mood' => $detected, ':id' => $conversationId]);
+}
+
 db()->prepare("INSERT INTO ai_messages (conversation_id, role, content) VALUES (:c, 'user', :m)")
     ->execute([':c' => $conversationId, ':m' => $message]);
 

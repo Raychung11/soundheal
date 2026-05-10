@@ -38,6 +38,22 @@ if (is_post()) {
     if ($event['title'] === '' || !$event['starts_at'] || !$event['ends_at']) {
         $errors[] = 'Title, start and end time are required.';
     }
+
+    // Optional cover image upload — replaces the URL field if a file is sent.
+    if (!$errors) {
+        try {
+            $uploaded = handle_upload('cover_image_file', 'events');
+            if ($uploaded) {
+                if ($id && !empty($event['cover_image']) && str_starts_with((string) $event['cover_image'], '/uploads/')) {
+                    delete_upload($event['cover_image']);
+                }
+                $event['cover_image'] = $uploaded;
+            }
+        } catch (RuntimeException $e) {
+            $errors[] = $e->getMessage();
+        }
+    }
+
     if (!$errors) {
         $slug = $event['slug'] ?: slugify($event['title']);
         if ($id) {
@@ -86,7 +102,7 @@ require __DIR__ . '/../includes/admin_layout.php';
   <p class="mt-3 text-red-300/80"><?= e($err) ?></p>
 <?php endforeach; ?>
 
-<form method="post" class="mt-8 space-y-5 max-w-3xl">
+<form method="post" enctype="multipart/form-data" class="mt-8 space-y-5 max-w-3xl">
   <?= csrf_field() ?>
   <label class="block">
     <span class="text-xs uppercase tracking-widest text-beige-100/60">Title</span>
@@ -134,9 +150,14 @@ require __DIR__ . '/../includes/admin_layout.php';
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Member price (MYR)</span>
       <input name="price_member" type="number" step="0.01" value="<?= e((string)$event['price_member']) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
     </label>
-    <label class="block">
-      <span class="text-xs uppercase tracking-widest text-beige-100/60">Cover image URL</span>
-      <input name="cover_image" value="<?= e($event['cover_image']) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+    <label class="block sm:col-span-2">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Cover image</span>
+      <?php if (!empty($event['cover_image'])): ?>
+        <img src="<?= e(str_starts_with((string)$event['cover_image'], '/') ? url($event['cover_image']) : $event['cover_image']) ?>" alt="" class="mt-2 h-32 w-auto rounded-xl object-cover border border-white/10">
+      <?php endif; ?>
+      <input type="file" name="cover_image_file" accept="image/jpeg,image/png,image/webp" class="mt-2 w-full text-sm text-beige-100/70 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-gold-500/20 file:text-gold-400 hover:file:bg-gold-500/30">
+      <input name="cover_image" type="hidden" value="<?= e($event['cover_image']) ?>">
+      <span class="text-[11px] text-beige-100/40 mt-1 block">JPEG / PNG / WebP, up to 5 MB.</span>
     </label>
     <label class="block">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Status</span>

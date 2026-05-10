@@ -4,6 +4,36 @@ require_login();
 $pageTitle = 'My Bookings';
 $user = current_user();
 
+if (is_post()) {
+    csrf_verify();
+    if (input('action') === 'cancel') {
+        $bookingId = (int) input('booking_id', 0);
+        $row = db()->prepare(
+            "SELECT b.id, b.status, b.user_id, e.starts_at
+             FROM event_bookings b
+             JOIN events e ON e.id = b.event_id
+             WHERE b.id = :id LIMIT 1"
+        );
+        $row->execute([':id' => $bookingId]);
+        $booking = $row->fetch();
+        if (!$booking || (int) $booking['user_id'] !== $user['id']) {
+            flash('booking', 'Booking not found.', 'error');
+        } elseif (!in_array($booking['status'], ['pending','paid'], true)) {
+            flash('booking', 'This booking can no longer be cancelled.', 'error');
+        } elseif (strtotime($booking['starts_at']) - time() < 12 * 3600) {
+            flash('booking', 'Cancellations close 12 hours before the session begins.', 'error');
+        } else {
+            db()->prepare("UPDATE event_bookings SET status = 'cancelled', cancelled_at = NOW() WHERE id = :id")
+                ->execute([':id' => $bookingId]);
+            db()->prepare("UPDATE tickets SET status = 'revoked' WHERE booking_id = :b")
+                ->execute([':b' => $bookingId]);
+            audit_log('booking.cancel', 'event_bookings', $bookingId);
+            flash('booking', 'Your booking has been cancelled. If you had paid, refund will follow within 7 days.', 'success');
+        }
+        redirect('/member/my_bookings.php');
+    }
+}
+
 $stmt = db()->prepare(
     "SELECT b.*, e.title, e.starts_at, e.location,
             (SELECT COUNT(*) FROM tickets t WHERE t.booking_id = b.id AND t.status = 'valid') AS ticket_count
@@ -35,10 +65,18 @@ require __DIR__ . '/../includes/header.php';
             <p class="font-serif text-2xl text-beige-100 mt-1"><?= e($b['title']) ?></p>
             <p class="text-sm text-beige-100/50 mt-1">Ref: <?= e($b['booking_ref']) ?> · <?= e($b['location'] ?? 'Location TBA') ?></p>
           </div>
-          <div class="flex items-center gap-4">
+          <div class="flex items-center gap-4 flex-wrap">
             <span class="text-xs px-3 py-1 rounded-full <?= $b['status'] === 'paid' ? 'bg-gold-500/20 text-gold-400' : 'bg-white/5 text-beige-100/60' ?>"><?= e($b['status']) ?></span>
             <?php if ((int)$b['ticket_count'] > 0): ?>
               <a href="<?= url('/member/my_tickets.php?booking=' . (int)$b['id']) ?>" class="text-sm text-gold-400 hover:text-gold-300">View ticket →</a>
+            <?php endif; ?>
+            <?php if (in_array($b['status'], ['pending','paid'], true) && strtotime($b['starts_at']) - time() > 12 * 3600): ?>
+              <form method="post" class="inline" onsubmit="return confirm('Cancel this booking?');">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="cancel">
+                <input type="hidden" name="booking_id" value="<?= (int)$b['id'] ?>">
+                <button class="text-xs text-beige-100/50 hover:text-red-300/80">Cancel</button>
+              </form>
             <?php endif; ?>
           </div>
         </div>
