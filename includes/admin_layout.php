@@ -15,6 +15,7 @@ $adminNav = [
     ['Content',            '/admin/content.php'],
     ['Testimonials',       '/admin/testimonials.php'],
     ['Marketing',          '/admin/marketing.php'],
+    ['Referral program',   '/admin/referral_settings.php'],
     ['Corporate leads',    '/admin/corporate_leads.php'],
     ['Reports',            '/admin/reports.php'],
 ];
