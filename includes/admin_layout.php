@@ -14,10 +14,12 @@ $adminNav = [
     ['Check-in',           '/admin/checkin.php'],
     ['Content',            '/admin/content.php'],
     ['Testimonials',       '/admin/testimonials.php'],
+    ['Marketing',          '/admin/marketing.php'],
     ['Corporate leads',    '/admin/corporate_leads.php'],
     ['Reports',            '/admin/reports.php'],
 ];
 $pageTitle = ($pageTitle ?? 'Admin') . ' · Admin';
+$skipTracking = true;
 require __DIR__ . '/header.php';
 ?>
 <div class="max-w-7xl mx-auto px-4 py-8 grid md:grid-cols-[220px_1fr] gap-8">
