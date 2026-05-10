@@ -107,13 +107,17 @@ $typeLabels = [
 require __DIR__ . '/../includes/header.php';
 ?>
 
-<div x-data="library({
-        tracks: <?= htmlspecialchars(json_encode($tracksForJs, JSON_UNESCAPED_UNICODE), ENT_QUOTES) ?>,
-        initialFeatured: <?= $featured ? (int) $featured['id'] : 'null' ?>,
-        initialType: <?= json_encode($initialType) ?>,
-        csrf: <?= json_encode(csrf_token()) ?>,
-        logUrl: <?= json_encode(url('/api/log_play.php')) ?>
-     })" class="pb-32">
+<script>
+  window.__SH_LIBRARY = {
+    tracks: <?= json_encode($tracksForJs, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>,
+    initialFeatured: <?= $featured ? (int) $featured['id'] : 'null' ?>,
+    initialType: <?= json_encode($initialType) ?>,
+    csrf: <?= json_encode(csrf_token()) ?>,
+    logUrl: <?= json_encode(url('/api/log_play.php')) ?>
+  };
+</script>
+
+<div x-data="library()" x-init="init()" class="pb-32">
 
   <section class="max-w-6xl mx-auto px-6 pt-12 md:pt-16">
     <p class="text-gold-400/80 tracking-[0.3em] uppercase text-[11px]">Audio sanctuary</p>
@@ -249,14 +253,13 @@ require __DIR__ . '/../includes/header.php';
               </div>
             </template>
 
-            <div class="absolute inset-0 bg-navy-950/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-              <button type="button" @click="track.locked ? null : playTrack(track.id)"
-                      class="h-14 w-14 rounded-full bg-gold-500 text-navy-950 flex items-center justify-center text-lg shadow-[0_8px_30px_-10px_rgba(201,164,106,0.5)]"
-                      x-show="!track.locked">
-                <span x-show="!(playing && currentId === track.id)">▶</span>
-                <span x-show="playing && currentId === track.id">❚❚</span>
-              </button>
-            </div>
+            <button type="button"
+                    x-show="!track.locked"
+                    @click="playTrack(track.id)"
+                    class="absolute bottom-3 right-3 h-12 w-12 rounded-full bg-gold-500 text-navy-950 flex items-center justify-center text-lg shadow-[0_8px_30px_-10px_rgba(201,164,106,0.5)] hover:bg-gold-400 transition">
+              <span x-show="!(playing && currentId === track.id)">▶</span>
+              <span x-show="playing && currentId === track.id">❚❚</span>
+            </button>
 
             <span x-show="track.locked"
                   class="absolute top-3 right-3 text-[10px] uppercase tracking-widest px-2 py-1 rounded-full bg-navy-950/80 text-gold-400 border border-gold-500/30">
@@ -322,7 +325,8 @@ require __DIR__ . '/../includes/header.php';
 </div>
 
 <script>
-function library(opts) {
+function library() {
+  const opts = window.__SH_LIBRARY || { tracks: [] };
   return {
     tracks: opts.tracks || [],
     filterType: opts.initialType || 'all',
@@ -337,7 +341,6 @@ function library(opts) {
     durationSec: 0,
 
     init() {
-      // Build the audio element once.
       this.audio = new Audio();
       this.audio.preload = 'metadata';
       this.audio.addEventListener('timeupdate', () => {
@@ -351,7 +354,6 @@ function library(opts) {
       this.audio.addEventListener('pause', () => { this.playing = false; });
       this.audio.addEventListener('play',  () => { this.playing = true;  });
 
-      // Optional auto-load of the featured track (paused).
       if (opts.initialFeatured) {
         const t = this.tracks.find(x => x.id === opts.initialFeatured && !x.locked);
         if (t) {
