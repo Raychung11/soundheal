@@ -109,14 +109,25 @@ function user_has_member_access(?int $userId = null): bool
 {
     $userId = $userId ?? current_user_id();
     if (!$userId) return false;
-    $stmt = db()->prepare(
-        "SELECT (
-                  EXISTS(SELECT 1 FROM memberships WHERE user_id = :u AND status = 'active')
-                  OR
-                  (SELECT trial_ends_at IS NOT NULL AND trial_ends_at > NOW()
-                     FROM users WHERE id = :u)
-                ) AS has_access"
-    );
-    $stmt->execute([':u' => $userId]);
-    return (bool) $stmt->fetchColumn();
+
+    $hasMembership = false;
+    try {
+        $stmt = db()->prepare("SELECT 1 FROM memberships WHERE user_id = :u AND status = 'active' LIMIT 1");
+        $stmt->execute([':u' => $userId]);
+        $hasMembership = (bool) $stmt->fetchColumn();
+    } catch (Throwable $e) {
+        error_log('[auth] membership lookup failed: ' . $e->getMessage());
+    }
+    if ($hasMembership) return true;
+
+    // Trial column may not exist yet on older deployments — degrade gracefully.
+    try {
+        $stmt = db()->prepare("SELECT trial_ends_at FROM users WHERE id = :u");
+        $stmt->execute([':u' => $userId]);
+        $expires = $stmt->fetchColumn();
+        return $expires && strtotime((string) $expires) > time();
+    } catch (Throwable $e) {
+        error_log('[auth] trial column missing — assuming no trial: ' . $e->getMessage());
+        return false;
+    }
 }

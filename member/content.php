@@ -3,15 +3,31 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 require_login();
 $pageTitle = 'Audio Sanctuary';
 $user = current_user();
-$hasMemberAccess = user_has_member_access();
 
-// Trial state for the banner.
-$trialRow = db()->prepare("SELECT trial_ends_at FROM users WHERE id = :u");
-$trialRow->execute([':u' => $user['id']]);
-$trialEndsAt = $trialRow->fetchColumn();
-$trialActive = $trialEndsAt && strtotime($trialEndsAt) > time();
-$trialHoursLeft = $trialActive ? max(0, (int) round((strtotime($trialEndsAt) - time()) / 3600)) : 0;
-$trialDaysLeft  = (int) ceil($trialHoursLeft / 24);
+// Trial state for the banner — gracefully degrade if migration 003 hasn't run.
+$trialEndsAt = null;
+$trialActive = false;
+$trialHoursLeft = 0;
+$trialDaysLeft  = 0;
+try {
+    $trialRow = db()->prepare("SELECT trial_ends_at FROM users WHERE id = :u");
+    $trialRow->execute([':u' => $user['id']]);
+    $trialEndsAt = $trialRow->fetchColumn() ?: null;
+    $trialActive = $trialEndsAt && strtotime($trialEndsAt) > time();
+    $trialHoursLeft = $trialActive ? max(0, (int) round((strtotime($trialEndsAt) - time()) / 3600)) : 0;
+    $trialDaysLeft  = (int) ceil($trialHoursLeft / 24);
+} catch (Throwable $e) {
+    error_log('[content.php] trial check skipped: ' . $e->getMessage());
+}
+
+try {
+    $hasMemberAccess = user_has_member_access();
+} catch (Throwable $e) {
+    error_log('[content.php] member-access check fell back to membership-only: ' . $e->getMessage());
+    $stmt = db()->prepare("SELECT 1 FROM memberships WHERE user_id = :u AND status = 'active' LIMIT 1");
+    $stmt->execute([':u' => $user['id']]);
+    $hasMemberAccess = (bool) $stmt->fetchColumn();
+}
 
 // All published tracks. Premium tracks remain visible (locked overlay).
 $tracks = db()->query(
@@ -34,19 +50,25 @@ $moodToType = [
 ];
 $initialType = $moodToType[$mood] ?? 'all';
 
-// Recent plays for "continue listening".
-$recent = db()->prepare(
-    "SELECT c.id, c.title, c.type, c.duration_seconds, c.cover_image, c.access,
-            MAX(p.played_at) AS last_played
-     FROM content_plays p
-     JOIN wellness_content c ON c.id = p.content_id
-     WHERE p.user_id = :u AND c.is_published = 1
-     GROUP BY c.id
-     ORDER BY last_played DESC
-     LIMIT 4"
-);
-$recent->execute([':u' => $user['id']]);
-$recentTracks = $recent->fetchAll();
+// Recent plays for "continue listening". Skip silently if content_plays
+// table isn't there yet (phase 2 migration not applied).
+$recentTracks = [];
+try {
+    $recent = db()->prepare(
+        "SELECT c.id, c.title, c.type, c.duration_seconds, c.cover_image, c.access,
+                MAX(p.played_at) AS last_played
+         FROM content_plays p
+         JOIN wellness_content c ON c.id = p.content_id
+         WHERE p.user_id = :u AND c.is_published = 1
+         GROUP BY c.id
+         ORDER BY last_played DESC
+         LIMIT 4"
+    );
+    $recent->execute([':u' => $user['id']]);
+    $recentTracks = $recent->fetchAll();
+} catch (Throwable $e) {
+    error_log('[content.php] continue-listening skipped: ' . $e->getMessage());
+}
 
 // Pick a featured track — the latest non-premium-locked one for this viewer.
 $featured = null;
