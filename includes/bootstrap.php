@@ -42,3 +42,4 @@ require_once __DIR__ . '/role.php';
 require_once __DIR__ . '/mail.php';
 require_once __DIR__ . '/upload.php';
 require_once __DIR__ . '/throttle.php';
+require_once __DIR__ . '/site_settings.php';

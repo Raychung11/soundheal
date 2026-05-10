@@ -1,6 +1,9 @@
 <?php
 require_once __DIR__ . '/../includes/bootstrap.php';
-$pageTitle = 'Begin your journey';
+
+$isTrial   = !empty(input('trial')) && (bool) setting('trial_enabled', true);
+$trialDays = (int) setting('trial_duration_days', 7);
+$pageTitle = $isTrial ? 'Begin your free trial' : 'Begin your journey';
 $errors = [];
 
 if (is_post()) {
@@ -31,7 +34,7 @@ if (is_post()) {
     }
 
     if (!$errors) {
-        $userId = register_user($name, $email, $pass, $phone ?: null);
+        $userId = register_user($name, $email, $pass, $phone ?: null, $isTrial ? $trialDays : null);
 
         // Issue an email verification token (one-time, 7-day window).
         $verifyToken = generate_token(32);
@@ -50,16 +53,26 @@ if (is_post()) {
         ]);
 
         attempt_login($email, $pass);
-        flash('welcome', 'Welcome to ' . config('app.name') . '. Your sanctuary is ready — please confirm your email when you have a moment.', 'success');
-        redirect('/member/dashboard.php');
+        flash('welcome',
+            $isTrial
+                ? 'Your ' . $trialDays . '-day free trial is open. Welcome.'
+                : 'Welcome to ' . config('app.name') . '. Your sanctuary is ready — please confirm your email when you have a moment.',
+            'success');
+        redirect($isTrial ? '/member/content.php' : '/member/dashboard.php');
     }
 }
 
 require __DIR__ . '/../includes/header.php';
 ?>
 <section class="max-w-md mx-auto px-6 py-24">
-  <p class="text-gold-400/80 tracking-[0.3em] uppercase text-xs text-center">Create your sanctuary</p>
-  <h1 class="font-serif text-4xl text-beige-100 mt-4 text-center">Begin gently</h1>
+  <?php if ($isTrial): ?>
+    <p class="text-gold-400/80 tracking-[0.3em] uppercase text-xs text-center">Free trial · <?= (int) $trialDays ?> days</p>
+    <h1 class="font-serif text-4xl text-beige-100 mt-4 text-center">A gentle first step</h1>
+    <p class="mt-3 text-center text-beige-100/60 text-sm">No payment required. Your trial begins the moment you sign up.</p>
+  <?php else: ?>
+    <p class="text-gold-400/80 tracking-[0.3em] uppercase text-xs text-center">Create your sanctuary</p>
+    <h1 class="font-serif text-4xl text-beige-100 mt-4 text-center">Begin gently</h1>
+  <?php endif; ?>
 
   <?php foreach ($errors as $err): ?>
     <p class="mt-4 text-red-300/80 text-center"><?= e($err) ?></p>
@@ -67,6 +80,7 @@ require __DIR__ . '/../includes/header.php';
 
   <form method="post" class="mt-10 space-y-5">
     <?= csrf_field() ?>
+    <?php if ($isTrial): ?><input type="hidden" name="trial" value="1"><?php endif; ?>
     <label class="block">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Full name</span>
       <input name="full_name" required class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3 focus:border-gold-500/50 focus:outline-none">

@@ -11,6 +11,8 @@ $tracks = db()->query(
      ORDER BY type ASC, created_at DESC"
 )->fetchAll();
 
+$hasMemberAccess = user_has_member_access();
+
 $grouped = [];
 foreach ($tracks as $t) {
     $grouped[$t['type']][] = $t;
@@ -38,7 +40,7 @@ require __DIR__ . '/../includes/header.php';
       <h2 class="mt-16 font-serif text-2xl text-gold-400"><?= e($label) ?></h2>
       <div class="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
         <?php foreach ($grouped[$key] as $t):
-          $isLocked = $t['access'] === 'premium';
+          $isLocked = $t['access'] === 'premium' && !$hasMemberAccess;
           $streamUrl = url('/api/stream_content.php?id=' . (int)$t['id']);
         ?>
           <article class="border border-white/5 rounded-3xl p-5 bg-navy-900/40 hover:border-gold-500/30 transition flex flex-col">

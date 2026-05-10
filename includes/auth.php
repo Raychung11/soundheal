@@ -80,19 +80,43 @@ function require_login(string $redirectTo = '/public/login.php'): void
     }
 }
 
-function register_user(string $fullName, string $email, string $password, ?string $phone = null): int
+function register_user(string $fullName, string $email, string $password, ?string $phone = null, ?int $trialDays = null): int
 {
+    $trialEndsAt = null;
+    if ($trialDays !== null && $trialDays > 0) {
+        $trialEndsAt = (new DateTimeImmutable('+' . $trialDays . ' days'))->format('Y-m-d H:i:s');
+    }
     $stmt = db()->prepare(
-        'INSERT INTO users (role_id, full_name, email, phone, password_hash, status)
-         VALUES (3, :name, :email, :phone, :hash, "active")'
+        'INSERT INTO users (role_id, full_name, email, phone, password_hash, status, trial_ends_at)
+         VALUES (3, :name, :email, :phone, :hash, "active", :trial)'
     );
     $stmt->execute([
         ':name'  => $fullName,
         ':email' => $email,
         ':phone' => $phone,
         ':hash'  => password_hash($password, PASSWORD_DEFAULT),
+        ':trial' => $trialEndsAt,
     ]);
     $id = (int) db()->lastInsertId();
-    audit_log('register', 'users', $id);
+    audit_log($trialDays ? 'register.trial' : 'register', 'users', $id, $trialDays ? ['trial_days' => $trialDays] : []);
     return $id;
+}
+
+/**
+ * True when the user has an active membership OR an unexpired trial.
+ */
+function user_has_member_access(?int $userId = null): bool
+{
+    $userId = $userId ?? current_user_id();
+    if (!$userId) return false;
+    $stmt = db()->prepare(
+        "SELECT (
+                  EXISTS(SELECT 1 FROM memberships WHERE user_id = :u AND status = 'active')
+                  OR
+                  (SELECT trial_ends_at IS NOT NULL AND trial_ends_at > NOW()
+                     FROM users WHERE id = :u)
+                ) AS has_access"
+    );
+    $stmt->execute([':u' => $userId]);
+    return (bool) $stmt->fetchColumn();
 }

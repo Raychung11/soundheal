@@ -5,6 +5,7 @@
  */
 $adminNav = [
     ['Dashboard',          '/admin/dashboard.php'],
+    ['Home page',          '/admin/home_settings.php'],
     ['Events',             '/admin/events.php'],
     ['Bookings',           '/admin/bookings.php'],
     ['Members',            '/admin/members.php'],

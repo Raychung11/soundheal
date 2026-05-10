@@ -19,9 +19,7 @@ if (!$track) {
 }
 
 if ($track['access'] === 'premium') {
-    $m = db()->prepare("SELECT id FROM memberships WHERE user_id = :u AND status = 'active' LIMIT 1");
-    $m->execute([':u' => current_user_id()]);
-    if (!$m->fetch()) {
+    if (!user_has_member_access()) {
         http_response_code(403);
         exit('Membership required.');
     }

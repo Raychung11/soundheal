@@ -15,6 +15,11 @@ $membership = db()->prepare(
 $membership->execute([':u' => $user['id']]);
 $activeMembership = $membership->fetch();
 
+$trialRow = db()->prepare("SELECT trial_ends_at FROM users WHERE id = :u");
+$trialRow->execute([':u' => $user['id']]);
+$trialEndsAt = $trialRow->fetchColumn();
+$trialActive = $trialEndsAt && strtotime($trialEndsAt) > time() && !$activeMembership;
+
 $bookings = db()->prepare(
     "SELECT b.*, e.title, e.starts_at, e.location
      FROM event_bookings b
@@ -61,6 +66,15 @@ $firstName = trim(explode(' ', $user['full_name'])[0]);
         <p class="font-serif text-2xl text-beige-100 mt-3"><?= e($activeMembership['plan_name']) ?></p>
         <p class="text-sm text-beige-100/60 mt-1">Renews <?= e(format_datetime($activeMembership['expires_at'], 'd M Y')) ?></p>
         <a href="<?= url('/member/my_membership.php') ?>" class="mt-4 inline-block text-sm text-gold-400 hover:text-gold-300">Manage →</a>
+      <?php elseif ($trialActive):
+        $hoursLeft = max(0, (int) round((strtotime($trialEndsAt) - time()) / 3600));
+        $daysLeft  = max(0, (int) round($hoursLeft / 24));
+      ?>
+        <p class="font-serif text-2xl text-gold-400 mt-3">Free trial</p>
+        <p class="text-sm text-beige-100/60 mt-1">
+          <?= $daysLeft >= 1 ? $daysLeft . ' day' . ($daysLeft === 1 ? '' : 's') : $hoursLeft . ' hours' ?> remaining
+        </p>
+        <a href="<?= url('/public/membership.php') ?>" class="mt-4 inline-block text-sm text-gold-400 hover:text-gold-300">Continue with a plan →</a>
       <?php else: ?>
         <p class="text-beige-100/70 mt-3">Not a member yet.</p>
         <a href="<?= url('/public/membership.php') ?>" class="mt-4 inline-block text-sm text-gold-400 hover:text-gold-300">Choose a plan →</a>

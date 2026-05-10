@@ -33,10 +33,16 @@ uploads/ qr/ logs/
 
 ## Local setup (Hostinger or local LAMP)
 
-1. Create a MySQL database, then import the schema:
+1. Create a MySQL database, then import the schema and apply migrations in order:
    ```bash
    mysql -u root -p soundheal < database/schema.sql
+   mysql -u root -p soundheal < database/migrations/002_phase2.sql
+   mysql -u root -p soundheal < database/migrations/003_phase3.sql
    ```
+   Migration `003_phase3.sql` seeds an admin-controlled `site_settings` table,
+   one demo Crystal Bowl Sound Bath session for the upcoming Saturday at 7pm,
+   a free 5-minute sample audio, an ambient hero loop, and three soft testimonials —
+   so the home page renders something real on first boot.
 2. Copy `.env.example` to `.env` (or set env vars in hPanel) and fill in DB + service credentials.
 3. Point your web root at the project root (`index.php` redirects to `public/`).
 4. Make `uploads/`, `qr/`, and `logs/` writable by PHP:
