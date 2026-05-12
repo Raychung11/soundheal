@@ -4,6 +4,7 @@ if (!defined('SOUNDHEAL_BOOTED')) {
 }
 $pageTitle = $pageTitle ?? config('app.name');
 $pageDescription = $pageDescription ?? 'A calm, premium wellness operating system. Sound healing, breathwork and mindful experiences.';
+$brandName = (string) setting('company_name', (string) config('app.name'));
 
 // Marketing tracking — admin pages set $skipTracking before requiring header.
 if (empty($skipTracking)) {
@@ -15,7 +16,7 @@ if (empty($skipTracking)) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= e($pageTitle) ?> · <?= e(config('app.name')) ?></title>
+    <title><?= e($pageTitle) ?> · <?= e($brandName) ?></title>
     <meta name="description" content="<?= e($pageDescription) ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

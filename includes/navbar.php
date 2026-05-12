@@ -1,5 +1,7 @@
 <?php
 $user = current_user();
+$brandName    = (string) setting('company_name',    (string) config('app.name'));
+$brandTagline = (string) setting('company_tagline', (string) config('app.tagline'));
 $nav = [
     ['Experiences', '/public/experiences.php'],
     ['Sessions',    '/public/events.php'],
@@ -11,8 +13,10 @@ $nav = [
 <header class="border-b border-white/5 bg-navy-950/80 backdrop-blur sticky top-0 z-40">
   <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between" x-data="{ open: false }">
     <a href="<?= url('/public/index.php') ?>" class="flex items-center gap-2">
-      <span class="font-serif text-2xl text-gold-400 tracking-wide"><?= e(config('app.name')) ?></span>
-      <span class="hidden sm:inline text-xs uppercase tracking-[0.3em] text-beige-200/70">Wellness OS</span>
+      <span class="font-serif text-2xl text-gold-400 tracking-wide"><?= e($brandName) ?></span>
+      <?php if ($brandTagline !== ''): ?>
+        <span class="hidden sm:inline text-xs uppercase tracking-[0.3em] text-beige-200/70"><?= e($brandTagline) ?></span>
+      <?php endif; ?>
     </a>
 
     <nav class="hidden md:flex items-center gap-8 text-sm">
