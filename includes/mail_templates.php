@@ -23,13 +23,15 @@ function render_mail_template(string $name, array $vars): array
 
 function mail_layout(string $preheader, string $bodyHtml): string
 {
+    $brand   = e((string) setting('company_name',    (string) config('app.name')));
+    $tagline = e((string) setting('company_tagline', (string) config('app.tagline')));
     return <<<HTML
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width">
-<title>SoundHeal</title>
+<title>{$brand}</title>
 </head>
 <body style="margin:0;padding:0;background:#0a1027;font-family:Georgia,'Cormorant Garamond',serif;color:#f6efe5;">
 <span style="display:none;opacity:0;visibility:hidden;height:0;width:0;font-size:1px;color:#0a1027;">{$preheader}</span>
@@ -37,8 +39,8 @@ function mail_layout(string $preheader, string $bodyHtml): string
 <tr><td align="center">
 <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="background:#0f172a;border:1px solid rgba(255,255,255,0.06);border-radius:18px;overflow:hidden;">
 <tr><td style="padding:36px 36px 16px;">
-<div style="font-family:Georgia,'Cormorant Garamond',serif;color:#c9a46a;font-size:28px;letter-spacing:0.04em;">SoundHeal</div>
-<div style="color:#e7d2a3;font-size:11px;letter-spacing:0.4em;text-transform:uppercase;margin-top:4px;">Wellness Operating System</div>
+<div style="font-family:Georgia,'Cormorant Garamond',serif;color:#c9a46a;font-size:28px;letter-spacing:0.04em;">{$brand}</div>
+<div style="color:#e7d2a3;font-size:11px;letter-spacing:0.4em;text-transform:uppercase;margin-top:4px;">{$tagline}</div>
 </td></tr>
 <tr><td style="padding:8px 36px 36px;font-family:Inter,Arial,sans-serif;font-size:15px;line-height:1.7;color:#f6efe5;">
 {$bodyHtml}
