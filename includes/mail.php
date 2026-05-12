@@ -21,7 +21,7 @@ require_once __DIR__ . '/mail_templates.php';
 function send_mail(string $to, string $toName, string $subject, string $template, array $vars = []): bool
 {
     $cfg = config('app.mail');
-    $brandName = (string) setting('company_name', (string) config('app.name'));
+    $brandName = brand_name();
     [$html, $text] = render_mail_template($template, $vars + [
         'app_name' => $brandName,
         'app_url'  => config('app.url'),

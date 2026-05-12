@@ -1,5 +1,5 @@
 <?php
-$companyName    = (string) setting('company_name',          (string) config('app.name'));
+$companyName    = brand_name();
 $companyTagline = (string) setting('company_tagline',       (string) config('app.tagline'));
 $companyLegal   = (string) setting('company_legal_name',    '');
 $companyRegNo   = (string) setting('company_registration_no','');

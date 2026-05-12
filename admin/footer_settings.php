@@ -5,7 +5,7 @@ $pageTitle = 'Footer builder';
 
 $textKeys = [
     // Company
-    'company_name'              => 'string',
+    'company_brand'             => 'string',
     'company_legal_name'        => 'string',
     'company_registration_no'   => 'string',
     'company_tagline'           => 'string',
@@ -80,10 +80,10 @@ function text_field(string $key, string $label, string $placeholder = '', string
     </div>
 
     <div class="grid sm:grid-cols-2 gap-5">
-      <?php text_field('company_name',             'Brand name',          'SoundHeal'); ?>
-      <?php text_field('company_tagline',          'Tagline',             'Wellness Operating System'); ?>
-      <?php text_field('company_legal_name',       'Legal entity name',   'SoundHeal Wellness Sdn. Bhd.'); ?>
-      <?php text_field('company_registration_no',  'Registration number', '202401012345 (1234567-X)'); ?>
+      <?php text_field('company_brand',            'Brand (display name)',  'jaemie sound bath'); ?>
+      <?php text_field('company_tagline',          'Tagline',               'Sound healing sanctuary'); ?>
+      <?php text_field('company_legal_name',       'Company name (legal entity)', 'JLC Management Sdn. Bhd.'); ?>
+      <?php text_field('company_registration_no',  'Registration number',   '202401012345 (1234567-X)'); ?>
     </div>
 
     <label class="block">

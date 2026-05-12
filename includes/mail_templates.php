@@ -23,7 +23,7 @@ function render_mail_template(string $name, array $vars): array
 
 function mail_layout(string $preheader, string $bodyHtml): string
 {
-    $brand   = e((string) setting('company_name',    (string) config('app.name')));
+    $brand   = e(brand_name());
     $tagline = e((string) setting('company_tagline', (string) config('app.tagline')));
     return <<<HTML
 <!doctype html>

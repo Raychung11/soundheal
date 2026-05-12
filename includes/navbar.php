@@ -1,6 +1,6 @@
 <?php
 $user = current_user();
-$brandName    = (string) setting('company_name',    (string) config('app.name'));
+$brandName    = brand_name();
 $brandTagline = (string) setting('company_tagline', (string) config('app.tagline'));
 $nav = [
     ['Experiences', '/public/experiences.php'],

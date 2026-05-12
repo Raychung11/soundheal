@@ -67,3 +67,17 @@ function media_src(?string $path): string
     }
     return url($path);
 }
+
+/**
+ * Brand display name. Prefers the new company_brand setting, falls back
+ * to the older company_name (kept for backwards compatibility), then
+ * config('app.name'). Use this everywhere the user-facing brand appears.
+ */
+function brand_name(): string
+{
+    $brand = trim((string) setting('company_brand', ''));
+    if ($brand !== '') return $brand;
+    $name = trim((string) setting('company_name', ''));
+    if ($name !== '') return $name;
+    return (string) config('app.name', 'SoundHeal');
+}

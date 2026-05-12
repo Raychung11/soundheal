@@ -4,7 +4,7 @@ if (!defined('SOUNDHEAL_BOOTED')) {
 }
 $pageTitle = $pageTitle ?? config('app.name');
 $pageDescription = $pageDescription ?? 'A calm, premium wellness operating system. Sound healing, breathwork and mindful experiences.';
-$brandName = (string) setting('company_name', (string) config('app.name'));
+$brandName = brand_name();
 
 // Marketing tracking — admin pages set $skipTracking before requiring header.
 if (empty($skipTracking)) {
