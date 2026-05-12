@@ -9,59 +9,90 @@ $nav = [
     ['About',       '/public/about.php'],
     ['Contact',     '/public/contact.php'],
 ];
+$firstName = $user ? trim(explode(' ', (string) $user['full_name'])[0]) : '';
 ?>
 <header class="border-b border-white/5 bg-navy-950/80 backdrop-blur sticky top-0 z-40">
-  <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between" x-data="{ open: false }">
-    <a href="<?= url('/public/index.php') ?>" class="flex items-center gap-2">
-      <span class="font-serif text-2xl text-gold-400 tracking-wide"><?= e($brandName) ?></span>
+  <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-6" x-data="{ open: false, account: false }">
+    <!-- Brand -->
+    <a href="<?= url('/public/index.php') ?>" class="flex items-center gap-3 min-w-0">
+      <span class="font-serif text-2xl text-gold-400 tracking-wide whitespace-nowrap"><?= e($brandName) ?></span>
       <?php if ($brandTagline !== ''): ?>
-        <span class="hidden sm:inline text-xs uppercase tracking-[0.3em] text-beige-200/70"><?= e($brandTagline) ?></span>
+        <span class="hidden xl:inline text-[10px] uppercase tracking-[0.3em] text-beige-200/60 whitespace-nowrap"><?= e($brandTagline) ?></span>
       <?php endif; ?>
     </a>
 
-    <nav class="hidden md:flex items-center gap-8 text-sm">
+    <!-- Primary nav (md and up) -->
+    <nav class="hidden md:flex items-center gap-6 lg:gap-8 text-sm">
       <?php foreach ($nav as [$label, $path]): ?>
-        <a href="<?= url($path) ?>" class="text-beige-100/80 hover:text-gold-400 transition"><?= e($label) ?></a>
+        <a href="<?= url($path) ?>" class="text-beige-100/80 hover:text-gold-400 transition whitespace-nowrap"><?= e($label) ?></a>
       <?php endforeach; ?>
     </nav>
 
+    <!-- Account / CTA (md and up) -->
     <div class="hidden md:flex items-center gap-3">
       <?php if ($user): ?>
-        <?php if ($user['role'] === 'admin' || $user['role'] === 'staff'): ?>
-          <a href="<?= url('/admin/dashboard.php') ?>" class="text-sm text-gold-400 hover:text-gold-300">Admin</a>
-        <?php endif; ?>
-        <a href="<?= url('/member/content.php') ?>" class="text-sm text-beige-100/80 hover:text-gold-400">Library</a>
-        <a href="<?= url('/member/refer.php') ?>" class="text-sm text-beige-100/80 hover:text-gold-400">Refer</a>
-        <a href="<?= url('/member/dashboard.php') ?>" class="text-sm text-beige-100/90 hover:text-gold-400">My Sanctuary</a>
-        <form method="post" action="<?= url('/public/logout.php') ?>" class="inline">
-          <?= csrf_field() ?>
-          <button class="text-sm text-beige-100/60 hover:text-gold-400" type="submit">Sign out</button>
-        </form>
+        <div class="relative" @click.outside="account = false">
+          <button type="button" @click="account = !account"
+                  class="flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/10 text-sm text-beige-100/85 hover:border-gold-500/40 hover:text-gold-400 transition">
+            <span class="h-6 w-6 rounded-full bg-gold-500/20 text-gold-400 flex items-center justify-center text-[11px] uppercase"><?= e(substr($firstName ?: 'A', 0, 1)) ?></span>
+            <span class="whitespace-nowrap"><?= e($firstName ?: 'Account') ?></span>
+            <svg class="h-3 w-3 text-beige-100/50" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4.5l3 3 3-3"/></svg>
+          </button>
+
+          <div x-show="account" x-cloak x-transition.opacity
+               class="absolute right-0 mt-2 w-56 rounded-2xl border border-white/10 bg-navy-900/95 backdrop-blur p-2 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.6)]">
+            <a href="<?= url('/member/dashboard.php') ?>"      class="block px-3 py-2 rounded-lg text-sm text-beige-100/90 hover:bg-gold-500/10 hover:text-gold-400">My Sanctuary</a>
+            <a href="<?= url('/member/content.php') ?>"        class="block px-3 py-2 rounded-lg text-sm text-beige-100/90 hover:bg-gold-500/10 hover:text-gold-400">Audio library</a>
+            <a href="<?= url('/member/my_bookings.php') ?>"    class="block px-3 py-2 rounded-lg text-sm text-beige-100/90 hover:bg-gold-500/10 hover:text-gold-400">My bookings</a>
+            <a href="<?= url('/member/refer.php') ?>"          class="block px-3 py-2 rounded-lg text-sm text-beige-100/90 hover:bg-gold-500/10 hover:text-gold-400">Refer a friend</a>
+            <a href="<?= url('/member/profile.php') ?>"        class="block px-3 py-2 rounded-lg text-sm text-beige-100/90 hover:bg-gold-500/10 hover:text-gold-400">Profile</a>
+            <?php if (in_array($user['role'], ['admin','staff'], true)): ?>
+              <div class="my-1 border-t border-white/5"></div>
+              <a href="<?= url('/admin/dashboard.php') ?>" class="block px-3 py-2 rounded-lg text-sm text-gold-400 hover:bg-gold-500/10">Admin →</a>
+            <?php endif; ?>
+            <div class="my-1 border-t border-white/5"></div>
+            <form method="post" action="<?= url('/public/logout.php') ?>">
+              <?= csrf_field() ?>
+              <button class="block w-full text-left px-3 py-2 rounded-lg text-sm text-beige-100/65 hover:bg-red-500/10 hover:text-red-300" type="submit">Sign out</button>
+            </form>
+          </div>
+        </div>
       <?php else: ?>
-        <a href="<?= url('/public/login.php') ?>" class="text-sm text-beige-100/80 hover:text-gold-400">Sign in</a>
-        <a href="<?= url('/public/register.php') ?>" class="px-4 py-2 rounded-full bg-gold-500 text-navy-950 text-sm font-medium hover:bg-gold-400 transition">Begin journey</a>
+        <a href="<?= url('/public/login.php') ?>"    class="text-sm text-beige-100/80 hover:text-gold-400 whitespace-nowrap">Sign in</a>
+        <a href="<?= url('/public/register.php') ?>" class="px-4 py-2 rounded-full bg-gold-500 text-navy-950 text-sm font-medium hover:bg-gold-400 transition whitespace-nowrap">Begin journey</a>
       <?php endif; ?>
     </div>
 
-    <button class="md:hidden text-beige-100" @click="open = !open" aria-label="Menu">
+    <!-- Mobile toggle -->
+    <button class="md:hidden text-beige-100 -mr-2 p-2" @click="open = !open" aria-label="Menu">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
 
-    <div x-show="open" x-transition class="md:hidden absolute top-full left-0 right-0 bg-navy-900 border-b border-white/5" style="display: none;">
-      <div class="px-6 py-4 flex flex-col gap-4">
+    <!-- Mobile menu -->
+    <div x-show="open" x-cloak x-transition class="md:hidden absolute top-full left-0 right-0 bg-navy-900 border-b border-white/5">
+      <div class="px-6 py-5 flex flex-col gap-4">
         <?php foreach ($nav as [$label, $path]): ?>
           <a href="<?= url($path) ?>" class="text-beige-100/90"><?= e($label) ?></a>
         <?php endforeach; ?>
-        <?php if ($user): ?>
-          <a href="<?= url('/member/dashboard.php') ?>" class="text-gold-400">My Sanctuary</a>
-          <?php if (in_array($user['role'], ['admin','staff'], true)): ?>
-            <a href="<?= url('/admin/dashboard.php') ?>" class="text-gold-400">Admin</a>
+        <div class="border-t border-white/5 pt-4 flex flex-col gap-4">
+          <?php if ($user): ?>
+            <a href="<?= url('/member/dashboard.php') ?>"   class="text-gold-400">My Sanctuary</a>
+            <a href="<?= url('/member/content.php') ?>"    class="text-beige-100/90">Audio library</a>
+            <a href="<?= url('/member/my_bookings.php') ?>" class="text-beige-100/90">My bookings</a>
+            <a href="<?= url('/member/refer.php') ?>"      class="text-beige-100/90">Refer a friend</a>
+            <a href="<?= url('/member/profile.php') ?>"    class="text-beige-100/90">Profile</a>
+            <?php if (in_array($user['role'], ['admin','staff'], true)): ?>
+              <a href="<?= url('/admin/dashboard.php') ?>" class="text-gold-400">Admin →</a>
+            <?php endif; ?>
+            <form method="post" action="<?= url('/public/logout.php') ?>">
+              <?= csrf_field() ?>
+              <button class="text-beige-100/65 text-left" type="submit">Sign out</button>
+            </form>
+          <?php else: ?>
+            <a href="<?= url('/public/login.php') ?>"    class="text-beige-100/90">Sign in</a>
+            <a href="<?= url('/public/register.php') ?>" class="text-gold-400">Begin journey</a>
           <?php endif; ?>
-          <form method="post" action="<?= url('/public/logout.php') ?>"><?= csrf_field() ?><button class="text-beige-100/70" type="submit">Sign out</button></form>
-        <?php else: ?>
-          <a href="<?= url('/public/login.php') ?>">Sign in</a>
-          <a href="<?= url('/public/register.php') ?>" class="text-gold-400">Begin journey</a>
-        <?php endif; ?>
+        </div>
       </div>
     </div>
   </div>
