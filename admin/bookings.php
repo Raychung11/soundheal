@@ -11,7 +11,54 @@ if (is_post()) {
         flash('booking', 'Missing booking.', 'error');
         redirect('/admin/bookings.php');
     }
-    if ($action === 'mark_attended') {
+    if ($action === 'mark_paid') {
+        // Manual rescue when the Billplz webhook didn't reach us. Settle
+        // through the existing path so tickets are issued + confirmation
+        // email goes out, exactly like a real webhook would.
+        db()->beginTransaction();
+        try {
+            // Promote any linked pending payment row.
+            $p = db()->prepare(
+                "SELECT id FROM payments WHERE purpose='booking' AND reference_id=:id ORDER BY id DESC LIMIT 1"
+            );
+            $p->execute([':id' => $bookingId]);
+            $paymentId = (int) ($p->fetchColumn() ?: 0);
+
+            if ($paymentId > 0) {
+                db()->prepare(
+                    "UPDATE payments SET status='paid', paid_at = COALESCE(paid_at, NOW()) WHERE id=:id"
+                )->execute([':id' => $paymentId]);
+                db()->commit();
+                if (function_exists('settle_payment')) settle_payment($paymentId);
+            } else {
+                // No payment row at all (e.g. demo booking) — flip booking
+                // and issue tickets directly.
+                db()->prepare("UPDATE event_bookings SET status='paid' WHERE id=:id")->execute([':id' => $bookingId]);
+                $b = db()->prepare("SELECT booking_ref, quantity FROM event_bookings WHERE id=:id");
+                $b->execute([':id' => $bookingId]);
+                $booking = $b->fetch();
+                $check = db()->prepare("SELECT COUNT(*) FROM tickets WHERE booking_id=:b");
+                $check->execute([':b' => $bookingId]);
+                if ($booking && (int) $check->fetchColumn() === 0) {
+                    $t = db()->prepare(
+                        "INSERT INTO tickets (booking_id, ticket_code, qr_token) VALUES (:b, :c, :tok)"
+                    );
+                    for ($i = 0; $i < (int) $booking['quantity']; $i++) {
+                        $t->execute([
+                            ':b'   => $bookingId,
+                            ':c'   => $booking['booking_ref'] . '-' . ($i + 1),
+                            ':tok' => generate_token(24),
+                        ]);
+                    }
+                }
+                db()->commit();
+            }
+            audit_log('booking.manual_mark_paid', 'event_bookings', $bookingId, ['payment_id' => $paymentId]);
+        } catch (Throwable $e) {
+            db()->rollBack();
+            error_log('[admin/bookings] mark_paid failed: ' . $e->getMessage());
+        }
+    } elseif ($action === 'mark_attended') {
         db()->prepare("UPDATE event_bookings SET status='attended' WHERE id = :id")->execute([':id' => $bookingId]);
         audit_log('booking.mark_attended', 'event_bookings', $bookingId);
     } elseif ($action === 'cancel') {
@@ -86,6 +133,14 @@ require __DIR__ . '/../includes/admin_layout.php';
           <td><?= e(format_money((float)$b['total_amount'])) ?></td>
           <td><span class="text-xs px-2 py-1 rounded-full <?= $b['status'] === 'paid' ? 'bg-gold-500/20 text-gold-400' : 'bg-white/5 text-beige-100/60' ?>"><?= e($b['status']) ?></span></td>
           <td class="text-right pr-4 space-x-2 whitespace-nowrap">
+            <?php if ($b['status'] === 'pending'): ?>
+              <form method="post" class="inline" onsubmit="return confirm('Mark this booking as paid? Use only if the Billplz webhook didn\'t reach us — tickets will be issued and a confirmation email sent.');">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="mark_paid">
+                <input type="hidden" name="booking_id" value="<?= (int)$b['id'] ?>">
+                <button class="text-xs text-gold-400 hover:text-gold-300">Mark paid</button>
+              </form>
+            <?php endif; ?>
             <?php if (in_array($b['status'], ['pending','paid'], true)): ?>
               <form method="post" class="inline">
                 <?= csrf_field() ?>
