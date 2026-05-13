@@ -4,7 +4,7 @@ $pageTitle = 'Experiences';
 $packs = active_packs();
 
 $experiences = db()->query(
-    "SELECT title, duration, description
+    "SELECT title, duration, description, cover_image
        FROM experiences
       WHERE status = 'active'
       ORDER BY sort_order ASC, title ASC"
@@ -29,18 +29,31 @@ require __DIR__ . '/../includes/header.php';
   <?php else: ?>
     <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
       <?php foreach ($experiences as $exp): ?>
-        <article class="group relative border border-white/5 rounded-3xl p-8 bg-navy-900/40 hover:border-gold-500/30 hover:bg-navy-900/70 transition overflow-hidden">
-          <div class="absolute -right-16 -top-16 w-48 h-48 rounded-full border border-gold-500/10 group-hover:border-gold-500/20 transition"></div>
-          <?php if (!empty($exp['duration'])): ?>
-            <p class="text-[11px] uppercase tracking-[0.3em] text-gold-400/70"><?= e($exp['duration']) ?></p>
+        <article class="group relative border border-white/5 rounded-3xl bg-navy-900/40 hover:border-gold-500/30 hover:bg-navy-900/70 transition overflow-hidden flex flex-col">
+          <?php if (!empty($exp['cover_image'])): ?>
+            <div class="relative aspect-[16/10] overflow-hidden">
+              <img src="<?= e(str_starts_with((string)$exp['cover_image'], '/') ? url($exp['cover_image']) : $exp['cover_image']) ?>"
+                   alt="<?= e($exp['title']) ?>"
+                   loading="lazy"
+                   class="w-full h-full object-cover transition duration-700 group-hover:scale-[1.03]">
+              <div class="absolute inset-0 bg-gradient-to-t from-navy-950/85 via-navy-950/20 to-transparent"></div>
+            </div>
           <?php endif; ?>
-          <h3 class="font-serif text-3xl text-gold-400 mt-3"><?= e($exp['title']) ?></h3>
-          <?php if (!empty($exp['description'])): ?>
-            <p class="mt-5 text-beige-100/70 leading-relaxed text-sm"><?= e($exp['description']) ?></p>
-          <?php endif; ?>
-          <a href="<?= url('/public/events.php') ?>" class="mt-8 inline-flex items-center gap-2 text-sm text-gold-400 hover:text-gold-300">
-            Reserve →
-          </a>
+          <div class="relative p-8 flex-1 flex flex-col">
+            <?php if (empty($exp['cover_image'])): ?>
+              <div class="absolute -right-16 -top-16 w-48 h-48 rounded-full border border-gold-500/10 group-hover:border-gold-500/20 transition"></div>
+            <?php endif; ?>
+            <?php if (!empty($exp['duration'])): ?>
+              <p class="text-[11px] uppercase tracking-[0.3em] text-gold-400/70"><?= e($exp['duration']) ?></p>
+            <?php endif; ?>
+            <h3 class="font-serif text-3xl text-gold-400 mt-3"><?= e($exp['title']) ?></h3>
+            <?php if (!empty($exp['description'])): ?>
+              <p class="mt-5 text-beige-100/70 leading-relaxed text-sm"><?= e($exp['description']) ?></p>
+            <?php endif; ?>
+            <a href="<?= url('/public/events.php') ?>" class="mt-8 inline-flex items-center gap-2 text-sm text-gold-400 hover:text-gold-300">
+              Reserve →
+            </a>
+          </div>
         </article>
       <?php endforeach; ?>
     </div>

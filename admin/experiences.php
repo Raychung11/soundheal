@@ -40,6 +40,7 @@ if (is_post()) {
     $status      = input('status', 'active') === 'inactive' ? 'inactive' : 'active';
     $sortOrder   = (int) input('sort_order', 0);
     $slug        = trim((string) input('slug', ''));
+    $coverImage  = trim((string) input('cover_image', ''));   // hidden input keeps current path
 
     if ($title === '') $formErrors[] = 'Title is required.';
 
@@ -50,27 +51,48 @@ if (is_post()) {
         $slug = strtolower(preg_replace('/[^a-z0-9\-]+/', '-', $slug));
     }
 
+    // Optional file upload — replaces any existing cover.
+    try {
+        $uploaded = handle_upload('cover_image_file', 'experiences');
+        if ($uploaded) {
+            if ($coverImage !== '' && str_starts_with($coverImage, '/uploads/')) {
+                delete_upload($coverImage);
+            }
+            $coverImage = $uploaded;
+        }
+    } catch (Throwable $e) {
+        $formErrors[] = $e->getMessage();
+    }
+
+    if (!empty($_POST['remove_cover']) && $coverImage !== '') {
+        if (str_starts_with($coverImage, '/uploads/')) {
+            delete_upload($coverImage);
+        }
+        $coverImage = '';
+    }
+
     if (!$formErrors) {
         if ($id > 0) {
             db()->prepare(
                 "UPDATE experiences
                     SET slug = :slug, title = :title, duration = :dur, description = :desc,
-                        status = :status, sort_order = :sort
+                        cover_image = :cover, status = :status, sort_order = :sort
                   WHERE id = :id"
             )->execute([
                 ':slug' => $slug, ':title' => $title, ':dur' => $duration ?: null,
-                ':desc' => $description ?: null, ':status' => $status, ':sort' => $sortOrder,
-                ':id' => $id,
+                ':desc' => $description ?: null, ':cover' => $coverImage ?: null,
+                ':status' => $status, ':sort' => $sortOrder, ':id' => $id,
             ]);
             audit_log('experience.update', 'experiences', $id);
             flash('experiences', 'Experience updated.', 'success');
         } else {
             db()->prepare(
-                "INSERT INTO experiences (slug, title, duration, description, status, sort_order)
-                 VALUES (:slug, :title, :dur, :desc, :status, :sort)"
+                "INSERT INTO experiences (slug, title, duration, description, cover_image, status, sort_order)
+                 VALUES (:slug, :title, :dur, :desc, :cover, :status, :sort)"
             )->execute([
                 ':slug' => $slug, ':title' => $title, ':dur' => $duration ?: null,
-                ':desc' => $description ?: null, ':status' => $status, ':sort' => $sortOrder,
+                ':desc' => $description ?: null, ':cover' => $coverImage ?: null,
+                ':status' => $status, ':sort' => $sortOrder,
             ]);
             $newId = (int) db()->lastInsertId();
             audit_log('experience.create', 'experiences', $newId);
@@ -82,7 +104,8 @@ if (is_post()) {
     // Preserve form on error
     $editing = [
         'id' => $id, 'slug' => $slug, 'title' => $title, 'duration' => $duration,
-        'description' => $description, 'status' => $status, 'sort_order' => $sortOrder,
+        'description' => $description, 'cover_image' => $coverImage,
+        'status' => $status, 'sort_order' => $sortOrder,
     ];
 }
 
@@ -116,10 +139,11 @@ require __DIR__ . '/../includes/admin_layout.php';
 <?php endif; ?>
 
 <?php if ($showForm): ?>
-  <?php $e = $editing ?: ['id'=>0,'slug'=>'','title'=>'','duration'=>'','description'=>'','status'=>'active','sort_order'=>10]; ?>
-  <form method="post" class="mt-8 space-y-6 max-w-3xl border border-white/5 rounded-3xl p-6 bg-navy-900/40">
+  <?php $e = $editing ?: ['id'=>0,'slug'=>'','title'=>'','duration'=>'','description'=>'','cover_image'=>'','status'=>'active','sort_order'=>10]; ?>
+  <form method="post" enctype="multipart/form-data" class="mt-8 space-y-6 max-w-3xl border border-white/5 rounded-3xl p-6 bg-navy-900/40">
     <?= csrf_field() ?>
     <input type="hidden" name="id" value="<?= (int)$e['id'] ?>">
+    <input type="hidden" name="cover_image" value="<?= e((string)($e['cover_image'] ?? '')) ?>">
 
     <?php if (!empty($formErrors)): ?>
       <div class="border border-red-400/40 bg-red-500/5 text-red-200 rounded-2xl px-5 py-4 text-sm">
@@ -146,6 +170,21 @@ require __DIR__ . '/../includes/admin_layout.php';
       <textarea name="description" rows="4"
                 class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3 focus:border-gold-500/50 focus:outline-none"><?= e($e['description'] ?? '') ?></textarea>
     </label>
+
+    <div class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Cover image</span>
+      <?php if (!empty($e['cover_image'])): ?>
+        <div class="mt-2 flex items-center gap-4">
+          <img src="<?= e(str_starts_with((string)$e['cover_image'], '/') ? url($e['cover_image']) : $e['cover_image']) ?>" alt="" class="h-32 w-auto rounded-xl object-cover border border-white/10">
+          <label class="inline-flex items-center gap-2 text-xs text-red-300/80 hover:text-red-200">
+            <input type="checkbox" name="remove_cover" value="1" class="accent-red-400"> Remove this image
+          </label>
+        </div>
+      <?php endif; ?>
+      <input type="file" name="cover_image_file" accept="image/jpeg,image/png,image/webp"
+             class="mt-2 w-full text-sm text-beige-100/70 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-gold-500/20 file:text-gold-400 hover:file:bg-gold-500/30">
+      <span class="text-[11px] text-beige-100/40 mt-1 block">JPG, PNG, or WebP. Recommended 1600×1000 (landscape). Max 5 MB.</span>
+    </div>
 
     <div class="grid sm:grid-cols-2 gap-4">
       <label class="block">
@@ -195,10 +234,19 @@ require __DIR__ . '/../includes/admin_layout.php';
         <?php foreach ($rows as $r): ?>
           <tr>
             <td class="py-3">
-              <p class="text-beige-100"><?= e($r['title']) ?></p>
-              <?php if (!empty($r['description'])): ?>
-                <p class="text-[11px] text-beige-100/45 mt-0.5 line-clamp-2 max-w-md"><?= e(mb_strimwidth((string)$r['description'], 0, 110, '…')) ?></p>
-              <?php endif; ?>
+              <div class="flex items-center gap-3">
+                <?php if (!empty($r['cover_image'])): ?>
+                  <img src="<?= e(str_starts_with((string)$r['cover_image'], '/') ? url($r['cover_image']) : $r['cover_image']) ?>" alt="" class="h-10 w-14 rounded-md object-cover border border-white/5">
+                <?php else: ?>
+                  <div class="h-10 w-14 rounded-md border border-white/5 bg-navy-950/50"></div>
+                <?php endif; ?>
+                <div>
+                  <p class="text-beige-100"><?= e($r['title']) ?></p>
+                  <?php if (!empty($r['description'])): ?>
+                    <p class="text-[11px] text-beige-100/45 mt-0.5 line-clamp-2 max-w-md"><?= e(mb_strimwidth((string)$r['description'], 0, 110, '…')) ?></p>
+                  <?php endif; ?>
+                </div>
+              </div>
             </td>
             <td class="text-beige-100/70"><?= e($r['duration'] ?? '—') ?></td>
             <td class="text-beige-100/70"><?= (int)$r['sort_order'] ?></td>
