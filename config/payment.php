@@ -18,6 +18,6 @@ return [
     'collection_id' => getenv('BILLPLZ_COLLECTION_ID') ?: '',
     'x_signature' => getenv('BILLPLZ_X_SIGNATURE') ?: '',
     'callback_url' => (getenv('APP_URL') ?: 'https://soundheal.local') . '/api/billplz_webhook.php',
-    'redirect_url' => (getenv('APP_URL') ?: 'https://soundheal.local') . '/member/my_bookings.php',
+    'redirect_url' => (getenv('APP_URL') ?: 'https://soundheal.local') . '/member/payment_thanks.php',
     'currency'    => 'MYR',
 ];

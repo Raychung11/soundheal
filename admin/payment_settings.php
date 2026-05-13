@@ -147,9 +147,14 @@ require __DIR__ . '/../includes/admin_layout.php';
     <span class="text-xs uppercase tracking-widest text-beige-100/60">Redirect URL after payment (optional)</span>
     <input name="billplz_redirect_url" type="url"
            value="<?= e(setting('billplz_redirect_url', '')) ?>"
-           placeholder="<?= e(rtrim((string) config('app.url'), '/')) ?>/member/my_bookings.php"
+           placeholder="<?= e(rtrim((string) config('app.url'), '/')) ?>/member/payment_thanks.php"
            class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3 text-sm">
-    <span class="text-[11px] text-beige-100/40 mt-1 block">Where customers land after paying. Leave blank to use the default member bookings page.</span>
+    <span class="text-[11px] text-beige-100/40 mt-1 block">
+      Where customers land after paying. Leave blank to use the default
+      <code class="text-gold-400/70">/member/payment_thanks.php</code> page,
+      which auto-detects paid / pending / failed states and shows the
+      booking ticket or membership status.
+    </span>
   </label>
 
   <div class="flex flex-wrap gap-3 pt-2">

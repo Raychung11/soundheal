@@ -105,7 +105,7 @@ function payment_config(): array
     $appUrl       = rtrim((string) config('app.url'), '/');
     $callbackUrl  = $appUrl . '/api/billplz_webhook.php';
     $redirectUrl  = trim((string) setting('billplz_redirect_url', ''))
-                    ?: ($env['redirect_url'] ?? $appUrl . '/member/my_bookings.php');
+                    ?: ($env['redirect_url'] ?: $appUrl . '/member/payment_thanks.php');
 
     return [
         'gateway'       => 'billplz',
