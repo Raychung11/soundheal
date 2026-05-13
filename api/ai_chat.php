@@ -78,11 +78,11 @@ echo json_encode(['reply' => $reply, 'session_token' => $sessionToken]);
 
 function ai_reply(int $conversationId, string $message): string
 {
-    $cfg = config('ai');
+    $cfg = ai_config();
     $apiKey = $cfg['openai']['api_key'] ?? '';
 
     if (!$apiKey) {
-        return ai_fallback($message);
+        return aria_fallback($message);
     }
 
     $history = db()->prepare(
@@ -91,7 +91,7 @@ function ai_reply(int $conversationId, string $message): string
     $history->execute([':c' => $conversationId]);
     $turns = array_reverse($history->fetchAll());
 
-    $messages = [['role' => 'system', 'content' => $cfg['persona']['system_prompt']]];
+    $messages = [['role' => 'system', 'content' => aria_system_prompt()]];
     foreach ($turns as $t) {
         $messages[] = ['role' => $t['role'], 'content' => $t['content']];
     }
@@ -100,7 +100,7 @@ function ai_reply(int $conversationId, string $message): string
     $payload = json_encode([
         'model'       => $cfg['openai']['model'],
         'messages'    => $messages,
-        'temperature' => 0.6,
+        'temperature' => (float) $cfg['temperature'],
         'max_tokens'  => 500,
     ]);
 
@@ -127,13 +127,5 @@ function ai_reply(int $conversationId, string $message): string
         }
     }
     error_log('[AI] OpenAI error ' . $code . ': ' . substr((string)$response, 0, 500));
-    return ai_fallback($message);
-}
-
-function ai_fallback(string $message): string
-{
-    return "Thank you for sharing that with me. Take a slow breath in… and out.\n\n"
-         . "If you're looking for stillness, our Sound Bath is a gentle place to begin. "
-         . "If your nervous system feels frayed, our Breathwork Journey can help you settle.\n\n"
-         . "This is not medical advice. Please consult qualified professionals for medical or mental health concerns.";
+    return aria_fallback($message);
 }

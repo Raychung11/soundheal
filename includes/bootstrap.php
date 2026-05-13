@@ -48,3 +48,4 @@ require_once __DIR__ . '/referrals.php';
 require_once __DIR__ . '/payments.php';
 require_once __DIR__ . '/invoices.php';
 require_once __DIR__ . '/class_packs.php';
+require_once __DIR__ . '/aria.php';
