@@ -15,6 +15,7 @@ $adminNav = [
     ['Payments',           '/admin/payments.php'],
     ['Invoices',           '/admin/invoices.php'],
     ['Payment settings',   '/admin/payment_settings.php'],
+    ['Mail settings',      '/admin/mail_settings.php'],
     ['Check-in',           '/admin/checkin.php'],
     ['Content',            '/admin/content.php'],
     ['Testimonials',       '/admin/testimonials.php'],
