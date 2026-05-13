@@ -2,16 +2,15 @@
 require_once __DIR__ . '/../includes/bootstrap.php';
 $pageTitle = 'Experiences';
 $packs = active_packs();
-require __DIR__ . '/../includes/header.php';
 
-$experiences = [
-    ['Sound Bath',         '75 min',  'A 75-minute immersion in crystal bowls and gongs. Lie down. Let the frequencies do the work.'],
-    ['Breathwork Journey', '60 min',  'Guided conscious breathing to release stored tension and arrive in the body.'],
-    ['Moon Circle',        '90 min',  'Monthly women’s circle held in candlelight — sound, journaling, and gentle ceremony.'],
-    ['Couples Tuning',     '60 min',  'A private session for two — synchronised sound and breath to soften connection.'],
-    ['Corporate Reset',    '45 min',  'On-site sound healing for teams. 45 minutes to lower the room and lift the focus.'],
-    ['1:1 Concierge',      '90 min',  'A bespoke private session crafted around your current emotional landscape.'],
-];
+$experiences = db()->query(
+    "SELECT title, duration, description
+       FROM experiences
+      WHERE status = 'active'
+      ORDER BY sort_order ASC, title ASC"
+)->fetchAll();
+
+require __DIR__ . '/../includes/header.php';
 ?>
 <section class="relative overflow-hidden">
   <div class="absolute inset-0 bg-gradient-to-b from-navy-950 to-transparent"></div>
@@ -23,19 +22,29 @@ $experiences = [
 </section>
 
 <section class="max-w-6xl mx-auto px-6 pb-24">
-  <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-    <?php foreach ($experiences as $i => [$title, $duration, $body]): ?>
-      <article class="group relative border border-white/5 rounded-3xl p-8 bg-navy-900/40 hover:border-gold-500/30 hover:bg-navy-900/70 transition overflow-hidden">
-        <div class="absolute -right-16 -top-16 w-48 h-48 rounded-full border border-gold-500/10 group-hover:border-gold-500/20 transition"></div>
-        <p class="text-[11px] uppercase tracking-[0.3em] text-gold-400/70"><?= e($duration) ?></p>
-        <h3 class="font-serif text-3xl text-gold-400 mt-3"><?= e($title) ?></h3>
-        <p class="mt-5 text-beige-100/70 leading-relaxed text-sm"><?= e($body) ?></p>
-        <a href="<?= url('/public/events.php') ?>" class="mt-8 inline-flex items-center gap-2 text-sm text-gold-400 hover:text-gold-300">
-          Reserve →
-        </a>
-      </article>
-    <?php endforeach; ?>
-  </div>
+  <?php if (!$experiences): ?>
+    <div class="border border-white/5 rounded-3xl p-10 bg-navy-900/40 text-center">
+      <p class="text-beige-100/70">New offerings are taking shape. Please check back soon, or <a href="<?= url('/public/contact.php') ?>" class="text-gold-400 hover:text-gold-300">say hello</a>.</p>
+    </div>
+  <?php else: ?>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <?php foreach ($experiences as $exp): ?>
+        <article class="group relative border border-white/5 rounded-3xl p-8 bg-navy-900/40 hover:border-gold-500/30 hover:bg-navy-900/70 transition overflow-hidden">
+          <div class="absolute -right-16 -top-16 w-48 h-48 rounded-full border border-gold-500/10 group-hover:border-gold-500/20 transition"></div>
+          <?php if (!empty($exp['duration'])): ?>
+            <p class="text-[11px] uppercase tracking-[0.3em] text-gold-400/70"><?= e($exp['duration']) ?></p>
+          <?php endif; ?>
+          <h3 class="font-serif text-3xl text-gold-400 mt-3"><?= e($exp['title']) ?></h3>
+          <?php if (!empty($exp['description'])): ?>
+            <p class="mt-5 text-beige-100/70 leading-relaxed text-sm"><?= e($exp['description']) ?></p>
+          <?php endif; ?>
+          <a href="<?= url('/public/events.php') ?>" class="mt-8 inline-flex items-center gap-2 text-sm text-gold-400 hover:text-gold-300">
+            Reserve →
+          </a>
+        </article>
+      <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
 </section>
 
 <?php if ($packs): ?>
