@@ -6,9 +6,9 @@ declare(strict_types=1);
  * Override any value through environment variables when deploying.
  */
 
-// Best-effort auto-detection of the public URL when APP_URL is not set.
-// This avoids handing Billplz a "soundheal.local" callback / redirect URL
-// on hosts where the env var was never configured.
+// Best-effort auto-detection of the public URL.
+// We use this whenever APP_URL is unset or still holds the placeholder
+// "soundheal.local". Real production overrides via env continue to win.
 $detectedUrl = (static function (): string {
     if (php_sapi_name() === 'cli' || empty($_SERVER['HTTP_HOST'])) {
         return 'https://soundheal.local';
@@ -20,12 +20,23 @@ $detectedUrl = (static function (): string {
     return $proto . '://' . $_SERVER['HTTP_HOST'];
 })();
 
+$envUrl = trim((string) getenv('APP_URL'));
+// Treat the development placeholder (or anything pointing at .local /
+// localhost) as "not set" so a stale Hostinger env var can't poison
+// the redirect / callback URLs we hand to Billplz.
+if ($envUrl === ''
+    || stripos($envUrl, 'soundheal.local') !== false
+    || stripos($envUrl, 'localhost') !== false
+    || stripos($envUrl, '127.0.0.1') !== false) {
+    $envUrl = '';
+}
+
 return [
     'name'        => getenv('APP_NAME') ?: 'SoundHeal',
     'tagline'     => 'Wellness Operating System',
     'env'         => getenv('APP_ENV') ?: 'production',
     'debug'       => filter_var(getenv('APP_DEBUG') ?: 'false', FILTER_VALIDATE_BOOLEAN),
-    'url'         => rtrim(getenv('APP_URL') ?: $detectedUrl, '/'),
+    'url'         => rtrim($envUrl !== '' ? $envUrl : $detectedUrl, '/'),
     'timezone'    => getenv('APP_TIMEZONE') ?: 'Asia/Kuala_Lumpur',
     'currency'    => 'MYR',
     'locale'      => 'en',

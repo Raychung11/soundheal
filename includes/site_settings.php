@@ -102,7 +102,18 @@ function payment_config(): array
     $collectionId = trim((string) setting('billplz_collection_id', (string) ($env['collection_id'] ?? '')));
     $xSignature   = trim((string) setting('billplz_x_signature',   (string) ($env['x_signature']   ?? '')));
 
-    $appUrl       = rtrim((string) config('app.url'), '/');
+    // Public URL: admin override > config('app.url') (which already includes
+    // env + auto-detect). Strip any trailing slash. Reject local placeholders
+    // so a stale value can't poison the callback / redirect URLs.
+    $publicUrlOverride = trim((string) setting('billplz_public_url', ''));
+    if ($publicUrlOverride !== ''
+        && stripos($publicUrlOverride, 'soundheal.local') === false
+        && stripos($publicUrlOverride, 'localhost') === false) {
+        $appUrl = rtrim($publicUrlOverride, '/');
+    } else {
+        $appUrl = rtrim((string) config('app.url'), '/');
+    }
+
     $callbackUrl  = $appUrl . '/api/billplz_webhook.php';
     $redirectUrl  = trim((string) setting('billplz_redirect_url', ''))
                     ?: ($env['redirect_url'] ?: $appUrl . '/member/payment_thanks.php');

@@ -61,6 +61,7 @@ if (is_post()) {
         set_setting('billplz_collection_id', trim((string) input('billplz_collection_id', '')), 'string');
         set_setting('billplz_x_signature',   trim((string) input('billplz_x_signature', '')),   'string');
         set_setting('billplz_redirect_url',  trim((string) input('billplz_redirect_url', '')),  'string');
+        set_setting('billplz_public_url',    trim((string) input('billplz_public_url', '')),    'string');
 
         audit_log('payment_settings.update', 'site_settings', null);
         flash('payment', 'Payment settings saved.', 'success');
@@ -113,19 +114,38 @@ require __DIR__ . '/../includes/admin_layout.php';
 
 <!-- Public URL sanity check -->
 <?php
-$publicUrl = rtrim((string) config('app.url'), '/');
-$looksLocal = str_contains($publicUrl, 'soundheal.local') || str_contains($publicUrl, 'localhost') || str_starts_with($publicUrl, 'http://');
+// Distinguish what the active payment_config saw (after admin override)
+// from the raw value config/app.php produced (env + auto-detect).
+$activeUrl = rtrim(preg_replace('#/api/billplz_webhook\.php$#', '', $cfg['callback_url']), '/');
+$baseUrl   = rtrim((string) config('app.url'), '/');
+$looksLocal = stripos($activeUrl, 'soundheal.local') !== false
+           || stripos($activeUrl, 'localhost')        !== false
+           || stripos($activeUrl, '127.0.0.1')        !== false;
 ?>
 <div class="mt-8 border <?= $looksLocal ? 'border-red-400/40 bg-red-500/5' : 'border-white/5 bg-navy-900/40' ?> rounded-3xl p-6">
   <div class="flex items-center justify-between gap-3 flex-wrap">
     <div>
-      <p class="text-[11px] uppercase tracking-widest <?= $looksLocal ? 'text-red-300' : 'text-gold-400/80' ?>">Detected public URL</p>
-      <code class="text-sm text-beige-100"><?= e($publicUrl) ?></code>
+      <p class="text-[11px] uppercase tracking-widest <?= $looksLocal ? 'text-red-300' : 'text-gold-400/80' ?>">Public URL (active)</p>
+      <code class="text-sm text-beige-100"><?= e($activeUrl) ?></code>
+      <?php if ($baseUrl !== $activeUrl): ?>
+        <p class="text-[11px] text-beige-100/45 mt-2">Env / auto-detect would have used <code class="text-beige-100/65"><?= e($baseUrl) ?></code> — the admin override below takes precedence.</p>
+      <?php endif; ?>
     </div>
     <?php if ($looksLocal): ?>
-      <span class="text-xs text-red-300">⚠ Looks like a local default. Set the <code>APP_URL</code> env variable on Hostinger to your real domain so Billplz callbacks + redirects don't break.</span>
+      <span class="text-xs text-red-300">⚠ Looks like a local default. Set the override below — or fix the <code>APP_URL</code> env on Hostinger — so Billplz callbacks + redirects don't break.</span>
     <?php endif; ?>
   </div>
+
+  <label class="block mt-5">
+    <span class="text-xs uppercase tracking-widest text-beige-100/60">Override public URL (optional, wins over env)</span>
+    <input name="billplz_public_url" form="payment-settings-form" type="url"
+           value="<?= e(setting('billplz_public_url', '')) ?>"
+           placeholder="https://jaemiesoundbath.com"
+           class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3 text-sm">
+    <span class="text-[11px] text-beige-100/40 mt-1 block">
+      Use this if env-vars are awkward to set on your host. Leave blank to fall through to <code>APP_URL</code> or auto-detection. Local placeholders (soundheal.local / localhost) are ignored.
+    </span>
+  </label>
 </div>
 
 <!-- Webhook URL panel -->
@@ -139,7 +159,7 @@ $looksLocal = str_contains($publicUrl, 'soundheal.local') || str_contains($publi
   </div>
 </div>
 
-<form method="post" action="<?= url('/admin/payment_settings.php') ?>" class="mt-8 space-y-6 max-w-3xl border border-white/5 rounded-3xl p-6 bg-navy-900/40">
+<form id="payment-settings-form" method="post" action="<?= url('/admin/payment_settings.php') ?>" class="mt-8 space-y-6 max-w-3xl border border-white/5 rounded-3xl p-6 bg-navy-900/40">
   <?= csrf_field() ?>
 
   <div class="flex items-center justify-between gap-4 flex-wrap">
