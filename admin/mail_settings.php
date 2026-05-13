@@ -90,6 +90,46 @@ require __DIR__ . '/../includes/admin_layout.php';
   </div>
 <?php endif; ?>
 
+<!-- What the system currently sees -->
+<?php
+$rows = [
+    ['SMTP host',     $cfg['host'],         $cfg['host']         !== ''],
+    ['Port',          (string) $cfg['port'],$cfg['port']         > 0],
+    ['Encryption',    $cfg['encryption'],   $cfg['encryption']   !== ''],
+    ['Username',      $cfg['username'],     $cfg['username']     !== ''],
+    ['Password',      $cfg['password'] !== '' ? '✓ saved (' . strlen($cfg['password']) . ' chars)' : '— not set —', $cfg['password'] !== ''],
+    ['From address',  $cfg['from_address'], $cfg['from_address'] !== ''],
+    ['From name',     $cfg['from_name'],    $cfg['from_name']    !== ''],
+];
+$allSet = $cfg['host'] !== '' && $cfg['username'] !== '' && $cfg['password'] !== '';
+?>
+<div class="mt-6 border <?= $allSet ? 'border-white/5 bg-navy-900/40' : 'border-red-400/40 bg-red-500/5' ?> rounded-3xl p-6">
+  <div class="flex items-center justify-between gap-3 flex-wrap">
+    <h2 class="font-serif text-xl text-gold-400">What the system currently sees</h2>
+    <span class="text-[11px] uppercase tracking-widest <?= $allSet ? 'text-gold-400/80' : 'text-red-300' ?>">
+      <?= $allSet ? 'SMTP ready' : 'SMTP not yet configured' ?>
+    </span>
+  </div>
+  <table class="mt-3 w-full text-sm">
+    <tbody class="divide-y divide-white/5">
+      <?php foreach ($rows as [$label, $val, $ok]): ?>
+        <tr>
+          <td class="py-2 text-beige-100/55 w-44"><?= e($label) ?></td>
+          <td class="text-beige-100/90 font-mono text-xs break-all"><?= e($val !== '' ? $val : '— empty —') ?></td>
+          <td class="text-right text-xs <?= $ok ? 'text-gold-400/80' : 'text-red-300' ?>">
+            <?= $ok ? '✓' : 'missing' ?>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table>
+  <?php if (!$allSet): ?>
+    <p class="mt-4 text-xs text-red-200/90 leading-relaxed">
+      The system needs <strong>SMTP host</strong>, <strong>username</strong> and <strong>password</strong> before it can speak SMTP. Until those three are filled in, every outbound email falls through to PHP <code>mail()</code> which Hostinger silently drops.
+    </p>
+  <?php endif; ?>
+</div>
+
 <form method="post" action="<?= url('/admin/mail_settings.php') ?>" class="mt-8 space-y-6 max-w-3xl border border-white/5 rounded-3xl p-6 bg-navy-900/40">
   <?= csrf_field() ?>
   <input type="hidden" name="action" value="save">

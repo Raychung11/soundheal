@@ -65,8 +65,16 @@ function send_mail(string $to, string $toName, string $subject, string $template
         return _mail_send_via_native_smtp($to, $toName, $subject, $html, $text, $cfg, $template);
     }
 
-    // 3. Last-ditch: native PHP mail() — unreliable on most shared hosts.
-    return _mail_send_via_mail($to, $toName, $subject, $html, $text, $cfg, $template);
+    // 3. Last-ditch: native PHP mail(). Surface which SMTP field is missing
+    //    so the admin can see it in the log instead of a generic message.
+    $missing = [];
+    if ($cfg['host']     === '') $missing[] = 'SMTP host';
+    if ($cfg['username'] === '') $missing[] = 'username';
+    if ($cfg['password'] === '') $missing[] = 'password';
+    $reason = $missing
+        ? 'Missing ' . implode(' + ', $missing) . ' in /admin/mail_settings.php. PHP mail() is unreliable on shared hosting — fill these in and save.'
+        : 'Hostinger shared often blocks mail() — configure SMTP credentials instead.';
+    return _mail_send_via_mail($to, $toName, $subject, $html, $text, $cfg, $template, $reason);
 }
 
 function _mail_log(string $to, string $toName, string $subject, ?string $template, string $status, string $driver, ?string $error = null): void
@@ -124,7 +132,7 @@ function _mail_send_via_phpmailer(string $to, string $toName, string $subject, s
     }
 }
 
-function _mail_send_via_mail(string $to, string $toName, string $subject, string $html, string $text, array $cfg, string $template): bool
+function _mail_send_via_mail(string $to, string $toName, string $subject, string $html, string $text, array $cfg, string $template, ?string $reasonHint = null): bool
 {
     $headers = [
         'MIME-Version: 1.0',
@@ -134,7 +142,7 @@ function _mail_send_via_mail(string $to, string $toName, string $subject, string
     ];
     $sent = @mail($to, $subject, $html, implode("\r\n", $headers));
     _mail_log($to, $toName, $subject, $template, $sent ? 'sent' : 'failed', 'mail()',
-        $sent ? null : 'PHP mail() returned false. Hostinger shared often blocks this — configure SMTP credentials instead.');
+        $sent ? null : ($reasonHint ?: 'PHP mail() returned false. Hostinger shared often blocks this — configure SMTP credentials instead.'));
     return $sent;
 }
 
