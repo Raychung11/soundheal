@@ -30,7 +30,7 @@ if ($payment && $payment['status'] === 'pending' && $paidParam === 'true') {
     db()->prepare("UPDATE payments SET status = 'paid', paid_at = COALESCE(:p, NOW()) WHERE id = :id")
         ->execute([':p' => $paidAt ?: null, ':id' => $payment['id']]);
 
-    require_once __DIR__ . '/../api/billplz_create.php'; // brings in settle_payment()
+    // settle_payment() is loaded via bootstrap (includes/payments.php).
     if (function_exists('settle_payment')) {
         settle_payment((int) $payment['id']);
     }

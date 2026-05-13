@@ -20,7 +20,7 @@ if (is_post()) {
             db()->prepare("UPDATE payments SET status = 'paid', paid_at = COALESCE(paid_at, NOW()) WHERE id = :id")
                 ->execute([':id' => $pid]);
 
-            require_once __DIR__ . '/../api/billplz_create.php';
+            // settle_payment() loaded via bootstrap (includes/payments.php).
             if (function_exists('settle_payment')) {
                 settle_payment($pid);
             }

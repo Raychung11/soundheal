@@ -7,7 +7,7 @@
  * We validate x_signature, mark the payment as paid, and call settle_payment().
  */
 require_once __DIR__ . '/../includes/bootstrap.php';
-require_once __DIR__ . '/billplz_create.php'; // to reuse settle_payment()
+// settle_payment() is loaded via bootstrap (includes/payments.php).
 
 if (!is_post()) {
     http_response_code(405); exit('Method not allowed.');
