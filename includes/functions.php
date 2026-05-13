@@ -119,6 +119,47 @@ function generate_token(int $length = 32): string
     return bin2hex(random_bytes($length));
 }
 
+/**
+ * Title-case a person's name: trims, collapses whitespace, capitalises
+ * the first letter of every word, preserves apostrophes and hyphens
+ * ("o'neill" → "O'Neill", "mary-jane" → "Mary-Jane"). Unicode-safe.
+ */
+function format_name(string $raw): string
+{
+    $clean = trim(preg_replace('/\s+/u', ' ', $raw) ?? '');
+    if ($clean === '') return '';
+    return mb_convert_case($clean, MB_CASE_TITLE, 'UTF-8');
+}
+
+/**
+ * Normalise a phone number to E.164-ish format. Local Malaysian numbers
+ * starting with 0 get rewritten to +60…. Bare digits also get +60
+ * prepended. Numbers already containing a + are kept as-is (only the
+ * non-digit characters after the + are stripped).
+ *
+ * Returns null when the input has no digits.
+ */
+function normalize_phone(?string $raw, string $defaultCountryCode = '60'): ?string
+{
+    $raw = trim((string) $raw);
+    if ($raw === '') return null;
+
+    if ($raw[0] === '+') {
+        $digits = preg_replace('/\D/', '', substr($raw, 1));
+        return $digits === '' ? null : '+' . $digits;
+    }
+
+    $digits = preg_replace('/\D/', '', $raw);
+    if ($digits === '') return null;
+
+    if ($digits[0] === '0') {
+        $digits = $defaultCountryCode . substr($digits, 1);
+    } elseif (!str_starts_with($digits, $defaultCountryCode)) {
+        $digits = $defaultCountryCode . $digits;
+    }
+    return '+' . $digits;
+}
+
 function format_money(float $amount, string $currency = 'MYR'): string
 {
     return $currency . ' ' . number_format($amount, 2);

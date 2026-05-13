@@ -20,9 +20,9 @@ $errors = [];
 
 if (is_post()) {
     csrf_verify();
-    $name  = trim((string) input('full_name', ''));
+    $name  = format_name((string) input('full_name', ''));
     $email = filter_var(input('email', ''), FILTER_VALIDATE_EMAIL);
-    $phone = trim((string) input('phone', ''));
+    $phone = normalize_phone((string) input('phone', ''));
     $pass  = (string) input('password', '');
     $confirm = (string) input('password_confirm', '');
 
@@ -109,7 +109,10 @@ require __DIR__ . '/../includes/header.php';
     <?php if ($isTrial): ?><input type="hidden" name="trial" value="1"><?php endif; ?>
     <label class="block">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Full name</span>
-      <input name="full_name" required class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3 focus:border-gold-500/50 focus:outline-none">
+      <input name="full_name" required
+             x-data x-on:blur="$el.value = $el.value.trim().toLowerCase().replace(/\s+/g, ' ').replace(/(^|[\s'\-])\p{L}/gu, c => c.toUpperCase())"
+             class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3 focus:border-gold-500/50 focus:outline-none"
+             style="text-transform: capitalize;">
     </label>
     <label class="block">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Email</span>
@@ -117,7 +120,15 @@ require __DIR__ . '/../includes/header.php';
     </label>
     <label class="block">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Phone (optional)</span>
-      <input name="phone" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3 focus:border-gold-500/50 focus:outline-none">
+      <div class="mt-2 flex items-stretch rounded-2xl bg-navy-900 border border-white/5 focus-within:border-gold-500/50 transition overflow-hidden">
+        <span class="px-3 flex items-center text-gold-400 text-sm bg-navy-950/60 border-r border-white/5">+60</span>
+        <input name="phone" type="tel" inputmode="tel" autocomplete="tel-national"
+               placeholder="12 345 6789"
+               x-data x-on:input="$el.value = $el.value.replace(/[^\d+\s\-]/g, '')"
+               x-on:blur="$el.value = $el.value.replace(/[^\d+]/g, '').replace(/^\+?60/, '').replace(/^0/, '')"
+               class="flex-1 bg-transparent px-4 py-3 focus:outline-none">
+      </div>
+      <span class="text-[11px] text-beige-100/40 mt-1 block">Outside Malaysia? Start with <code class="text-gold-400/70">+</code> and your country code.</span>
     </label>
     <label class="block">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Password</span>

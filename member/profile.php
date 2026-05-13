@@ -8,8 +8,8 @@ $saved = false;
 
 if (is_post()) {
     csrf_verify();
-    $name  = trim((string) input('full_name', ''));
-    $phone = trim((string) input('phone', ''));
+    $name  = format_name((string) input('full_name', ''));
+    $phone = normalize_phone((string) input('phone', ''));
     $addr1 = trim((string) input('address_line1', ''));
     $addr2 = trim((string) input('address_line2', ''));
     $city  = trim((string) input('city', ''));
@@ -35,7 +35,7 @@ if (is_post()) {
                     country = :country';
         $params = [
             ':n'  => $name,
-            ':p'  => $phone ?: null,
+            ':p'  => $phone,
             ':a1' => $addr1 ?: null,
             ':a2' => $addr2 ?: null,
             ':ct' => $city  ?: null,
@@ -95,7 +95,10 @@ require __DIR__ . '/../includes/header.php';
       <label class="block">
         <span class="text-xs uppercase tracking-widest text-beige-100/60">Full name</span>
         <input name="full_name" required value="<?= e($user['full_name']) ?>"
-               class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3 focus:border-gold-500/50 focus:outline-none">
+               x-on:blur="$el.value = $el.value.trim().toLowerCase().replace(/\s+/g, ' ').replace(/(^|[\s'\-])\p{L}/gu, c => c.toUpperCase())"
+               class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3 focus:border-gold-500/50 focus:outline-none"
+               style="text-transform: capitalize;">
+        <span class="text-[11px] text-beige-100/40 mt-1 block">We auto-capitalise the first letter of each word when you leave the field.</span>
       </label>
 
       <div class="grid sm:grid-cols-2 gap-5">
@@ -107,8 +110,16 @@ require __DIR__ . '/../includes/header.php';
         </label>
         <label class="block">
           <span class="text-xs uppercase tracking-widest text-beige-100/60">Phone</span>
-          <input name="phone" type="tel" value="<?= e($details['phone'] ?? '') ?>"
-                 class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3 focus:border-gold-500/50 focus:outline-none">
+          <div class="mt-2 flex items-stretch rounded-2xl bg-navy-950 border border-white/5 focus-within:border-gold-500/50 transition overflow-hidden">
+            <span class="px-3 flex items-center text-gold-400 text-sm bg-navy-900/60 border-r border-white/5">+60</span>
+            <input name="phone" type="tel" inputmode="tel" autocomplete="tel-national"
+                   value="<?= e(preg_replace('/^\+60/', '', (string) ($details['phone'] ?? ''))) ?>"
+                   placeholder="12 345 6789"
+                   x-on:input="$el.value = $el.value.replace(/[^\d+\s\-]/g, '')"
+                   x-on:blur="$el.value = $el.value.replace(/[^\d+]/g, '').replace(/^\+?60/, '').replace(/^0/, '')"
+                   class="flex-1 bg-transparent px-4 py-3 focus:outline-none">
+          </div>
+          <span class="text-[11px] text-beige-100/40 mt-1 block">Type your number without the country code — we add <strong class="text-beige-100/65">+60</strong> automatically. Outside Malaysia? Start with <code class="text-gold-400/70">+</code> and the country code.</span>
         </label>
       </div>
     </section>
