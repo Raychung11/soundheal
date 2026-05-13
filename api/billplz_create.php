@@ -28,6 +28,19 @@ if ($purpose === 'booking') {
     if (!$entity) { http_response_code(404); exit('Membership not found.'); }
     $amount = (float) $entity['price'];
     $description = 'Membership · ' . $entity['name'];
+} elseif ($purpose === 'class_pack') {
+    $stmt = db()->prepare(
+        "SELECT pp.*, cp.name AS pack_name
+           FROM pack_purchases pp
+           JOIN class_packs cp ON cp.id = pp.pack_id
+          WHERE pp.id = :id AND pp.user_id = :u AND pp.status = 'pending' LIMIT 1"
+    );
+    $stmt->execute([':id' => $ref, ':u' => $user['id']]);
+    $entity = $stmt->fetch();
+    if (!$entity) { http_response_code(404); exit('Pack purchase not found.'); }
+    $snap   = json_decode((string) ($entity['pack_snapshot'] ?? '{}'), true) ?: [];
+    $amount = (float) ($snap['price'] ?? 0);
+    $description = 'Class pack · ' . $entity['pack_name'];
 } else {
     http_response_code(400); exit('Unknown purpose.');
 }
@@ -45,11 +58,16 @@ $ins->execute([
 $paymentId = (int) db()->lastInsertId();
 
 if (!$cfg['api_key'] || !$cfg['collection_id']) {
-    flash('payment', 'Payment gateway not yet configured. (Demo mode — booking marked as paid.)', 'info');
+    flash('payment', 'Payment gateway not yet configured. (Demo mode — marked as paid.)', 'info');
     db()->prepare("UPDATE payments SET status='paid', paid_at=NOW(), gateway_bill_id=:b WHERE id=:id")
         ->execute([':b' => 'DEMO-' . $paymentId, ':id' => $paymentId]);
     settle_payment($paymentId);
-    redirect($purpose === 'membership' ? '/member/my_membership.php' : '/member/my_bookings.php');
+    $demoRedirect = match ($purpose) {
+        'membership' => '/member/my_membership.php',
+        'class_pack' => '/member/my_credits.php',
+        default      => '/member/my_bookings.php',
+    };
+    redirect($demoRedirect);
 }
 
 $payload = http_build_query([

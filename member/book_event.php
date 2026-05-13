@@ -19,11 +19,15 @@ $mStmt->execute([':u' => $user['id']]);
 $isMember = (bool) $mStmt->fetch();
 $unitPrice = $isMember ? (float)$event['price_member'] : (float)$event['price_public'];
 
+// Credit balance — lets the member pay with a pack credit instead of cash.
+$creditBalance = credit_balance_for((int) $user['id']);
+
 $errors = [];
 
 if (is_post()) {
     csrf_verify();
-    $qty = max(1, min(6, (int) input('quantity', 1)));
+    $useCredit = !empty($_POST['use_credit']) && $creditBalance > 0;
+    $qty = $useCredit ? 1 : max(1, min(6, (int) input('quantity', 1)));
 
     db()->beginTransaction();
     try {
@@ -43,25 +47,36 @@ if (is_post()) {
         }
 
         $bookingRef = 'SH-' . strtoupper(bin2hex(random_bytes(4)));
-        $total = $unitPrice * $qty;
+        // When paying with a credit, the booking is effectively prepaid:
+        // unit_price/total are recorded as 0 and the credit ledger is the source of truth.
+        $effectiveUnit = $useCredit ? 0.0 : $unitPrice;
+        $total = $effectiveUnit * $qty;
 
         $ins = db()->prepare(
-            "INSERT INTO event_bookings (booking_ref, user_id, event_id, quantity, unit_price, total_amount, status)
-             VALUES (:ref, :u, :e, :q, :up, :tot, :status)"
+            "INSERT INTO event_bookings (booking_ref, user_id, event_id, quantity, unit_price, total_amount, status, paid_with_credit)
+             VALUES (:ref, :u, :e, :q, :up, :tot, :status, :pwc)"
         );
         $ins->execute([
             ':ref' => $bookingRef,
             ':u'   => $user['id'],
             ':e'   => $eventId,
             ':q'   => $qty,
-            ':up'  => $unitPrice,
+            ':up'  => $effectiveUnit,
             ':tot' => $total,
-            ':status' => $unitPrice > 0 ? 'pending' : 'paid',
+            ':status' => ($useCredit || $effectiveUnit <= 0) ? 'paid' : 'pending',
+            ':pwc' => $useCredit ? 1 : 0,
         ]);
         $bookingId = (int) db()->lastInsertId();
 
-        // For free sessions, immediately issue tickets.
-        if ($unitPrice <= 0) {
+        // Burn the credit before issuing the ticket so we never double-spend.
+        if ($useCredit) {
+            if (!redeem_credit_for_booking((int) $user['id'], $bookingId)) {
+                throw new RuntimeException('Could not redeem your credit. Please refresh and try again.');
+            }
+        }
+
+        // Issue tickets immediately for free sessions and credit-paid sessions.
+        if ($effectiveUnit <= 0 || $useCredit) {
             $tStmt = db()->prepare(
                 "INSERT INTO tickets (booking_id, ticket_code, qr_token) VALUES (:b, :code, :token)"
             );
@@ -77,30 +92,35 @@ if (is_post()) {
         db()->commit();
         audit_log('booking.create', 'event_bookings', $bookingId, ['ref' => $bookingRef, 'total' => $total]);
 
-        // Issue an invoice immediately so the customer can see what's owed
-        // (or, for free bookings, an immediate receipt is issued below).
-        $invoiceId = issue_invoice(
-            (int) $user['id'],
-            'booking',
-            $bookingId,
-            build_booking_line_items([
-                'event_title'  => $event['title'],
-                'event_id'     => $eventId,
-                'starts_at'    => $event['starts_at'],
-                'quantity'     => $qty,
-                'unit_price'   => $unitPrice,
-                'total_amount' => $total,
-            ])
-        );
+        // Skip the invoice when the booking is fully paid with a credit —
+        // the pack purchase already produced its own invoice/receipt.
+        if (!$useCredit) {
+            issue_invoice(
+                (int) $user['id'],
+                'booking',
+                $bookingId,
+                build_booking_line_items([
+                    'event_title'  => $event['title'],
+                    'event_id'     => $eventId,
+                    'starts_at'    => $event['starts_at'],
+                    'quantity'     => $qty,
+                    'unit_price'   => $unitPrice,
+                    'total_amount' => $total,
+                ])
+            );
+        }
 
-        if ($unitPrice <= 0) {
-            send_mail($user['email'], $user['full_name'], 'Your SoundHeal seat is held', 'booking_confirm', [
+        if ($effectiveUnit <= 0 || $useCredit) {
+            send_mail($user['email'], $user['full_name'], 'Your seat is held', 'booking_confirm', [
                 'event_title' => $event['title'],
                 'starts_at'   => format_datetime($event['starts_at']),
                 'location'    => $event['location'] ?? 'Location TBA',
                 'booking_ref' => $bookingRef,
             ]);
-            flash('booking', 'Your seat is held. We can\'t wait to welcome you.', 'success');
+            $msg = $useCredit
+                ? 'Seat held — 1 credit redeemed. We can\'t wait to welcome you.'
+                : 'Your seat is held. We can\'t wait to welcome you.';
+            flash('booking', $msg, 'success');
             redirect('/member/my_bookings.php');
         }
 
@@ -123,24 +143,41 @@ require __DIR__ . '/../includes/header.php';
     <p class="mt-4 text-red-300/80"><?= e($err) ?></p>
   <?php endforeach; ?>
 
-  <form method="post" class="mt-10 space-y-6">
+  <form method="post" class="mt-10 space-y-6" x-data="{ useCredit: false }">
     <?= csrf_field() ?>
+
+    <?php if ($creditBalance > 0 && $unitPrice > 0): ?>
+      <label class="flex items-start gap-3 border border-gold-500/30 rounded-2xl p-5 bg-gold-500/5 cursor-pointer">
+        <input type="checkbox" name="use_credit" value="1" x-model="useCredit" class="mt-1 accent-gold-500">
+        <span>
+          <span class="text-beige-100">Use 1 credit instead of paying</span>
+          <span class="block text-xs text-beige-100/60 mt-1">You currently hold <strong class="text-gold-400"><?= (int)$creditBalance ?> credit<?= $creditBalance === 1 ? '' : 's' ?></strong>. One credit = one seat. <a href="<?= url('/member/my_credits.php') ?>" class="text-gold-400 hover:text-gold-300 underline-offset-4 hover:underline">View balance</a></span>
+        </span>
+      </label>
+    <?php endif; ?>
+
     <div class="border border-white/5 rounded-3xl p-6 bg-navy-900/40 flex justify-between items-center">
       <div>
         <p class="text-beige-100">Per seat <?= $isMember ? '(member)' : '(public)' ?></p>
-        <p class="font-serif text-2xl text-gold-400 mt-1"><?= e(format_money($unitPrice)) ?></p>
+        <p class="font-serif text-2xl text-gold-400 mt-1" :class="useCredit ? 'line-through opacity-50' : ''"><?= e(format_money($unitPrice)) ?></p>
+        <p class="text-xs text-gold-400 mt-1" x-show="useCredit" x-cloak>Paid with 1 credit</p>
       </div>
-      <label class="flex items-center gap-3 text-sm">
+      <label class="flex items-center gap-3 text-sm" :class="useCredit ? 'opacity-50 pointer-events-none' : ''">
         <span>Seats</span>
-        <select name="quantity" class="rounded-full bg-navy-950 border border-white/5 px-4 py-2 focus:border-gold-500/50 focus:outline-none">
+        <select name="quantity" class="rounded-full bg-navy-950 border border-white/5 px-4 py-2 focus:border-gold-500/50 focus:outline-none" :disabled="useCredit">
           <?php for ($i = 1; $i <= 6; $i++): ?><option><?= $i ?></option><?php endfor; ?>
         </select>
       </label>
     </div>
 
     <button class="w-full px-6 py-4 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition">
-      <?= $unitPrice > 0 ? 'Continue to payment' : 'Confirm reservation' ?>
+      <span x-show="!useCredit"><?= $unitPrice > 0 ? 'Continue to payment' : 'Confirm reservation' ?></span>
+      <span x-show="useCredit" x-cloak>Redeem 1 credit · confirm reservation</span>
     </button>
+
+    <?php if ($creditBalance === 0 && $unitPrice > 0): ?>
+      <p class="text-center text-xs text-beige-100/45">Want to save? <a href="<?= url('/member/checkout_pack.php') ?>" class="text-gold-400 hover:text-gold-300 underline-offset-4 hover:underline">Buy a class pack</a> and pay with credits next time.</p>
+    <?php endif; ?>
   </form>
 </section>
 <?php require __DIR__ . '/../includes/footer.php'; ?>

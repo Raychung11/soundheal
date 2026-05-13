@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/bootstrap.php';
 $pageTitle = 'Experiences';
+$packs = active_packs();
 require __DIR__ . '/../includes/header.php';
 
 $experiences = [
@@ -36,6 +37,43 @@ $experiences = [
     <?php endforeach; ?>
   </div>
 </section>
+
+<?php if ($packs): ?>
+<section class="border-t border-white/5 bg-navy-950/40">
+  <div class="max-w-5xl mx-auto px-6 py-24">
+    <div class="text-center">
+      <p class="text-gold-400/80 tracking-[0.3em] uppercase text-[11px]">Pricing</p>
+      <h2 class="font-serif text-4xl text-beige-100 mt-4">Single class or a gentle bundle</h2>
+      <p class="mt-4 text-beige-100/65 max-w-2xl mx-auto">Drop in for a single session, or pre-purchase a pack and save. Credits are redeemable across all our published offline sessions.</p>
+    </div>
+
+    <div class="mt-12 grid md:grid-cols-<?= count($packs) >= 2 ? '2' : '1' ?> gap-6 max-w-4xl mx-auto">
+      <?php foreach ($packs as $pack): $total = (int)$pack['paid_credits'] + (int)$pack['bonus_credits']; ?>
+        <article class="border border-gold-500/30 rounded-3xl p-8 bg-navy-900/50">
+          <p class="text-[11px] uppercase tracking-[0.3em] text-gold-400/70"><?= e($pack['tagline'] ?? 'Class pack') ?></p>
+          <h3 class="font-serif text-3xl text-beige-100 mt-3"><?= e($pack['name']) ?></h3>
+          <p class="font-serif text-5xl text-gold-400 mt-5"><?= e(format_money((float)$pack['price'])) ?></p>
+          <ul class="mt-6 space-y-2 text-sm text-beige-100/75">
+            <li class="flex items-start gap-2"><span class="text-gold-400 mt-0.5">✓</span> <?= (int)$pack['paid_credits'] ?> paid class<?= (int)$pack['paid_credits'] === 1 ? '' : 'es' ?></li>
+            <?php if ((int)$pack['bonus_credits'] > 0): ?>
+              <li class="flex items-start gap-2"><span class="text-gold-400 mt-0.5">✓</span> <strong class="text-gold-400/90"><?= (int)$pack['bonus_credits'] ?> bonus class<?= (int)$pack['bonus_credits'] === 1 ? '' : 'es' ?></strong> — on us</li>
+            <?php endif; ?>
+            <li class="flex items-start gap-2"><span class="text-gold-400 mt-0.5">✓</span> <?= $total ?> credits total · 1 per session</li>
+            <?php if ((int)$pack['validity_days'] > 0): ?>
+              <li class="flex items-start gap-2"><span class="text-gold-400 mt-0.5">✓</span> <?= (int)$pack['validity_days'] ?>-day validity</li>
+            <?php endif; ?>
+          </ul>
+          <a href="<?= url(is_logged_in() ? '/member/checkout_pack.php' : '/public/register.php') ?>"
+             class="mt-8 inline-block px-6 py-3 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition">
+            <?= is_logged_in() ? 'Buy pack' : 'Sign up to buy' ?>
+          </a>
+        </article>
+      <?php endforeach; ?>
+    </div>
+    <p class="mt-8 text-xs text-beige-100/45 text-center">Single classes can also be booked at the per-class rate from any event page.</p>
+  </div>
+</section>
+<?php endif; ?>
 
 <section class="border-t border-white/5">
   <div class="max-w-3xl mx-auto px-6 py-24 text-center">

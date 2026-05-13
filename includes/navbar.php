@@ -44,6 +44,7 @@ $firstName = $user ? trim(explode(' ', (string) $user['full_name'])[0]) : '';
             <a href="<?= url('/member/dashboard.php') ?>"      class="block px-3 py-2 rounded-lg text-sm text-beige-100/90 hover:bg-gold-500/10 hover:text-gold-400">My Sanctuary</a>
             <a href="<?= url('/member/content.php') ?>"        class="block px-3 py-2 rounded-lg text-sm text-beige-100/90 hover:bg-gold-500/10 hover:text-gold-400">Audio library</a>
             <a href="<?= url('/member/my_bookings.php') ?>"    class="block px-3 py-2 rounded-lg text-sm text-beige-100/90 hover:bg-gold-500/10 hover:text-gold-400">My bookings</a>
+            <a href="<?= url('/member/my_credits.php') ?>"     class="block px-3 py-2 rounded-lg text-sm text-beige-100/90 hover:bg-gold-500/10 hover:text-gold-400">Class packs</a>
             <a href="<?= url('/member/invoices.php') ?>"       class="block px-3 py-2 rounded-lg text-sm text-beige-100/90 hover:bg-gold-500/10 hover:text-gold-400">Invoices &amp; receipts</a>
             <a href="<?= url('/member/refer.php') ?>"          class="block px-3 py-2 rounded-lg text-sm text-beige-100/90 hover:bg-gold-500/10 hover:text-gold-400">Refer a friend</a>
             <a href="<?= url('/member/profile.php') ?>"        class="block px-3 py-2 rounded-lg text-sm text-beige-100/90 hover:bg-gold-500/10 hover:text-gold-400">Profile</a>
@@ -80,6 +81,7 @@ $firstName = $user ? trim(explode(' ', (string) $user['full_name'])[0]) : '';
             <a href="<?= url('/member/dashboard.php') ?>"   class="text-gold-400">My Sanctuary</a>
             <a href="<?= url('/member/content.php') ?>"    class="text-beige-100/90">Audio library</a>
             <a href="<?= url('/member/my_bookings.php') ?>" class="text-beige-100/90">My bookings</a>
+            <a href="<?= url('/member/my_credits.php') ?>"  class="text-beige-100/90">Class packs</a>
             <a href="<?= url('/member/invoices.php') ?>"    class="text-beige-100/90">Invoices &amp; receipts</a>
             <a href="<?= url('/member/refer.php') ?>"      class="text-beige-100/90">Refer a friend</a>
             <a href="<?= url('/member/profile.php') ?>"    class="text-beige-100/90">Profile</a>

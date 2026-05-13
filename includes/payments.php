@@ -72,6 +72,13 @@ if (!function_exists('settle_payment')) {
         } elseif ($payment['purpose'] === 'membership') {
             db()->prepare("UPDATE memberships SET status='active', last_payment_id=:p WHERE id=:id")
                 ->execute([':p' => $paymentId, ':id' => $payment['reference_id']]);
+        } elseif ($payment['purpose'] === 'class_pack') {
+            // Bind the payment to the pack purchase and grant the credits.
+            db()->prepare("UPDATE pack_purchases SET payment_id = :p WHERE id = :id")
+                ->execute([':p' => $paymentId, ':id' => $payment['reference_id']]);
+            if (function_exists('grant_pack_credits')) {
+                grant_pack_credits((int) $payment['reference_id']);
+            }
         }
 
         // Emit the receipt (and mark the matching invoice paid). Idempotent.

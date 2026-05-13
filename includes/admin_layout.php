@@ -10,6 +10,7 @@ $adminNav = [
     ['Footer',             '/admin/footer_settings.php'],
     ['Legal pages',        '/admin/legal_settings.php'],
     ['Events',             '/admin/events.php'],
+    ['Class packs',        '/admin/class_packs.php'],
     ['Bookings',           '/admin/bookings.php'],
     ['Members',            '/admin/members.php'],
     ['Payments',           '/admin/payments.php'],
