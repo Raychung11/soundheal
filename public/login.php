@@ -39,15 +39,22 @@ require __DIR__ . '/../includes/header.php';
     <p class="mt-6 text-red-300/80 text-center"><?= e($error) ?></p>
   <?php endif; ?>
 
-  <form method="post" class="mt-10 space-y-5">
+  <form method="post" class="mt-10 space-y-5" x-data="{ show: false }">
     <?= csrf_field() ?>
     <label class="block">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Email</span>
-      <input name="email" type="email" required autofocus class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3 focus:border-gold-500/50 focus:outline-none">
+      <input name="email" type="email" required autofocus autocomplete="email" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3 focus:border-gold-500/50 focus:outline-none">
     </label>
     <label class="block">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Password</span>
-      <input name="password" type="password" required class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3 focus:border-gold-500/50 focus:outline-none">
+      <div class="relative mt-2">
+        <input name="password" :type="show ? 'text' : 'password'" required autocomplete="current-password"
+               class="w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3 pr-16 focus:border-gold-500/50 focus:outline-none">
+        <button type="button" @click="show = !show"
+                class="absolute inset-y-0 right-0 px-4 text-beige-100/45 hover:text-gold-400 text-xs uppercase tracking-widest"
+                :aria-label="show ? 'Hide password' : 'Show password'"
+                x-text="show ? 'Hide' : 'Show'"></button>
+      </div>
     </label>
     <button class="w-full px-5 py-3 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition">Enter</button>
   </form>
