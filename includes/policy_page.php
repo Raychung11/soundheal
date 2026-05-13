@@ -38,7 +38,7 @@ require __DIR__ . '/header.php';
   </article>
 
   <p class="mt-16 text-xs text-beige-100/40 italic text-center">
-    Questions? Email <a href="mailto:<?= e((string) setting('company_email', 'hello@soundheal.local')) ?>" class="text-gold-400/80 hover:text-gold-300"><?= e((string) setting('company_email', 'hello@soundheal.local')) ?></a>.
+    Questions? Email <a href="mailto:<?= e((string) setting('company_email', 'hello@jaemiesoundbath.com')) ?>" class="text-gold-400/80 hover:text-gold-300"><?= e((string) setting('company_email', 'hello@jaemiesoundbath.com')) ?></a>.
   </p>
 </section>
 
