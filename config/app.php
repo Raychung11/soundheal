@@ -6,12 +6,26 @@ declare(strict_types=1);
  * Override any value through environment variables when deploying.
  */
 
+// Best-effort auto-detection of the public URL when APP_URL is not set.
+// This avoids handing Billplz a "soundheal.local" callback / redirect URL
+// on hosts where the env var was never configured.
+$detectedUrl = (static function (): string {
+    if (php_sapi_name() === 'cli' || empty($_SERVER['HTTP_HOST'])) {
+        return 'https://soundheal.local';
+    }
+    $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+          || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
+          || ((int) ($_SERVER['SERVER_PORT'] ?? 0) === 443)
+        ? 'https' : 'http';
+    return $proto . '://' . $_SERVER['HTTP_HOST'];
+})();
+
 return [
     'name'        => getenv('APP_NAME') ?: 'SoundHeal',
     'tagline'     => 'Wellness Operating System',
     'env'         => getenv('APP_ENV') ?: 'production',
     'debug'       => filter_var(getenv('APP_DEBUG') ?: 'false', FILTER_VALIDATE_BOOLEAN),
-    'url'         => rtrim(getenv('APP_URL') ?: 'https://soundheal.local', '/'),
+    'url'         => rtrim(getenv('APP_URL') ?: $detectedUrl, '/'),
     'timezone'    => getenv('APP_TIMEZONE') ?: 'Asia/Kuala_Lumpur',
     'currency'    => 'MYR',
     'locale'      => 'en',

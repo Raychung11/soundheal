@@ -111,8 +111,25 @@ require __DIR__ . '/../includes/admin_layout.php';
   </div>
 <?php endif; ?>
 
+<!-- Public URL sanity check -->
+<?php
+$publicUrl = rtrim((string) config('app.url'), '/');
+$looksLocal = str_contains($publicUrl, 'soundheal.local') || str_contains($publicUrl, 'localhost') || str_starts_with($publicUrl, 'http://');
+?>
+<div class="mt-8 border <?= $looksLocal ? 'border-red-400/40 bg-red-500/5' : 'border-white/5 bg-navy-900/40' ?> rounded-3xl p-6">
+  <div class="flex items-center justify-between gap-3 flex-wrap">
+    <div>
+      <p class="text-[11px] uppercase tracking-widest <?= $looksLocal ? 'text-red-300' : 'text-gold-400/80' ?>">Detected public URL</p>
+      <code class="text-sm text-beige-100"><?= e($publicUrl) ?></code>
+    </div>
+    <?php if ($looksLocal): ?>
+      <span class="text-xs text-red-300">⚠ Looks like a local default. Set the <code>APP_URL</code> env variable on Hostinger to your real domain so Billplz callbacks + redirects don't break.</span>
+    <?php endif; ?>
+  </div>
+</div>
+
 <!-- Webhook URL panel -->
-<div class="mt-8 border border-white/5 rounded-3xl bg-navy-900/40 p-6">
+<div class="mt-4 border border-white/5 rounded-3xl bg-navy-900/40 p-6">
   <h2 class="font-serif text-2xl text-gold-400">Webhook URL</h2>
   <p class="text-sm text-beige-100/70 mt-2 leading-relaxed">In your Billplz dashboard → <em>Settings</em> → <em>Profile</em> → <em>Callback URL</em>, paste the URL below. This is where Billplz pings us when a payment is paid or failed.</p>
   <div class="mt-4 flex flex-wrap items-center gap-3">
