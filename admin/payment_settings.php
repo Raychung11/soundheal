@@ -31,8 +31,25 @@ if (is_post()) {
                 $title = $coll['title'] ?? $coll['id'] ?? 'OK';
                 $message = 'Connected to Billplz ' . ($cfg['sandbox'] ? 'sandbox' : 'live') . ' — collection "' . $title . '" is live.';
                 $messageType = 'success';
+            } elseif ($http === 401) {
+                $mode = $cfg['sandbox'] ? 'SANDBOX (billplz-sandbox.com)' : 'LIVE (billplz.com)';
+                $other = $cfg['sandbox'] ? 'live'    : 'sandbox';
+                $otherUrl = $cfg['sandbox'] ? 'https://www.billplz.com' : 'https://www.billplz-sandbox.com';
+                $message = 'Billplz rejected the credentials (401). You are currently testing against ' . $mode . '. '
+                         . 'The most common cause is a key/environment mismatch: '
+                         . 'a key generated at ' . $otherUrl . ' will only work after you '
+                         . ($cfg['sandbox'] ? 'untick' : 'tick')
+                         . ' Sandbox mode and use a Collection ID from the ' . $other . ' environment too. '
+                         . 'Also check there is no whitespace around the key.';
+                $messageType = 'error';
+            } elseif ($http === 404) {
+                $message = 'Billplz returned 404 — the API key authenticated, but Collection ID "' . $cfg['collection_id']
+                         . '" was not found in ' . ($cfg['sandbox'] ? 'sandbox' : 'live') . '. '
+                         . 'Either re-create the collection in this environment or switch the Sandbox toggle to match.';
+                $messageType = 'error';
             } else {
-                $message = 'Billplz returned HTTP ' . $http . '. Double-check the API key and Collection ID. Response: ' . substr((string) $response, 0, 240);
+                $message = 'Billplz returned HTTP ' . $http . '. Double-check the API key and Collection ID. Response: '
+                         . substr((string) $response, 0, 240);
                 $messageType = 'error';
             }
             audit_log('payment.test', 'site_settings', null, ['http' => $http]);
