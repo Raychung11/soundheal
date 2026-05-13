@@ -73,5 +73,10 @@ if (!function_exists('settle_payment')) {
             db()->prepare("UPDATE memberships SET status='active', last_payment_id=:p WHERE id=:id")
                 ->execute([':p' => $paymentId, ':id' => $payment['reference_id']]);
         }
+
+        // Emit the receipt (and mark the matching invoice paid). Idempotent.
+        if (function_exists('issue_receipt')) {
+            issue_receipt($paymentId);
+        }
     }
 }

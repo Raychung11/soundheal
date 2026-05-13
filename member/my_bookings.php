@@ -36,7 +36,11 @@ if (is_post()) {
 
 $stmt = db()->prepare(
     "SELECT b.*, e.title, e.starts_at, e.location,
-            (SELECT COUNT(*) FROM tickets t WHERE t.booking_id = b.id AND t.status = 'valid') AS ticket_count
+            (SELECT COUNT(*) FROM tickets t WHERE t.booking_id = b.id AND t.status = 'valid') AS ticket_count,
+            (SELECT id FROM invoices WHERE doc_type='receipt' AND purpose='booking' AND reference_id = b.id ORDER BY id DESC LIMIT 1) AS receipt_id,
+            (SELECT access_token FROM invoices WHERE doc_type='receipt' AND purpose='booking' AND reference_id = b.id ORDER BY id DESC LIMIT 1) AS receipt_token,
+            (SELECT id FROM invoices WHERE doc_type='invoice' AND purpose='booking' AND reference_id = b.id ORDER BY id DESC LIMIT 1) AS invoice_id,
+            (SELECT access_token FROM invoices WHERE doc_type='invoice' AND purpose='booking' AND reference_id = b.id ORDER BY id DESC LIMIT 1) AS invoice_token
      FROM event_bookings b
      JOIN events e ON e.id = b.event_id
      WHERE b.user_id = :u
@@ -69,6 +73,11 @@ require __DIR__ . '/../includes/header.php';
             <span class="text-xs px-3 py-1 rounded-full <?= $b['status'] === 'paid' ? 'bg-gold-500/20 text-gold-400' : 'bg-white/5 text-beige-100/60' ?>"><?= e($b['status']) ?></span>
             <?php if ((int)$b['ticket_count'] > 0): ?>
               <a href="<?= url('/member/my_tickets.php?booking=' . (int)$b['id']) ?>" class="text-sm text-gold-400 hover:text-gold-300">View ticket →</a>
+            <?php endif; ?>
+            <?php if (!empty($b['receipt_id'])): ?>
+              <a href="<?= url('/member/document.php?id=' . (int) $b['receipt_id'] . '&t=' . urlencode((string) $b['receipt_token'])) ?>" class="text-xs text-gold-400/80 hover:text-gold-300">Receipt</a>
+            <?php elseif (!empty($b['invoice_id'])): ?>
+              <a href="<?= url('/member/document.php?id=' . (int) $b['invoice_id'] . '&t=' . urlencode((string) $b['invoice_token'])) ?>" class="text-xs text-gold-400/80 hover:text-gold-300">Invoice</a>
             <?php endif; ?>
             <?php if (in_array($b['status'], ['pending','paid'], true) && strtotime($b['starts_at']) - time() > 12 * 3600): ?>
               <form method="post" class="inline" onsubmit="return confirm('Cancel this booking?');">

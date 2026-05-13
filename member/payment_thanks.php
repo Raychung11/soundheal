@@ -88,6 +88,21 @@ require __DIR__ . '/../includes/header.php';
     <h1 class="font-serif text-5xl text-beige-100 mt-4 leading-tight">Held with thanks.</h1>
     <p class="mt-5 text-beige-100/75 leading-relaxed">Your payment has been confirmed. Take a slow breath in… and out.</p>
 
+    <?php
+    $rcStmt = db()->prepare(
+        "SELECT id, doc_number, access_token FROM invoices
+         WHERE doc_type='receipt' AND payment_id = :pid LIMIT 1"
+    );
+    $rcStmt->execute([':pid' => (int) $payment['id']]);
+    $receipt = $rcStmt->fetch();
+    ?>
+    <?php if ($receipt): ?>
+      <a href="<?= url('/member/document.php?id=' . (int) $receipt['id'] . '&t=' . urlencode((string) $receipt['access_token'])) ?>"
+         class="mt-6 inline-flex items-center gap-2 px-5 py-2 rounded-full border border-gold-500/40 text-gold-400 text-sm hover:bg-gold-500/10 transition">
+        View receipt · <?= e($receipt['doc_number']) ?>
+      </a>
+    <?php endif; ?>
+
     <div class="mt-10 border border-gold-500/30 rounded-3xl p-6 bg-navy-900/60 text-left">
       <?php if ($ref && $payment['purpose'] === 'booking'): ?>
         <p class="text-[11px] uppercase tracking-[0.3em] text-gold-400/80">Your booking</p>

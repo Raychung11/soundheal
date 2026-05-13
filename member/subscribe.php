@@ -30,6 +30,18 @@ if (is_post()) {
         db()->commit();
         audit_log('membership.create', 'memberships', $membershipId, ['plan' => $plan['code']]);
 
+        // Issue invoice so the customer can see what's owed before payment.
+        issue_invoice(
+            (int) $user['id'],
+            'membership',
+            $membershipId,
+            build_membership_line_items([
+                'plan_name'     => $plan['name'],
+                'price'         => $plan['price'],
+                'billing_cycle' => $plan['billing_cycle'],
+            ])
+        );
+
         // Hand off to payment.
         redirect('/api/billplz_create.php?purpose=membership&ref=' . $membershipId);
     } catch (Throwable $e) {

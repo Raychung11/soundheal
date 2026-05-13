@@ -77,6 +77,22 @@ if (is_post()) {
         db()->commit();
         audit_log('booking.create', 'event_bookings', $bookingId, ['ref' => $bookingRef, 'total' => $total]);
 
+        // Issue an invoice immediately so the customer can see what's owed
+        // (or, for free bookings, an immediate receipt is issued below).
+        $invoiceId = issue_invoice(
+            (int) $user['id'],
+            'booking',
+            $bookingId,
+            build_booking_line_items([
+                'event_title'  => $event['title'],
+                'event_id'     => $eventId,
+                'starts_at'    => $event['starts_at'],
+                'quantity'     => $qty,
+                'unit_price'   => $unitPrice,
+                'total_amount' => $total,
+            ])
+        );
+
         if ($unitPrice <= 0) {
             send_mail($user['email'], $user['full_name'], 'Your SoundHeal seat is held', 'booking_confirm', [
                 'event_title' => $event['title'],
