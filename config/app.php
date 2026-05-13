@@ -36,8 +36,8 @@ if ($envUrl === ''
 }
 
 return [
-    'name'        => getenv('APP_NAME') ?: 'SoundHeal',
-    'tagline'     => 'Wellness Operating System',
+    'name'        => getenv('APP_NAME') ?: 'jaemie sound bath',
+    'tagline'     => '',
     'env'         => getenv('APP_ENV') ?: 'production',
     'debug'       => filter_var(getenv('APP_DEBUG') ?: 'false', FILTER_VALIDATE_BOOLEAN),
     'url'         => rtrim($envUrl !== '' ? $envUrl : $detectedUrl, '/'),
