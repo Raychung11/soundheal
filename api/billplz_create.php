@@ -32,7 +32,7 @@ if ($purpose === 'booking') {
     http_response_code(400); exit('Unknown purpose.');
 }
 
-$cfg = config('payment');
+$cfg = payment_config();
 
 $ins = db()->prepare(
     "INSERT INTO payments (user_id, purpose, reference_id, gateway, amount, currency, status)

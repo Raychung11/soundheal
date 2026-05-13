@@ -13,6 +13,7 @@ $adminNav = [
     ['Bookings',           '/admin/bookings.php'],
     ['Members',            '/admin/members.php'],
     ['Payments',           '/admin/payments.php'],
+    ['Payment settings',   '/admin/payment_settings.php'],
     ['Check-in',           '/admin/checkin.php'],
     ['Content',            '/admin/content.php'],
     ['Testimonials',       '/admin/testimonials.php'],

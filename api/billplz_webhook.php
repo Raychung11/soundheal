@@ -13,7 +13,7 @@ if (!is_post()) {
     http_response_code(405); exit('Method not allowed.');
 }
 
-$cfg     = config('payment');
+$cfg     = payment_config();
 $payload = $_POST;
 file_put_contents(SH_ROOT . '/logs/billplz-webhook.log',
     '[' . date('c') . '] ' . json_encode($payload) . PHP_EOL, FILE_APPEND);

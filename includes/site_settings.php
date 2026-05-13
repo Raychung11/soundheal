@@ -81,3 +81,43 @@ function brand_name(): string
     if ($name !== '') return $name;
     return (string) config('app.name', 'SoundHeal');
 }
+
+/**
+ * Resolved Billplz payment config — merges environment defaults with
+ * admin-managed site_settings, so credentials can live in either place.
+ * site_settings wins when populated; env stays as a fallback / dev seed.
+ */
+function payment_config(): array
+{
+    $env = $GLOBALS['payment_config'] ?? [];
+
+    $sandbox = setting('billplz_sandbox', null);
+    if ($sandbox === null) {
+        $sandbox = (bool) ($env['sandbox'] ?? true);
+    } else {
+        $sandbox = (bool) $sandbox;
+    }
+
+    $apiKey       = trim((string) setting('billplz_api_key',       (string) ($env['api_key']       ?? '')));
+    $collectionId = trim((string) setting('billplz_collection_id', (string) ($env['collection_id'] ?? '')));
+    $xSignature   = trim((string) setting('billplz_x_signature',   (string) ($env['x_signature']   ?? '')));
+
+    $appUrl       = rtrim((string) config('app.url'), '/');
+    $callbackUrl  = $appUrl . '/api/billplz_webhook.php';
+    $redirectUrl  = trim((string) setting('billplz_redirect_url', ''))
+                    ?: ($env['redirect_url'] ?? $appUrl . '/member/my_bookings.php');
+
+    return [
+        'gateway'       => 'billplz',
+        'sandbox'       => $sandbox,
+        'api_base'      => $sandbox
+            ? 'https://www.billplz-sandbox.com/api/v3'
+            : 'https://www.billplz.com/api/v3',
+        'api_key'       => $apiKey,
+        'collection_id' => $collectionId,
+        'x_signature'   => $xSignature,
+        'callback_url'  => $callbackUrl,
+        'redirect_url'  => $redirectUrl,
+        'currency'      => 'MYR',
+    ];
+}
