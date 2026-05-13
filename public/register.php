@@ -104,7 +104,14 @@ require __DIR__ . '/../includes/header.php';
     <p class="mt-4 text-red-300/80 text-center"><?= e($err) ?></p>
   <?php endforeach; ?>
 
-  <form method="post" class="mt-10 space-y-5">
+  <form method="post" class="mt-10 space-y-5" x-data="{
+      showPw: false,
+      showConfirm: false,
+      pw: '',
+      confirm: '',
+      get pwOk()    { return this.pw === '' || this.pw.length >= 8; },
+      get pwMatch() { return this.confirm === '' || this.pw === this.confirm; }
+    }">
     <?= csrf_field() ?>
     <?php if ($isTrial): ?><input type="hidden" name="trial" value="1"><?php endif; ?>
     <label class="block">
@@ -132,11 +139,31 @@ require __DIR__ . '/../includes/header.php';
     </label>
     <label class="block">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Password</span>
-      <input name="password" type="password" minlength="8" required class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3 focus:border-gold-500/50 focus:outline-none">
+      <div class="relative mt-2">
+        <input name="password" :type="showPw ? 'text' : 'password'" minlength="8" required
+               autocomplete="new-password" x-model="pw"
+               class="w-full rounded-2xl bg-navy-900 border px-4 py-3 pr-16 focus:outline-none transition"
+               :class="pwOk ? 'border-white/5 focus:border-gold-500/50' : 'border-red-400/50'">
+        <button type="button" @click="showPw = !showPw"
+                class="absolute inset-y-0 right-0 px-4 text-beige-100/45 hover:text-gold-400 text-xs uppercase tracking-widest"
+                :aria-label="showPw ? 'Hide password' : 'Show password'"
+                x-text="showPw ? 'Hide' : 'Show'"></button>
+      </div>
+      <span class="mt-1 block text-[11px] text-red-300/70" x-show="!pwOk" x-cloak>At least 8 characters, gently.</span>
     </label>
     <label class="block">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Confirm password</span>
-      <input name="password_confirm" type="password" minlength="8" required class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3 focus:border-gold-500/50 focus:outline-none">
+      <div class="relative mt-2">
+        <input name="password_confirm" :type="showConfirm ? 'text' : 'password'" minlength="8" required
+               autocomplete="new-password" x-model="confirm"
+               class="w-full rounded-2xl bg-navy-900 border px-4 py-3 pr-16 focus:outline-none transition"
+               :class="pwMatch ? 'border-white/5 focus:border-gold-500/50' : 'border-red-400/50'">
+        <button type="button" @click="showConfirm = !showConfirm"
+                class="absolute inset-y-0 right-0 px-4 text-beige-100/45 hover:text-gold-400 text-xs uppercase tracking-widest"
+                :aria-label="showConfirm ? 'Hide password' : 'Show password'"
+                x-text="showConfirm ? 'Hide' : 'Show'"></button>
+      </div>
+      <span class="mt-1 block text-[11px] text-red-300/70" x-show="!pwMatch" x-cloak>Both fields must match.</span>
     </label>
     <button class="w-full px-5 py-3 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition">Create account</button>
   </form>
