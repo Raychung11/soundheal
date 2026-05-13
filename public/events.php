@@ -2,12 +2,15 @@
 require_once __DIR__ . '/../includes/bootstrap.php';
 $pageTitle = 'Upcoming Sessions';
 
+// Match the capacity-hold logic in member/book_event.php — pending
+// bookings hold a seat until they pay, so they count toward the
+// public "seats remaining" total.
 $events = db()->query(
     "SELECT e.*,
             (SELECT COALESCE(SUM(quantity), 0)
                FROM event_bookings b
               WHERE b.event_id = e.id
-                AND b.status IN ('paid','attended')) AS seats_taken
+                AND b.status IN ('pending','paid','attended')) AS seats_taken
      FROM events e
      WHERE e.status = 'published' AND e.starts_at >= NOW()
      ORDER BY e.starts_at ASC"

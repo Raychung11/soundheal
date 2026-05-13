@@ -16,10 +16,20 @@ if (is_post()) {
     redirect('/admin/events.php');
 }
 
+// Match book_event.php's capacity check: pending bookings hold a seat
+// until they pay or the hold times out, so they should count in the
+// "seats taken" display too. Cancelled/refunded/no_show bookings free
+// the seat and are excluded.
 $events = db()->query(
     "SELECT e.*,
             (SELECT COALESCE(SUM(quantity), 0)
-               FROM event_bookings WHERE event_id = e.id AND status IN ('paid','attended')) AS seats_taken
+               FROM event_bookings
+               WHERE event_id = e.id
+                 AND status IN ('pending','paid','attended')) AS seats_taken,
+            (SELECT COALESCE(SUM(quantity), 0)
+               FROM event_bookings
+               WHERE event_id = e.id
+                 AND status IN ('paid','attended')) AS seats_paid
      FROM events e
      ORDER BY e.starts_at DESC LIMIT 100"
 )->fetchAll();
@@ -47,7 +57,15 @@ require __DIR__ . '/../includes/admin_layout.php';
           </td>
           <td><?= e(format_datetime($e['starts_at'])) ?></td>
           <td><span class="text-xs px-2 py-1 rounded-full <?= $e['status'] === 'published' ? 'bg-gold-500/20 text-gold-400' : 'bg-white/5 text-beige-100/60' ?>"><?= e($e['status']) ?></span></td>
-          <td><?= (int)$e['seats_taken'] ?> / <?= (int)$e['capacity'] ?></td>
+          <td>
+            <span class="text-beige-100"><?= (int)$e['seats_taken'] ?></span>
+            <span class="text-beige-100/40">/ <?= (int)$e['capacity'] ?></span>
+            <?php $pending = (int) $e['seats_taken'] - (int) $e['seats_paid']; if ($pending > 0): ?>
+              <span class="ml-2 text-[10px] uppercase tracking-widest text-beige-100/50">
+                <span class="text-gold-400/80"><?= (int)$e['seats_paid'] ?> paid</span> · <?= $pending ?> pending
+              </span>
+            <?php endif; ?>
+          </td>
           <td class="text-right pr-4">
             <a href="<?= url('/admin/event_form.php?id=' . (int)$e['id']) ?>" class="text-gold-400 text-sm hover:text-gold-300">Edit</a>
             <form method="post" class="inline ml-3" onsubmit="return confirm('Archive this event?');">
