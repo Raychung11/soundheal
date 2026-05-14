@@ -15,6 +15,7 @@ $textKeys = [
     'company_country'           => 'string',
     'company_phone'             => 'string',
     'company_email'             => 'string',
+    'business_hours'            => 'string',
     'company_billing_email'     => 'string',
     'company_privacy_email'     => 'string',
     // Socials
@@ -105,6 +106,7 @@ function text_field(string $key, string $label, string $placeholder = '', string
       <?php text_field('company_email',         'General email',   'hello@soundheal.com', 'email'); ?>
       <?php text_field('company_billing_email', 'Billing email',   'billing@soundheal.com', 'email'); ?>
       <?php text_field('company_privacy_email', 'Privacy email',   'privacy@soundheal.com', 'email'); ?>
+      <?php text_field('business_hours',        'Business hours',  'Tuesday – Sunday · 10am – 8pm (closed Mondays)'); ?>
     </div>
   </section>
 

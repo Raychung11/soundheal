@@ -69,14 +69,14 @@ if (preg_match('/i\s+am\s+feeling\s+([a-z]+)|i\'?m\s+feeling\s+([a-z]+)/i', $mes
 db()->prepare("INSERT INTO ai_messages (conversation_id, role, content) VALUES (:c, 'user', :m)")
     ->execute([':c' => $conversationId, ':m' => $message]);
 
-$reply = ai_reply($conversationId, $message);
+$reply = ai_reply($conversationId, $message, $userId);
 
 db()->prepare("INSERT INTO ai_messages (conversation_id, role, content) VALUES (:c, 'assistant', :m)")
     ->execute([':c' => $conversationId, ':m' => $reply]);
 
 echo json_encode(['reply' => $reply, 'session_token' => $sessionToken]);
 
-function ai_reply(int $conversationId, string $message): string
+function ai_reply(int $conversationId, string $message, ?int $userId): string
 {
     $cfg = ai_config();
     $apiKey = $cfg['openai']['api_key'] ?? '';
@@ -97,35 +97,83 @@ function ai_reply(int $conversationId, string $message): string
     }
     $messages[] = ['role' => 'user', 'content' => $message];
 
-    $payload = json_encode([
-        'model'       => $cfg['openai']['model'],
-        'messages'    => $messages,
-        'temperature' => (float) $cfg['temperature'],
-        'max_tokens'  => 500,
-    ]);
+    $useTools = !empty($cfg['tools_enabled']);
+    $maxIters = max(1, (int) ($cfg['max_tool_calls'] ?? 4));
 
+    for ($i = 0; $i < $maxIters; $i++) {
+        $request = [
+            'model'       => $cfg['openai']['model'],
+            'messages'    => $messages,
+            'temperature' => (float) $cfg['temperature'],
+            'max_tokens'  => 600,
+        ];
+        if ($useTools) {
+            $request['tools']       = aria_tools_schema();
+            $request['tool_choice'] = 'auto';
+        }
+
+        $resp = aria_openai_call($cfg, $request);
+        if (!$resp['ok']) {
+            error_log('[AI] OpenAI error ' . $resp['code'] . ': ' . substr((string)$resp['body'], 0, 500));
+            return aria_fallback($message);
+        }
+        $choice = $resp['data']['choices'][0]['message'] ?? null;
+        if (!$choice) {
+            return aria_fallback($message);
+        }
+
+        // No tool call → final reply.
+        if (empty($choice['tool_calls'])) {
+            return trim((string) ($choice['content'] ?? '')) ?: aria_fallback($message);
+        }
+
+        // Append the assistant's tool-call message verbatim, then resolve
+        // each tool and append its result. OpenAI requires the assistant
+        // tool-call message in history before each `tool` reply.
+        $messages[] = [
+            'role'       => 'assistant',
+            'content'    => $choice['content'] ?? null,
+            'tool_calls' => $choice['tool_calls'],
+        ];
+        foreach ($choice['tool_calls'] as $tc) {
+            $name = (string) ($tc['function']['name'] ?? '');
+            $args = json_decode((string) ($tc['function']['arguments'] ?? '{}'), true) ?? [];
+            $result = aria_execute_tool($name, is_array($args) ? $args : [], $userId);
+            $messages[] = [
+                'role'         => 'tool',
+                'tool_call_id' => (string) $tc['id'],
+                'name'         => $name,
+                'content'      => json_encode($result, JSON_UNESCAPED_UNICODE),
+            ];
+        }
+    }
+
+    // Loop budget exhausted — ask Aria to wrap up gracefully.
+    return "I gathered what I could, but lost the thread for a moment. Could you tell me which one of those interests you most?";
+}
+
+function aria_openai_call(array $cfg, array $request): array
+{
     $ch = curl_init($cfg['openai']['base_url'] . '/chat/completions');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_POSTFIELDS     => json_encode($request, JSON_UNESCAPED_UNICODE),
         CURLOPT_HTTPHEADER     => [
             'Content-Type: application/json',
-            'Authorization: Bearer ' . $apiKey,
+            'Authorization: Bearer ' . ($cfg['openai']['api_key'] ?? ''),
         ],
-        CURLOPT_TIMEOUT        => 25,
+        CURLOPT_TIMEOUT        => 40,
     ]);
-    $response = curl_exec($ch);
+    $body = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    if ($code >= 200 && $code < 300 && $response) {
-        $data = json_decode($response, true);
-        $text = $data['choices'][0]['message']['content'] ?? '';
-        if ($text !== '') {
-            return trim($text);
-        }
-    }
-    error_log('[AI] OpenAI error ' . $code . ': ' . substr((string)$response, 0, 500));
-    return aria_fallback($message);
+    $data = $body ? json_decode((string) $body, true) : null;
+    return [
+        'ok'   => $code >= 200 && $code < 300 && is_array($data),
+        'code' => (int) $code,
+        'body' => $body,
+        'data' => $data,
+    ];
 }

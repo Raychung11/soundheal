@@ -53,6 +53,8 @@ if (!function_exists('ai_config')) {
                 'system_prompt' => $personaPrompt,
             ],
             'include_live_offerings' => $includeLive,
+            'tools_enabled'   => (bool) setting('ai_tools_enabled', true),
+            'max_tool_calls'  => max(1, min(8, (int) setting('ai_max_tool_calls', 4))),
         ];
     }
 
@@ -85,7 +87,20 @@ if (!function_exists('ai_config')) {
 
         $inventory = $cfg['include_live_offerings'] ? aria_live_offerings_block() : '';
 
-        return trim(implode("\n\n", array_filter([$preamble, $rules, $inventory])));
+        $toolsGuide = '';
+        if (!empty($cfg['tools_enabled'])) {
+            $toolsGuide = <<<GUIDE
+Tools (use freely — never invent the answer):
+- Specific dates, prices, seat counts, refund rules, opening hours, the studio address: call get_business_info, list_upcoming_events, search_events, or get_pack_pricing first.
+- The member asks about their own credits, bookings, or invoices: call get_my_credits / get_my_bookings / get_my_invoices. If the member is not signed in, gently invite them to sign in.
+- The guest wants to reserve a seat: call get_booking_link and share the returned URL — say "tap here when you're ready" rather than claiming you've booked it.
+- The guest wants the team to follow up by email / wants a corporate session: confirm the necessary details (name, email, message — plus company and team size for corporate), then call submit_contact_lead or submit_corporate_inquiry, then read back the confirmation.
+- Combine tools when needed (e.g. list_upcoming_events then get_booking_link).
+- Keep tool calls cheap: don't call the same tool twice in one turn with the same arguments.
+GUIDE;
+        }
+
+        return trim(implode("\n\n", array_filter([$preamble, $rules, $inventory, $toolsGuide])));
     }
 
     /**
