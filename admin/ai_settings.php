@@ -65,6 +65,8 @@ if (is_post()) {
         set_setting('ai_temperature',            trim((string) input('ai_temperature', '0.6')),       'string');
         set_setting('ai_openai_api_key',         trim((string) input('ai_openai_api_key', '')),       'string');
         set_setting('ai_include_live_offerings', !empty($_POST['ai_include_live_offerings']) ? '1' : '0', 'bool');
+        set_setting('aria_widget_enabled',       !empty($_POST['aria_widget_enabled']) ? '1' : '0',       'bool');
+        set_setting('aria_widget_greeting',      trim((string) input('aria_widget_greeting', '')),     'string');
 
         audit_log('ai_settings.update', 'site_settings', null);
         flash('ai', 'Aria settings saved.', 'success');
@@ -131,6 +133,21 @@ require __DIR__ . '/../includes/admin_layout.php';
     <input type="checkbox" name="ai_include_live_offerings" value="1"
            <?= !empty($cfg['include_live_offerings']) ? 'checked' : '' ?> class="accent-gold-500">
     Auto-include active experiences and class packs in her context
+  </label>
+
+  <h2 class="font-serif text-2xl text-gold-400 pt-4">Sitewide chat widget</h2>
+  <label class="inline-flex items-center gap-3 px-4 py-3 rounded-2xl border border-white/10 text-sm text-beige-100/80">
+    <input type="checkbox" name="aria_widget_enabled" value="1"
+           <?= (bool) setting('aria_widget_enabled', true) ? 'checked' : '' ?> class="accent-gold-500">
+    Show a floating "Chat with <?= e($cfg['persona']['name'] ?: 'Aria') ?>" button on every public page
+  </label>
+  <label class="block">
+    <span class="text-xs uppercase tracking-widest text-beige-100/60">Opening greeting</span>
+    <input name="aria_widget_greeting"
+           value="<?= e((string) setting('aria_widget_greeting', '')) ?>"
+           placeholder="Hi — I'm Aria. Ask me about sessions, pricing, or anything else."
+           class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3 focus:border-gold-500/50 focus:outline-none">
+    <span class="text-[11px] text-beige-100/40 mt-1 block">Shown the moment a visitor opens the widget — before they type anything.</span>
   </label>
 
   <h2 class="font-serif text-2xl text-gold-400 pt-4">OpenAI</h2>

@@ -41,6 +41,16 @@ if (strlen($message) > 2000) {
     $message = substr($message, 0, 2000);
 }
 
+// Soft throttle so the public widget can't drive runaway OpenAI cost.
+// Logged-in members get a higher ceiling than anonymous visitors.
+$throttleKey = 'aria:chat:' . (is_logged_in() ? ('u' . current_user_id()) : ('ip' . client_ip()));
+$ceiling     = is_logged_in() ? 40 : 20;
+if (!throttle($throttleKey, $ceiling, 600)) {
+    http_response_code(429);
+    echo json_encode(['error' => 'You\'re reaching out a lot — please pause a moment and try again shortly.']);
+    exit;
+}
+
 $sessionToken = $body['session_token'] ?? ($_SESSION['ai_session'] ?? null);
 $userId = current_user_id();
 
