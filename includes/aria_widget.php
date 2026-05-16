@@ -24,7 +24,7 @@ $ariaGreeting = (string) setting('aria_widget_greeting',
 $csrfToken    = function_exists('csrf_token') ? csrf_token() : '';
 ?>
 <div x-data="ariaWidget()" x-cloak
-     class="fixed bottom-5 right-5 z-50 flex flex-col items-end pointer-events-none">
+     class="fixed bottom-[5.25rem] right-4 md:bottom-5 md:right-5 z-50 flex flex-col items-end pointer-events-none">
 
   <!-- Chat panel -->
   <div x-show="open" x-transition.opacity

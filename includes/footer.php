@@ -102,6 +102,7 @@ $showPolicy  = (bool) setting('footer_show_policy_links',  true);
     </div>
   </div>
 </footer>
+<?php require __DIR__ . '/mobile_nav.php'; ?>
 <?php require __DIR__ . '/aria_widget.php'; ?>
 <script src="<?= asset('js/app.js') ?>"></script>
 </body>
