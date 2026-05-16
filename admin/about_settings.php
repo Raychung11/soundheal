@@ -9,6 +9,10 @@ $textKeys = [
     'about_hero_eyebrow'         => 'string',
     'about_hero_headline'        => 'string',
     'about_story_paragraphs'     => 'text',
+    'about_guide_eyebrow'        => 'string',
+    'about_guide_name'           => 'string',
+    'about_guide_role'           => 'string',
+    'about_guide_bio'            => 'text',
     'about_principle_1_label'    => 'string',
     'about_principle_1_body'     => 'text',
     'about_principle_2_label'    => 'string',
@@ -23,6 +27,7 @@ $textKeys = [
 $imageKeys = [
     'about_hero_image_path',
     'about_story_image_path',
+    'about_guide_image_path',
     'about_principle_1_image_path',
     'about_principle_2_image_path',
     'about_principle_3_image_path',
@@ -151,6 +156,21 @@ function text_area(string $key, string $label, int $rows = 3): void
     <?php text_area('about_story_paragraphs', 'Paragraphs (separate with a blank line)', 7); ?>
     <?php image_block('about_story_image_path', 'Story image (optional)'); ?>
     <p class="text-[11px] text-beige-100/40">Recommended: 1200 × 1500 px (4:5 portrait), JPEG/WebP.</p>
+  </section>
+
+  <section class="border border-white/5 rounded-3xl p-6 bg-navy-900/40 space-y-5">
+    <h2 class="font-serif text-2xl text-gold-400">Your guide</h2>
+    <p class="text-[11px] text-beige-100/45">Introduces the practitioner. Leave name and bio blank to hide this section entirely.</p>
+    <div class="grid sm:grid-cols-[1fr_280px] gap-5">
+      <div class="space-y-4">
+        <?php text_input('about_guide_eyebrow', 'Eyebrow text', 'Your guide'); ?>
+        <?php text_input('about_guide_name', 'Name', 'Jaemie'); ?>
+        <?php text_input('about_guide_role', 'Role / title', 'Sound practitioner & founder'); ?>
+        <?php text_area('about_guide_bio', 'Bio (separate paragraphs with a blank line)', 6); ?>
+      </div>
+      <?php image_block('about_guide_image_path', 'Portrait'); ?>
+    </div>
+    <p class="text-[11px] text-beige-100/40">Recommended: 1000 × 1250 px (4:5 portrait), JPEG/WebP.</p>
   </section>
 
   <section class="border border-white/5 rounded-3xl p-6 bg-navy-900/40 space-y-5">

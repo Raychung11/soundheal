@@ -12,6 +12,14 @@ $storyParas = (string) setting('about_story_paragraphs',
 $storyParagraphs = array_values(array_filter(array_map('trim', preg_split('/\n\s*\n/', $storyParas))));
 $storyImage      = media_src((string) setting('about_story_image_path', ''));
 
+$guideEyebrow = (string) setting('about_guide_eyebrow', 'Your guide');
+$guideName    = (string) setting('about_guide_name', '');
+$guideRole    = (string) setting('about_guide_role', '');
+$guideBio     = (string) setting('about_guide_bio', '');
+$guideImage   = media_src((string) setting('about_guide_image_path', ''));
+$guideParas   = array_values(array_filter(array_map('trim', preg_split('/\n\s*\n/', $guideBio))));
+$showGuide    = $guideName !== '' || $guideBio !== '' || $guideImage !== '';
+
 $principles = [];
 for ($i = 1; $i <= 3; $i++) {
     $principles[] = [
@@ -73,6 +81,47 @@ require __DIR__ . '/../includes/header.php';
     </div>
   </div>
 </section>
+
+<?php if ($showGuide): ?>
+<!-- Meet your guide -->
+<section class="border-t border-white/5 bg-navy-900/30">
+  <div class="max-w-6xl mx-auto px-6 py-20 md:py-28">
+    <div class="grid md:grid-cols-[420px_1fr] gap-12 lg:gap-16 items-center">
+      <div>
+        <?php if ($guideImage): ?>
+          <div class="relative">
+            <div class="absolute -inset-4 rounded-[2rem] border border-gold-500/15 pointer-events-none"></div>
+            <img src="<?= e($guideImage) ?>" alt="<?= e($guideName) ?>"
+                 onerror="this.parentElement.style.display='none'"
+                 loading="lazy"
+                 class="rounded-[1.75rem] border border-white/5 w-full aspect-[4/5] object-cover">
+          </div>
+        <?php else: ?>
+          <div class="rounded-[1.75rem] border border-white/5 w-full aspect-[4/5] bg-gradient-to-br from-gold-500/15 via-navy-800 to-navy-950 flex items-center justify-center">
+            <span class="font-serif text-6xl text-gold-400/30">◯</span>
+          </div>
+        <?php endif; ?>
+      </div>
+      <div>
+        <p class="text-gold-400/80 tracking-[0.3em] uppercase text-[11px]"><?= e($guideEyebrow) ?></p>
+        <?php if ($guideName !== ''): ?>
+          <h2 class="font-serif text-4xl md:text-5xl text-beige-100 mt-3"><?= e($guideName) ?></h2>
+        <?php endif; ?>
+        <?php if ($guideRole !== ''): ?>
+          <p class="text-gold-400/90 mt-2 text-sm tracking-wide"><?= e($guideRole) ?></p>
+        <?php endif; ?>
+        <?php if ($guideParas): ?>
+          <div class="mt-6 space-y-5 text-beige-100/80 leading-[1.95] font-light text-lg">
+            <?php foreach ($guideParas as $para): ?>
+              <p><?= nl2br(e($para)) ?></p>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
+      </div>
+    </div>
+  </div>
+</section>
+<?php endif; ?>
 
 <!-- Principles with imagery -->
 <section class="border-t border-white/5 bg-navy-900/40">
