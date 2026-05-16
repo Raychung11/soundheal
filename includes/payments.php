@@ -16,6 +16,55 @@ declare(strict_types=1);
 if (!function_exists('settle_payment')) {
 
     /**
+     * Server-side confirmation of a Billplz bill. Never trust the browser
+     * redirect params (?billplz[paid]=true) — anyone can forge those. This
+     * re-fetches the bill straight from Billplz with the secret API key and
+     * confirms it is genuinely paid AND that the amount matches what we
+     * recorded. Fails closed: any uncertainty returns false.
+     */
+    function billplz_verify_paid(string $billId, float $expectedAmount): bool
+    {
+        $billId = trim($billId);
+        if ($billId === '' || str_starts_with($billId, 'DEMO-')) {
+            return false;
+        }
+        $cfg = payment_config();
+        if (empty($cfg['api_key']) || empty($cfg['api_base'])) {
+            return false; // Can't verify — let the webhook / admin settle it.
+        }
+
+        $ch = curl_init(rtrim($cfg['api_base'], '/') . '/bills/' . rawurlencode($billId));
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_USERPWD        => $cfg['api_key'] . ':',
+            CURLOPT_TIMEOUT        => 15,
+        ]);
+        $body = curl_exec($ch);
+        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($code < 200 || $code >= 300 || !$body) {
+            return false;
+        }
+        $bill = json_decode((string) $body, true);
+        if (!is_array($bill)) {
+            return false;
+        }
+
+        $isPaid = ($bill['paid'] ?? false) === true
+            || ($bill['paid'] ?? '') === 'true'
+            || ($bill['state'] ?? '') === 'paid';
+        if (!$isPaid) {
+            return false;
+        }
+
+        // Billplz returns the amount in cents; compare against our record.
+        $expectedCents = (int) round($expectedAmount * 100);
+        $gotCents      = (int) ($bill['amount'] ?? -1);
+        return $gotCents === $expectedCents;
+    }
+
+    /**
      * Marks a payment as settled and either:
      *   - For bookings: flips the booking to paid, issues QR tickets (one per
      *     seat), and emails the member their confirmation.

@@ -11,6 +11,12 @@
  */
 require_once __DIR__ . '/../includes/bootstrap.php';
 
+// When pulled in as a library (e.g. the WhatsApp webhook) we only want the
+// ai_reply()/aria_openai_call() functions — not this HTTP endpoint's body,
+// which would otherwise emit its own headers + JSON and parse the wrong
+// request. Callers define ARIA_CHAT_LIBRARY before requiring this file.
+if (!defined('ARIA_CHAT_LIBRARY')) {
+
 header('Content-Type: application/json');
 
 if (!is_post()) {
@@ -25,8 +31,9 @@ $message = trim((string)($body['message'] ?? ''));
 
 // Soft CSRF for logged-in members; anonymous flow does not require it.
 if (is_logged_in()) {
-    $sent = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
-    if (!hash_equals($_SESSION['_csrf_token'] ?? '', (string) $sent)) {
+    $sent = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+    $stored = (string) ($_SESSION['_csrf_token'] ?? '');
+    if ($stored === '' || $sent === '' || !hash_equals($stored, $sent)) {
         http_response_code(419);
         echo json_encode(['error' => 'Stale session.']);
         exit;
@@ -71,7 +78,7 @@ if (!$conversationId) {
 
 // Capture an early mood signal if the user opens with "I'm feeling X today.".
 if (preg_match('/i\s+am\s+feeling\s+([a-z]+)|i\'?m\s+feeling\s+([a-z]+)/i', $message, $m)) {
-    $detected = strtolower($m[1] ?: $m[2]);
+    $detected = strtolower(($m[1] ?? '') ?: ($m[2] ?? ''));
     db()->prepare("UPDATE ai_conversations SET mood = COALESCE(mood, :mood) WHERE id = :id")
         ->execute([':mood' => $detected, ':id' => $conversationId]);
 }
@@ -86,7 +93,9 @@ db()->prepare("INSERT INTO ai_messages (conversation_id, role, content) VALUES (
 
 echo json_encode(['reply' => $reply, 'session_token' => $sessionToken]);
 
-function ai_reply(int $conversationId, string $message, ?int $userId): string
+} // end: !defined('ARIA_CHAT_LIBRARY')
+
+function ai_reply(int $conversationId, string $message, ?int $userId = null): string
 {
     $cfg = ai_config();
     $apiKey = $cfg['openai']['api_key'] ?? '';

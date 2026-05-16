@@ -58,6 +58,15 @@ $ins->execute([
 $paymentId = (int) db()->lastInsertId();
 
 if (!$cfg['api_key'] || !$cfg['collection_id']) {
+    // Demo auto-settle is a dev convenience only. In a production config
+    // (sandbox=false) missing credentials must fail loudly — never hand
+    // out tickets/membership/credits without taking payment.
+    if (empty($cfg['sandbox'])) {
+        error_log('[billplz_create] live config but Billplz credentials are missing — refusing to auto-settle');
+        flash('payment', 'Payments are temporarily unavailable. Please try again shortly or contact us.', 'error');
+        db()->prepare("UPDATE payments SET status='failed' WHERE id=:id")->execute([':id' => $paymentId]);
+        redirect('/member/my_bookings.php');
+    }
     flash('payment', 'Payment gateway not yet configured. (Demo mode — marked as paid.)', 'info');
     db()->prepare("UPDATE payments SET status='paid', paid_at=NOW(), gateway_bill_id=:b WHERE id=:id")
         ->execute([':b' => 'DEMO-' . $paymentId, ':id' => $paymentId]);

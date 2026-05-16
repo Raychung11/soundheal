@@ -62,15 +62,24 @@ if (is_post()) {
         db()->prepare("UPDATE event_bookings SET status='attended' WHERE id = :id")->execute([':id' => $bookingId]);
         audit_log('booking.mark_attended', 'event_bookings', $bookingId);
     } elseif ($action === 'cancel') {
+        $bk = db()->prepare("SELECT user_id, paid_with_credit FROM event_bookings WHERE id = :id LIMIT 1");
+        $bk->execute([':id' => $bookingId]);
+        $bk = $bk->fetch();
         db()->beginTransaction();
         try {
             db()->prepare("UPDATE event_bookings SET status='cancelled', cancelled_at = NOW() WHERE id = :id")->execute([':id' => $bookingId]);
             db()->prepare("UPDATE tickets SET status='revoked' WHERE booking_id = :b")->execute([':b' => $bookingId]);
             db()->commit();
             audit_log('booking.cancel.admin', 'event_bookings', $bookingId);
+            if ($bk && !empty($bk['paid_with_credit']) && function_exists('refund_credit_for_booking')) {
+                refund_credit_for_booking((int) $bk['user_id'], $bookingId);
+            }
         } catch (Throwable $e) { db()->rollBack(); }
     } elseif ($action === 'refund') {
         require_admin();
+        $bk = db()->prepare("SELECT user_id, paid_with_credit FROM event_bookings WHERE id = :id LIMIT 1");
+        $bk->execute([':id' => $bookingId]);
+        $bk = $bk->fetch();
         db()->beginTransaction();
         try {
             db()->prepare("UPDATE event_bookings SET status='refunded', refunded_at = NOW() WHERE id = :id")->execute([':id' => $bookingId]);
@@ -78,6 +87,9 @@ if (is_post()) {
             db()->prepare("UPDATE tickets SET status='revoked' WHERE booking_id = :b")->execute([':b' => $bookingId]);
             db()->commit();
             audit_log('booking.refund', 'event_bookings', $bookingId);
+            if ($bk && !empty($bk['paid_with_credit']) && function_exists('refund_credit_for_booking')) {
+                refund_credit_for_booking((int) $bk['user_id'], $bookingId);
+            }
         } catch (Throwable $e) { db()->rollBack(); }
     }
     flash('booking', 'Updated.', 'success');

@@ -21,7 +21,11 @@ if (is_post()) {
         throttle_reset($throttleKey);
         $intended = $_SESSION['_intended'] ?? null;
         unset($_SESSION['_intended']);
-        if ($intended) {
+        // Only honour a local path — never an absolute or protocol-relative
+        // URL — so a crafted login link can't bounce users off-site.
+        if (is_string($intended) && isset($intended[0]) && $intended[0] === '/'
+            && !str_starts_with($intended, '//') && !str_starts_with($intended, '/\\')
+        ) {
             redirect($intended);
         }
         redirect(has_role('admin','staff') ? '/admin/dashboard.php' : '/member/dashboard.php');

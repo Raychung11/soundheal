@@ -9,7 +9,7 @@ if (is_post()) {
     if (input('action') === 'cancel') {
         $bookingId = (int) input('booking_id', 0);
         $row = db()->prepare(
-            "SELECT b.id, b.status, b.user_id, e.starts_at
+            "SELECT b.id, b.status, b.user_id, b.paid_with_credit, e.starts_at
              FROM event_bookings b
              JOIN events e ON e.id = b.event_id
              WHERE b.id = :id LIMIT 1"
@@ -28,7 +28,12 @@ if (is_post()) {
             db()->prepare("UPDATE tickets SET status = 'revoked' WHERE booking_id = :b")
                 ->execute([':b' => $bookingId]);
             audit_log('booking.cancel', 'event_bookings', $bookingId);
-            flash('booking', 'Your booking has been cancelled. If you had paid, refund will follow within 7 days.', 'success');
+            if (!empty($booking['paid_with_credit']) && function_exists('refund_credit_for_booking')) {
+                refund_credit_for_booking($user['id'], $bookingId);
+                flash('booking', 'Your booking has been cancelled and your credit has been returned.', 'success');
+            } else {
+                flash('booking', 'Your booking has been cancelled. If you had paid, refund will follow within 7 days.', 'success');
+            }
         }
         redirect('/member/my_bookings.php');
     }

@@ -22,11 +22,15 @@ if ($billId !== '') {
     $payment = $stmt->fetch() ?: null;
 }
 
-// Trust Billplz's redirect param: if paid=true and the local record is still
-// pending (webhook hasn't fired yet), settle right here so the user sees a
-// confirmation rather than "we're confirming…". The webhook will also fire,
-// but settle_payment() is guarded against double-settlement.
-if ($payment && $payment['status'] === 'pending' && $paidParam === 'true') {
+// NEVER trust Billplz's redirect param — anyone can hit this URL with
+// ?billplz[paid]=true. If the local record is still pending (webhook hasn't
+// fired yet) we re-confirm the bill server-side, straight from Billplz with
+// the secret key, verifying both the paid state and the amount before we
+// settle. The webhook will also fire; settle_payment() is idempotent.
+if ($payment && $payment['status'] === 'pending' && $paidParam === 'true'
+    && function_exists('billplz_verify_paid')
+    && billplz_verify_paid((string) $payment['gateway_bill_id'], (float) $payment['amount'])
+) {
     db()->prepare("UPDATE payments SET status = 'paid', paid_at = COALESCE(:p, NOW()) WHERE id = :id")
         ->execute([':p' => $paidAt ?: null, ':id' => $payment['id']]);
 
