@@ -6,8 +6,13 @@ $heroEyebrow  = (string) setting('about_hero_eyebrow', 'Our story');
 $heroHeadline = (string) setting('about_hero_headline', 'A sanctuary built on listening.');
 $heroImage    = media_src((string) setting('about_hero_image_path', ''));
 
-$storyParas = (string) setting('about_story_paragraphs',
-    "SoundHeal began as a quiet practice between friends.\n\nToday we hold space for a wider community.\n\nWe are a sanctuary."
+$storyParas = (string) setting('about_story_paragraphs', <<<'TXT'
+SoundHeal began as a quiet practice between friends — gathering once a week with bowls and breath, holding space for the noise of the city to settle.
+
+Today we carry that same intention into a wider community: in-person sessions, a curated audio library, and an AI concierge designed to soften the path back to yourself.
+
+We are not a clinic. We are not a fad. We are a sanctuary — small enough to know your name, intentional enough to honour your stillness.
+TXT
 );
 $storyParagraphs = array_values(array_filter(array_map('trim', preg_split('/\n\s*\n/', $storyParas))));
 $storyImage      = media_src((string) setting('about_story_image_path', ''));
