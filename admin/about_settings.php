@@ -18,6 +18,20 @@ $textKeys = [
     'about_science_body'         => 'text',
     'about_science_points'       => 'text',
     'about_science_disclaimer'   => 'text',
+    'about_videos_eyebrow'       => 'string',
+    'about_videos_headline'      => 'string',
+    'about_video_1_url'          => 'string',
+    'about_video_1_caption'      => 'string',
+    'about_video_2_url'          => 'string',
+    'about_video_2_caption'      => 'string',
+    'about_video_3_url'          => 'string',
+    'about_video_3_caption'      => 'string',
+    'about_video_4_url'          => 'string',
+    'about_video_4_caption'      => 'string',
+    'about_video_5_url'          => 'string',
+    'about_video_5_caption'      => 'string',
+    'about_video_6_url'          => 'string',
+    'about_video_6_caption'      => 'string',
     'about_guide_eyebrow'        => 'string',
     'about_guide_name'           => 'string',
     'about_guide_role'           => 'string',
@@ -184,6 +198,19 @@ function text_area(string $key, string $label, int $rows = 3): void
     <?php text_area('about_science_body', 'Explanation (separate paragraphs with a blank line)', 8); ?>
     <?php text_area('about_science_points', 'Benefit points (one per line)', 6); ?>
     <?php text_area('about_science_disclaimer', 'Disclaimer (small print)', 3); ?>
+  </section>
+
+  <section class="border border-white/5 rounded-3xl p-6 bg-navy-900/40 space-y-5">
+    <h2 class="font-serif text-2xl text-gold-400">Videos</h2>
+    <p class="text-[11px] text-beige-100/45">Paste a YouTube link in any form — <code>youtube.com/watch?v=…</code>, <code>youtu.be/…</code> or a Shorts URL <code>youtube.com/shorts/…</code>. Vertical clips look best. Empty slots are hidden. The first filled video is also featured on the home page.</p>
+    <?php text_input('about_videos_eyebrow', 'Section eyebrow', 'In the room'); ?>
+    <?php text_input('about_videos_headline', 'Section headline', 'Moments from our sessions'); ?>
+    <?php for ($v = 1; $v <= 6; $v++): ?>
+      <div class="border-t border-white/5 pt-5 grid sm:grid-cols-[1fr_1fr] gap-4">
+        <?php text_input("about_video_{$v}_url", "Video {$v} · YouTube link", 'https://youtu.be/…'); ?>
+        <?php text_input("about_video_{$v}_caption", "Video {$v} · caption (optional)", 'A 1.6m gong, hand-hammered'); ?>
+      </div>
+    <?php endfor; ?>
   </section>
 
   <section class="border border-white/5 rounded-3xl p-6 bg-navy-900/40 space-y-5">

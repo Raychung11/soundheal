@@ -25,6 +25,8 @@ $keys = [
     'home_story_quote'         => 'text',
     'home_story_body'          => 'text',
     'home_story_cta_label'     => 'string',
+    'home_video_eyebrow'       => 'string',
+    'home_video_headline'      => 'string',
 ];
 
 if (is_post()) {
@@ -38,6 +40,7 @@ if (is_post()) {
     }
     set_setting('trial_enabled', !empty($_POST['trial_enabled']) ? '1' : '0', 'bool');
     set_setting('home_story_enabled', !empty($_POST['home_story_enabled']) ? '1' : '0', 'bool');
+    set_setting('home_video_enabled', !empty($_POST['home_video_enabled']) ? '1' : '0', 'bool');
 
     // File uploads → /uploads/home/...
     foreach ([
@@ -242,6 +245,24 @@ function media_block(string $key, string $label, string $accept, string $type = 
       <input name="home_story_cta_label" value="<?= e((string) setting('home_story_cta_label', '')) ?>" class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3">
     </label>
     <p class="text-[11px] text-beige-100/40">The button always links to the About page.</p>
+  </section>
+
+  <section class="border border-white/5 rounded-3xl p-6 bg-navy-900/40 space-y-5">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <h2 class="font-serif text-2xl text-gold-400">Featured video</h2>
+      <label class="flex items-center gap-2 text-sm text-beige-100/70">
+        <input type="checkbox" name="home_video_enabled" value="1" <?= setting('home_video_enabled', true) ? 'checked' : '' ?>> Show on home page
+      </label>
+    </div>
+    <p class="text-[11px] text-beige-100/45">Automatically features the <strong>first</strong> video from the About page → “Videos” section. Add your YouTube links there; this just controls the home-page heading and visibility.</p>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Eyebrow text</span>
+      <input name="home_video_eyebrow" value="<?= e((string) setting('home_video_eyebrow', '')) ?>" class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3">
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Headline</span>
+      <input name="home_video_headline" value="<?= e((string) setting('home_video_headline', '')) ?>" class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3 font-serif text-lg">
+    </label>
   </section>
 
   <div class="flex gap-3">

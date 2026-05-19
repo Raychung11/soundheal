@@ -67,6 +67,26 @@ function asset(string $path): string
     return url('assets/' . ltrim($path, '/'));
 }
 
+/**
+ * Extract an 11-char YouTube video ID from any common URL form
+ * (watch?v=, youtu.be/, /shorts/, /embed/) or a bare ID. Returns
+ * '' if nothing valid is found, so callers can hide empty slots.
+ */
+function youtube_id(string $input): string
+{
+    $input = trim($input);
+    if ($input === '') {
+        return '';
+    }
+    if (preg_match('~^[A-Za-z0-9_-]{11}$~', $input)) {
+        return $input;
+    }
+    if (preg_match('~(?:youtu\.be/|/shorts/|/embed/|[?&]v=)([A-Za-z0-9_-]{11})~', $input, $m)) {
+        return $m[1];
+    }
+    return '';
+}
+
 function redirect(string $path, int $code = 302): void
 {
     header('Location: ' . (str_starts_with($path, 'http') ? $path : url($path)), true, $code);

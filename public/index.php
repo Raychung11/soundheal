@@ -29,6 +29,16 @@ $homeStoryQuote      = (string) setting('home_story_quote', "Sound doesn't heal 
 $homeStoryBody       = (string) setting('home_story_body', 'Jaemie Sound Bath was born from a personal experience — weeks of exhaustion and restless nights that eased after a single gong bath. Not magic, but resonance: sound gently guiding the body back into rest and recovery.');
 $homeStoryCtaLabel   = (string) setting('home_story_cta_label', 'Read our story');
 
+$homeVideoEnabled    = (bool)   setting('home_video_enabled', true);
+$homeVideoId = '';
+for ($v = 1; $v <= 6; $v++) {
+    $hv = youtube_id((string) setting("about_video_{$v}_url", ''));
+    if ($hv !== '') { $homeVideoId = $hv; break; }
+}
+$homeVideoEyebrow    = (string) setting('home_video_eyebrow', 'Watch');
+$homeVideoHeadline   = (string) setting('home_video_headline', 'Step inside a session');
+$showHomeVideo       = $homeVideoEnabled && $homeVideoId !== '';
+
 $upcoming = db()->query(
     "SELECT id, slug, title, subtitle, starts_at, location, cover_image
      FROM events
@@ -218,6 +228,25 @@ $asLink = function (string $u): string {
         <figcaption class="mt-6 text-sm text-gold-400"><?= e($t['author_name']) ?><?php if (!empty($t['author_title'])): ?> <span class="text-beige-100/50">· <?= e($t['author_title']) ?></span><?php endif; ?></figcaption>
       </figure>
     <?php endforeach; ?>
+  </div>
+</section>
+<?php endif; ?>
+
+<?php if ($showHomeVideo): ?>
+<section class="relative overflow-hidden border-t border-white/5">
+  <div class="relative max-w-3xl mx-auto px-6 py-24 text-center">
+    <p class="text-gold-400/80 tracking-[0.4em] uppercase text-[11px]"><?= e($homeVideoEyebrow) ?></p>
+    <h2 class="font-serif text-4xl md:text-5xl text-beige-100 mt-5 leading-tight"><?= e($homeVideoHeadline) ?></h2>
+    <div class="mt-12 mx-auto w-full max-w-[320px]">
+      <div class="relative aspect-[9/16] rounded-[1.75rem] overflow-hidden border border-white/10 bg-navy-950 shadow-[0_20px_60px_-20px_rgba(201,164,106,0.25)]">
+        <iframe class="absolute inset-0 w-full h-full" loading="lazy"
+                src="https://www.youtube-nocookie.com/embed/<?= e($homeVideoId) ?>?rel=0&modestbranding=1&playsinline=1"
+                title="<?= e($homeVideoHeadline) ?>" frameborder="0"
+                allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowfullscreen></iframe>
+      </div>
+    </div>
+    <a href="<?= url('/public/about.php') ?>" class="inline-block mt-10 text-gold-400 hover:text-gold-300 text-sm">See more from the sanctuary →</a>
   </div>
 </section>
 <?php endif; ?>

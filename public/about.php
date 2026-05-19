@@ -78,6 +78,16 @@ $scienceDisclaimer = (string) setting('about_science_disclaimer',
     'Sound bath is a complementary wellness practice and is not intended to diagnose, treat, cure, or replace medical care. Individual experiences may vary.');
 $showScience     = $scienceParagraphs || $sciencePoints;
 
+$videosEyebrow  = (string) setting('about_videos_eyebrow', 'In the room');
+$videosHeadline = (string) setting('about_videos_headline', 'Moments from our sessions');
+$videos = [];
+for ($v = 1; $v <= 6; $v++) {
+    $vid = youtube_id((string) setting("about_video_{$v}_url", ''));
+    if ($vid === '') continue;
+    $videos[] = ['id' => $vid, 'caption' => trim((string) setting("about_video_{$v}_caption", ''))];
+}
+$showVideos = $videos !== [];
+
 require __DIR__ . '/../includes/header.php';
 ?>
 
@@ -213,6 +223,33 @@ require __DIR__ . '/../includes/header.php';
           </div>
         <?php endif; ?>
       </div>
+    </div>
+  </div>
+</section>
+<?php endif; ?>
+
+<?php if ($showVideos): ?>
+<!-- Videos -->
+<section class="border-t border-white/5">
+  <div class="max-w-6xl mx-auto px-6 py-20 md:py-28">
+    <p class="text-gold-400/80 tracking-[0.3em] uppercase text-[11px] text-center"><?= e($videosEyebrow) ?></p>
+    <h2 class="font-serif text-4xl md:text-5xl text-beige-100 mt-4 text-center leading-tight"><?= e($videosHeadline) ?></h2>
+    <div class="mt-12 flex gap-5 overflow-x-auto snap-x snap-mandatory pb-4 -mx-6 px-6">
+      <?php foreach ($videos as $vid): ?>
+        <figure class="snap-center shrink-0 w-[260px] sm:w-[300px]">
+          <div class="relative aspect-[9/16] rounded-[1.5rem] overflow-hidden border border-white/10 bg-navy-950">
+            <iframe class="absolute inset-0 w-full h-full" loading="lazy"
+                    src="https://www.youtube-nocookie.com/embed/<?= e($vid['id']) ?>?rel=0&modestbranding=1&playsinline=1"
+                    title="<?= e($vid['caption'] !== '' ? $vid['caption'] : 'Session video') ?>"
+                    frameborder="0"
+                    allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowfullscreen></iframe>
+          </div>
+          <?php if ($vid['caption'] !== ''): ?>
+            <figcaption class="mt-3 text-sm text-beige-100/60 text-center"><?= e($vid['caption']) ?></figcaption>
+          <?php endif; ?>
+        </figure>
+      <?php endforeach; ?>
     </div>
   </div>
 </section>
