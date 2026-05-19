@@ -7,7 +7,7 @@ $heroHeadline = (string) setting('about_hero_headline', 'A sanctuary built on li
 $heroImage    = media_src((string) setting('about_hero_image_path', ''));
 
 $storyParas = (string) setting('about_story_paragraphs', <<<'TXT'
-SoundHeal began as a quiet practice between friends — gathering once a week with bowls and breath, holding space for the noise of the city to settle.
+Our practice began as a quiet gathering between friends — meeting once a week with bowls and breath, holding space for the noise of the city to settle.
 
 Today we carry that same intention into a wider community: in-person sessions, a curated audio library, and an AI concierge designed to soften the path back to yourself.
 
