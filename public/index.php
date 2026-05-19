@@ -23,6 +23,12 @@ $trialAudio          = media_src((string) setting('trial_audio_path', ''));
 $trialCtaLabel       = (string) setting('trial_cta_label', 'Start your 7-day free trial');
 $trialDays           = (int)    setting('trial_duration_days', 7);
 
+$homeStoryEnabled    = (bool)   setting('home_story_enabled', true);
+$homeStoryEyebrow    = (string) setting('home_story_eyebrow', 'Our story');
+$homeStoryQuote      = (string) setting('home_story_quote', "Sound doesn't heal the body for you — it may help create the condition where the body can heal itself better.");
+$homeStoryBody       = (string) setting('home_story_body', 'Jaemie Sound Bath was born from a personal experience — weeks of exhaustion and restless nights that eased after a single gong bath. Not magic, but resonance: sound gently guiding the body back into rest and recovery.');
+$homeStoryCtaLabel   = (string) setting('home_story_cta_label', 'Read our story');
+
 $upcoming = db()->query(
     "SELECT id, slug, title, subtitle, starts_at, location, cover_image
      FROM events
@@ -212,6 +218,22 @@ $asLink = function (string $u): string {
         <figcaption class="mt-6 text-sm text-gold-400"><?= e($t['author_name']) ?><?php if (!empty($t['author_title'])): ?> <span class="text-beige-100/50">· <?= e($t['author_title']) ?></span><?php endif; ?></figcaption>
       </figure>
     <?php endforeach; ?>
+  </div>
+</section>
+<?php endif; ?>
+
+<?php if ($homeStoryEnabled): ?>
+<section class="relative overflow-hidden border-t border-white/5 bg-navy-900/40">
+  <div class="absolute inset-0 opacity-30 bg-[radial-gradient(circle_at_70%_50%,_rgba(201,164,106,0.22),_transparent_60%)]"></div>
+  <div class="relative max-w-4xl mx-auto px-6 py-24 text-center">
+    <p class="text-gold-400/80 tracking-[0.4em] uppercase text-[11px]"><?= e($homeStoryEyebrow) ?></p>
+    <?php if (trim($homeStoryQuote) !== ''): ?>
+      <blockquote class="mt-8 font-serif text-3xl md:text-4xl text-beige-100 leading-snug">“<?= e($homeStoryQuote) ?>”</blockquote>
+    <?php endif; ?>
+    <?php if (trim($homeStoryBody) !== ''): ?>
+      <p class="mt-8 text-beige-100/75 leading-[1.95] font-light max-w-2xl mx-auto"><?= nl2br(e($homeStoryBody)) ?></p>
+    <?php endif; ?>
+    <a href="<?= url('/public/about.php') ?>" class="inline-block mt-10 px-8 py-4 rounded-full border border-gold-500/50 text-gold-400 hover:bg-gold-500/10 transition"><?= e($homeStoryCtaLabel) ?></a>
   </div>
 </section>
 <?php endif; ?>

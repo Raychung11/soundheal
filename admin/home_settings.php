@@ -21,6 +21,10 @@ $keys = [
     'trial_subheadline'        => 'text',
     'trial_cta_label'          => 'string',
     'trial_duration_days'      => 'int',
+    'home_story_eyebrow'       => 'string',
+    'home_story_quote'         => 'text',
+    'home_story_body'          => 'text',
+    'home_story_cta_label'     => 'string',
 ];
 
 if (is_post()) {
@@ -33,6 +37,7 @@ if (is_post()) {
         }
     }
     set_setting('trial_enabled', !empty($_POST['trial_enabled']) ? '1' : '0', 'bool');
+    set_setting('home_story_enabled', !empty($_POST['home_story_enabled']) ? '1' : '0', 'bool');
 
     // File uploads → /uploads/home/...
     foreach ([
@@ -209,6 +214,34 @@ function media_block(string $key, string $label, string $accept, string $type = 
     </div>
 
     <?php media_block('trial_audio_path', 'Sample audio', 'audio/*', 'audio'); ?>
+  </section>
+
+  <section class="border border-white/5 rounded-3xl p-6 bg-navy-900/40 space-y-5">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <h2 class="font-serif text-2xl text-gold-400">Founder's story teaser</h2>
+      <label class="flex items-center gap-2 text-sm text-beige-100/70">
+        <input type="checkbox" name="home_story_enabled" value="1" <?= setting('home_story_enabled', true) ? 'checked' : '' ?>> Show on home page
+      </label>
+    </div>
+    <p class="text-[11px] text-beige-100/45">A short pull-quote + excerpt linking to the full About story. Leave fields blank to keep the built-in default copy.</p>
+
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Eyebrow text</span>
+      <input name="home_story_eyebrow" value="<?= e((string) setting('home_story_eyebrow', '')) ?>" class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3">
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Pull-quote (shown large)</span>
+      <textarea name="home_story_quote" rows="2" class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3"><?= e((string) setting('home_story_quote', '')) ?></textarea>
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Excerpt</span>
+      <textarea name="home_story_body" rows="3" class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3"><?= e((string) setting('home_story_body', '')) ?></textarea>
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Button label</span>
+      <input name="home_story_cta_label" value="<?= e((string) setting('home_story_cta_label', '')) ?>" class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3">
+    </label>
+    <p class="text-[11px] text-beige-100/40">The button always links to the About page.</p>
   </section>
 
   <div class="flex gap-3">

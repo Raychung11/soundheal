@@ -9,6 +9,15 @@ $textKeys = [
     'about_hero_eyebrow'         => 'string',
     'about_hero_headline'        => 'string',
     'about_story_paragraphs'     => 'text',
+    'about_founder_eyebrow'      => 'string',
+    'about_founder_headline'     => 'string',
+    'about_founder_quote'        => 'text',
+    'about_founder_body'         => 'text',
+    'about_science_eyebrow'      => 'string',
+    'about_science_headline'     => 'string',
+    'about_science_body'         => 'text',
+    'about_science_points'       => 'text',
+    'about_science_disclaimer'   => 'text',
     'about_guide_eyebrow'        => 'string',
     'about_guide_name'           => 'string',
     'about_guide_role'           => 'string',
@@ -156,6 +165,25 @@ function text_area(string $key, string $label, int $rows = 3): void
     <?php text_area('about_story_paragraphs', 'Paragraphs (separate with a blank line)', 7); ?>
     <?php image_block('about_story_image_path', 'Story image (optional)'); ?>
     <p class="text-[11px] text-beige-100/40">Recommended: 1200 × 1500 px (4:5 portrait), JPEG/WebP.</p>
+  </section>
+
+  <section class="border border-white/5 rounded-3xl p-6 bg-navy-900/40 space-y-5">
+    <h2 class="font-serif text-2xl text-gold-400">Founder's story</h2>
+    <p class="text-[11px] text-beige-100/45">The personal narrative shown on the About page. Leave any field blank to keep the built-in default copy that's already live.</p>
+    <?php text_input('about_founder_eyebrow', 'Eyebrow text', "Our founder's story"); ?>
+    <?php text_input('about_founder_headline', 'Headline', 'Why Jaemie Sound Bath exists'); ?>
+    <?php text_area('about_founder_quote', 'Pull-quote (one line, shown large)', 2); ?>
+    <?php text_area('about_founder_body', 'Story (separate paragraphs with a blank line)', 9); ?>
+  </section>
+
+  <section class="border border-white/5 rounded-3xl p-6 bg-navy-900/40 space-y-5">
+    <h2 class="font-serif text-2xl text-gold-400">The science of sound</h2>
+    <p class="text-[11px] text-beige-100/45">The “why it works” section + the medical disclaimer. Leave blank to keep the built-in default copy.</p>
+    <?php text_input('about_science_eyebrow', 'Eyebrow text', 'Not magic — resonance'); ?>
+    <?php text_input('about_science_headline', 'Headline', 'The science of sound resonance'); ?>
+    <?php text_area('about_science_body', 'Explanation (separate paragraphs with a blank line)', 8); ?>
+    <?php text_area('about_science_points', 'Benefit points (one per line)', 6); ?>
+    <?php text_area('about_science_disclaimer', 'Disclaimer (small print)', 3); ?>
   </section>
 
   <section class="border border-white/5 rounded-3xl p-6 bg-navy-900/40 space-y-5">

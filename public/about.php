@@ -34,6 +34,45 @@ $closingEyebrow  = (string) setting('about_closing_eyebrow', 'Quietly, with care
 $closingHeadline = (string) setting('about_closing_headline', 'Founded in Kuala Lumpur, 2024');
 $closingBody     = (string) setting('about_closing_body', '');
 
+// Founder's story + the science behind sound. Ships with the founder's
+// own words as the default; fully editable from Admin → About page.
+$defaultFounderBody = <<<'TXT'
+In December 2025, I went through one of the most exhausting periods of my life. I had been struggling with a persistent cough for almost three weeks. Nights were the hardest — excessive phlegm, constant coughing, interrupted sleep, and a body that simply couldn't fully recover. I tried different ways to manage it, yet healing felt frustratingly slow.
+
+By early January, during a company retreat, I was invited to join a gong bath session. To be honest, I joined with curiosity rather than expectation. Something surprising happened.
+
+That night, for the first time in weeks, I slept deeply. My breathing felt calmer, my body felt less tense, and over the next days, the coughing significantly eased. It wasn't an overnight "miracle," but it felt as though my body had finally shifted into recovery mode.
+
+That experience changed my perspective completely — and eventually became one of the reasons I founded Jaemie Sound Bath.
+TXT;
+
+$defaultScienceBody = <<<'TXT'
+At Jaemie Sound Bath, we do not position sound healing as superstition or a replacement for medical treatment. Instead, we understand the sound bath through the lens of nervous system regulation and deep relaxation.
+
+When the body is under prolonged stress, poor sleep, or inflammation, it can remain in a heightened "fight-or-flight" state. Research increasingly suggests that immersive sound experiences — especially low-frequency instruments such as gongs and singing bowls — may help guide the body into a more relaxed parasympathetic state, often called the "rest and restore" mode.
+
+Everything in our environment — including the human body — naturally vibrates. During a sound bath, gongs and singing bowls produce rich layers of sound waves and low-frequency vibrations that are not only heard through the ears, but often felt physically throughout the body. This is resonance: the way one vibrating system can gently influence another.
+TXT;
+
+$defaultSciencePoints = "Encouraging slower breathing patterns\nHelping muscles release physical tightness\nSupporting nervous system regulation\nPromoting a meditative, restorative state\nCreating an environment for deeper rest and recovery";
+
+$founderEyebrow  = (string) setting('about_founder_eyebrow', "Our founder's story");
+$founderHeadline = (string) setting('about_founder_headline', 'Why Jaemie Sound Bath exists');
+$founderQuote    = (string) setting('about_founder_quote', "Sound doesn't heal the body for you — it may help create the condition where the body can heal itself better.");
+$founderBody     = (string) setting('about_founder_body', $defaultFounderBody);
+$founderParagraphs = array_values(array_filter(array_map('trim', preg_split('/\n\s*\n/', $founderBody))));
+$showFounder     = trim($founderBody) !== '' || trim($founderQuote) !== '';
+
+$scienceEyebrow  = (string) setting('about_science_eyebrow', 'Not magic — resonance');
+$scienceHeadline = (string) setting('about_science_headline', 'The science of sound resonance');
+$scienceBody     = (string) setting('about_science_body', $defaultScienceBody);
+$scienceParagraphs = array_values(array_filter(array_map('trim', preg_split('/\n\s*\n/', $scienceBody))));
+$sciencePoints   = array_values(array_filter(array_map('trim',
+    preg_split('/\r?\n/', (string) setting('about_science_points', $defaultSciencePoints)))));
+$scienceDisclaimer = (string) setting('about_science_disclaimer',
+    'Sound bath is a complementary wellness practice and is not intended to diagnose, treat, cure, or replace medical care. Individual experiences may vary.');
+$showScience     = $scienceParagraphs || $sciencePoints;
+
 require __DIR__ . '/../includes/header.php';
 ?>
 
@@ -81,6 +120,57 @@ require __DIR__ . '/../includes/header.php';
     </div>
   </div>
 </section>
+
+<?php if ($showFounder): ?>
+<!-- Founder's story -->
+<section class="border-t border-white/5">
+  <div class="max-w-3xl mx-auto px-6 py-20 md:py-28">
+    <p class="text-gold-400/80 tracking-[0.3em] uppercase text-[11px] text-center"><?= e($founderEyebrow) ?></p>
+    <h2 class="font-serif text-4xl md:text-5xl text-beige-100 mt-4 text-center leading-tight"><?= e($founderHeadline) ?></h2>
+    <?php if (trim($founderQuote) !== ''): ?>
+      <blockquote class="mt-12 border-l-2 border-gold-500/40 pl-6 md:pl-8 font-serif text-2xl md:text-3xl text-beige-100/90 italic leading-snug">“<?= e($founderQuote) ?>”</blockquote>
+    <?php endif; ?>
+    <div class="mt-12 space-y-6 text-beige-100/80 leading-[1.95] font-light text-lg">
+      <?php foreach ($founderParagraphs as $para): ?>
+        <p><?= nl2br(e($para)) ?></p>
+      <?php endforeach; ?>
+    </div>
+  </div>
+</section>
+<?php endif; ?>
+
+<?php if ($showScience): ?>
+<!-- The science of sound -->
+<section class="border-t border-white/5 bg-navy-900/30">
+  <div class="max-w-5xl mx-auto px-6 py-20 md:py-28">
+    <p class="text-gold-400/80 tracking-[0.3em] uppercase text-[11px] text-center"><?= e($scienceEyebrow) ?></p>
+    <h2 class="font-serif text-4xl md:text-5xl text-beige-100 mt-4 text-center leading-tight"><?= e($scienceHeadline) ?></h2>
+
+    <?php if ($scienceParagraphs): ?>
+      <div class="mt-12 max-w-3xl mx-auto space-y-6 text-beige-100/80 leading-[1.95] font-light text-lg">
+        <?php foreach ($scienceParagraphs as $para): ?>
+          <p><?= nl2br(e($para)) ?></p>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+
+    <?php if ($sciencePoints): ?>
+      <ul class="mt-14 grid sm:grid-cols-2 gap-4 max-w-3xl mx-auto">
+        <?php foreach ($sciencePoints as $point): ?>
+          <li class="flex gap-3 items-start border border-white/5 rounded-2xl px-5 py-4 bg-navy-950/40">
+            <span class="text-gold-400 mt-0.5">◦</span>
+            <span class="text-beige-100/75 text-sm leading-relaxed"><?= e($point) ?></span>
+          </li>
+        <?php endforeach; ?>
+      </ul>
+    <?php endif; ?>
+
+    <?php if (trim($scienceDisclaimer) !== ''): ?>
+      <p class="mt-14 max-w-3xl mx-auto text-center text-xs text-beige-100/45 italic leading-relaxed"><?= e($scienceDisclaimer) ?></p>
+    <?php endif; ?>
+  </div>
+</section>
+<?php endif; ?>
 
 <?php if ($showGuide): ?>
 <!-- Meet your guide -->
