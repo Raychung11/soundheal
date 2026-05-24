@@ -61,7 +61,20 @@ require __DIR__ . '/../includes/header.php';
 $asLink = function (string $u): string {
     return (str_starts_with($u, 'http://') || str_starts_with($u, 'https://')) ? $u : url($u);
 };
+
+// Organization structured data for richer search/social results.
+$ldBase = rtrim((string) config('app.url'), '/');
+$ldSocial = array_values(array_filter([
+    (string) setting('company_social_instagram', ''),
+    (string) setting('company_social_facebook', ''),
+    (string) setting('company_social_tiktok', ''),
+    (string) setting('company_social_youtube', ''),
+], fn($u) => str_starts_with((string) $u, 'http')));
+$orgLd = ['@context' => 'https://schema.org', '@type' => 'Organization', 'name' => $brandName, 'url' => $ldBase];
+if ($seoImage !== '') $orgLd['logo'] = $seoImage;
+if ($ldSocial) $orgLd['sameAs'] = $ldSocial;
 ?>
+<script type="application/ld+json"><?= json_encode($orgLd, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?></script>
 
 <section class="relative overflow-hidden">
   <?php if ($heroImage): ?>

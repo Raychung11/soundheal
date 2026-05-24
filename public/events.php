@@ -16,8 +16,43 @@ $events = db()->query(
      ORDER BY e.starts_at ASC"
 )->fetchAll();
 
+// Event structured data (schema.org/Event) for Google rich results.
+$ldBase = rtrim((string) config('app.url'), '/');
+$eventsLd = [];
+foreach ($events as $e) {
+    $img = !empty($e['cover_image']) ? media_src((string) $e['cover_image']) : '';
+    if ($img !== '' && !str_starts_with($img, 'http')) $img = $ldBase . '/' . ltrim($img, '/');
+    $available = ((int) $e['capacity'] - (int) $e['seats_taken']) > 0;
+    $eventsLd[] = array_filter([
+        '@context'            => 'https://schema.org',
+        '@type'               => 'Event',
+        'name'                => $e['title'],
+        'startDate'           => date('c', strtotime((string) $e['starts_at'])),
+        'eventAttendanceMode' => 'https://schema.org/OfflineEventAttendanceMode',
+        'eventStatus'         => 'https://schema.org/EventScheduled',
+        'description'         => (string) ($e['subtitle'] ?: ($e['description'] ?? '')),
+        'image'               => $img ?: null,
+        'location'            => !empty($e['location']) ? [
+            '@type'   => 'Place',
+            'name'    => $e['location'],
+            'address' => $e['location'],
+        ] : null,
+        'organizer'           => ['@type' => 'Organization', 'name' => brand_name(), 'url' => $ldBase],
+        'offers'              => [
+            '@type'         => 'Offer',
+            'price'         => number_format((float) $e['price_public'], 2, '.', ''),
+            'priceCurrency' => 'MYR',
+            'availability'  => $available ? 'https://schema.org/InStock' : 'https://schema.org/SoldOut',
+            'url'           => $ldBase . '/public/events.php#event-' . (int) $e['id'],
+        ],
+    ], fn($v) => $v !== null && $v !== '');
+}
+
 require __DIR__ . '/../includes/header.php';
 ?>
+<?php if ($eventsLd): ?>
+<script type="application/ld+json"><?= json_encode($eventsLd, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?></script>
+<?php endif; ?>
 <section class="max-w-6xl mx-auto px-6 py-24">
   <p class="text-gold-400/80 tracking-[0.3em] uppercase text-xs">Calendar</p>
   <h1 class="font-serif text-5xl text-beige-100 mt-4">Upcoming sessions</h1>

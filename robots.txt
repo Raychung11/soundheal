@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /member/
+Disallow: /api/
+Disallow: /includes/
+Disallow: /config/
+Disallow: /database/
+Disallow: /logs/
+
+Sitemap: https://jaemiesoundbath.com/sitemap.php
