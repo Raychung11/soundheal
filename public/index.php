@@ -242,6 +242,9 @@ if ($ldSocial) $orgLd['sameAs'] = $ldSocial;
       </figure>
     <?php endforeach; ?>
   </div>
+  <p class="mt-10 text-center">
+    <a href="<?= url('/public/share_experience.php') ?>" class="text-gold-400 hover:text-gold-300 text-sm">Share your experience →</a>
+  </p>
 </section>
 <?php endif; ?>
 

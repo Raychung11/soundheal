@@ -16,6 +16,11 @@ $events = db()->query(
      ORDER BY e.starts_at ASC"
 )->fetchAll();
 
+// Distinct categories for the filter chips.
+$categories = array_values(array_unique(array_filter(array_map(
+    fn($e) => trim((string) ($e['category'] ?? '')), $events
+))));
+
 // Event structured data (schema.org/Event) for Google rich results.
 $ldBase = rtrim((string) config('app.url'), '/');
 $eventsLd = [];
@@ -58,6 +63,24 @@ require __DIR__ . '/../includes/header.php';
   <h1 class="font-serif text-5xl text-beige-100 mt-4">Upcoming sessions</h1>
   <p class="mt-6 max-w-2xl text-beige-100/70 leading-relaxed">Reserve your seat. Members enjoy quiet pricing and priority booking on every session.</p>
 
+  <?php if ($events): ?>
+    <div class="mt-10 flex flex-col gap-4 md:flex-row md:items-center md:justify-between" data-events-toolbar>
+      <label class="relative md:max-w-xs w-full">
+        <svg class="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-beige-100/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="search" data-events-search placeholder="Search sessions…"
+               class="w-full rounded-full bg-navy-900/60 border border-white/10 pl-11 pr-4 py-2.5 text-sm text-beige-100 placeholder:text-beige-100/40 focus:border-gold-500/50 focus:outline-none">
+      </label>
+      <?php if (count($categories) > 1): ?>
+        <div class="flex flex-wrap gap-2" data-events-filters>
+          <button type="button" data-cat="" class="text-xs uppercase tracking-[0.2em] px-4 py-2 rounded-full border border-gold-500/40 bg-gold-500/10 text-gold-400 transition" aria-pressed="true">All</button>
+          <?php foreach ($categories as $cat): ?>
+            <button type="button" data-cat="<?= e(strtolower($cat)) ?>" class="text-xs uppercase tracking-[0.2em] px-4 py-2 rounded-full border border-white/10 text-beige-100/60 hover:border-gold-500/40 hover:text-gold-400 transition capitalize" aria-pressed="false"><?= e($cat) ?></button>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+    </div>
+  <?php endif; ?>
+
   <?php if (!$events): ?>
     <div class="mt-16 border border-white/5 rounded-3xl p-12 text-center bg-navy-900/40">
       <p class="font-serif text-2xl text-beige-100/80">New sessions are being woven into the calendar.</p>
@@ -70,8 +93,15 @@ require __DIR__ . '/../includes/header.php';
         $remaining = max(0, (int)$event['capacity'] - (int)$event['seats_taken']);
         $soldOut = $remaining <= 0;
         $coverSrc = !empty($event['cover_image']) ? media_src((string) $event['cover_image']) : '';
+        $catVal = strtolower(trim((string) ($event['category'] ?? '')));
+        $searchText = strtolower(trim(($event['title'] ?? '') . ' ' . ($event['subtitle'] ?? '') . ' '
+            . ($event['description'] ?? '') . ' ' . ($event['facilitator'] ?? '') . ' ' . ($event['location'] ?? '')));
+        $shareUrl = $ldBase . '/public/events.php#event-' . (int) $event['id'];
+        $shareUrlEnc = rawurlencode($shareUrl);
+        $shareTextEnc = rawurlencode($event['title'] . ' · ' . brand_name());
       ?>
         <article id="event-<?= (int)$event['id'] ?>"
+                 data-event data-cat="<?= e($catVal) ?>" data-search="<?= e($searchText) ?>"
                  class="group grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] overflow-hidden border border-white/5 rounded-3xl bg-navy-900/40 hover:border-gold-500/30 transition">
 
           <!-- Cover -->
@@ -131,6 +161,16 @@ require __DIR__ . '/../includes/header.php';
               </div>
             </div>
 
+            <div class="flex items-center gap-2 text-[11px] text-beige-100/45">
+              <span class="uppercase tracking-[0.25em]">Share</span>
+              <a href="https://wa.me/?text=<?= $shareTextEnc ?>%20<?= $shareUrlEnc ?>" target="_blank" rel="noopener"
+                 class="px-2.5 py-1 rounded-full border border-white/10 hover:border-gold-500/40 hover:text-gold-400 transition">WhatsApp</a>
+              <a href="https://www.facebook.com/sharer/sharer.php?u=<?= $shareUrlEnc ?>" target="_blank" rel="noopener"
+                 class="px-2.5 py-1 rounded-full border border-white/10 hover:border-gold-500/40 hover:text-gold-400 transition">Facebook</a>
+              <button type="button" data-copy-link="<?= e($shareUrl) ?>"
+                 class="px-2.5 py-1 rounded-full border border-white/10 hover:border-gold-500/40 hover:text-gold-400 transition">Copy link</button>
+            </div>
+
             <div class="mt-auto flex items-end justify-between gap-4 pt-5 border-t border-white/5">
               <div class="space-y-1">
                 <div class="flex items-baseline gap-3">
@@ -155,6 +195,61 @@ require __DIR__ . '/../includes/header.php';
         </article>
       <?php endforeach; ?>
     </div>
+    <p data-events-empty class="hidden mt-12 text-center text-beige-100/55 italic">No sessions match your search. Try a different word or category.</p>
   <?php endif; ?>
 </section>
+
+<script>
+(function () {
+  const search  = document.querySelector('[data-events-search]');
+  const filters = document.querySelectorAll('[data-events-filters] button');
+  const cards   = Array.from(document.querySelectorAll('[data-event]'));
+  const empty   = document.querySelector('[data-events-empty]');
+  let activeCat = '';
+
+  function apply() {
+    const q = (search?.value || '').trim().toLowerCase();
+    let shown = 0;
+    cards.forEach((card) => {
+      const matchesCat  = !activeCat || card.dataset.cat === activeCat;
+      const matchesText = !q || (card.dataset.search || '').includes(q);
+      const show = matchesCat && matchesText;
+      card.classList.toggle('hidden', !show);
+      if (show) shown++;
+    });
+    if (empty) empty.classList.toggle('hidden', shown !== 0);
+  }
+
+  search?.addEventListener('input', apply);
+  filters.forEach((btn) => btn.addEventListener('click', () => {
+    activeCat = btn.dataset.cat || '';
+    filters.forEach((b) => {
+      const on = b === btn;
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.classList.toggle('border-gold-500/40', on);
+      b.classList.toggle('bg-gold-500/10', on);
+      b.classList.toggle('text-gold-400', on);
+      b.classList.toggle('border-white/10', !on);
+      b.classList.toggle('text-beige-100/60', !on);
+    });
+    apply();
+  }));
+
+  document.querySelectorAll('[data-copy-link]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const url = btn.dataset.copyLink;
+      try { await navigator.clipboard.writeText(url); }
+      catch (e) {
+        const t = document.createElement('textarea');
+        t.value = url; document.body.appendChild(t); t.select();
+        document.execCommand('copy'); t.remove();
+      }
+      const original = btn.textContent;
+      btn.textContent = 'Copied ✓';
+      setTimeout(() => { btn.textContent = original; }, 1600);
+    });
+  });
+})();
+</script>
+
 <?php require __DIR__ . '/../includes/footer.php'; ?>
