@@ -134,5 +134,10 @@ if (!function_exists('settle_payment')) {
         if (function_exists('issue_receipt')) {
             issue_receipt($paymentId);
         }
+
+        // Auto-record the company / IT-partner revenue split. Idempotent.
+        if (function_exists('record_revenue_split')) {
+            record_revenue_split($paymentId);
+        }
     }
 }

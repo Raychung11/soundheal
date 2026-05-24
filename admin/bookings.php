@@ -85,6 +85,14 @@ if (is_post()) {
             db()->prepare("UPDATE event_bookings SET status='refunded', refunded_at = NOW() WHERE id = :id")->execute([':id' => $bookingId]);
             db()->prepare("UPDATE payments SET status='refunded' WHERE purpose='booking' AND reference_id = :id")->execute([':id' => $bookingId]);
             db()->prepare("UPDATE tickets SET status='revoked' WHERE booking_id = :b")->execute([':b' => $bookingId]);
+            // Reverse the revenue split for any payment on this booking.
+            if (function_exists('reverse_revenue_split')) {
+                $rp = db()->prepare("SELECT id FROM payments WHERE purpose='booking' AND reference_id = :id");
+                $rp->execute([':id' => $bookingId]);
+                foreach ($rp->fetchAll() as $payRow) {
+                    reverse_revenue_split((int) $payRow['id'], 'Booking #' . $bookingId . ' refunded');
+                }
+            }
             db()->commit();
             audit_log('booking.refund', 'event_bookings', $bookingId);
             if ($bk && !empty($bk['paid_with_credit']) && function_exists('refund_credit_for_booking')) {
