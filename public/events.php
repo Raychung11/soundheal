@@ -21,6 +21,28 @@ $categories = array_values(array_unique(array_filter(array_map(
     fn($e) => trim((string) ($e['category'] ?? '')), $events
 ))));
 
+// Per-event social-share metadata. When ?event=ID is present (the URL
+// the share buttons hand out), override the page-level Open Graph tags
+// so WhatsApp / Facebook / X show that event's title, description and
+// cover image in the preview — not the generic calendar meta.
+$shareEventId = (int) input('event', 0);
+if ($shareEventId > 0) {
+    foreach ($events as $e) {
+        if ((int) $e['id'] !== $shareEventId) continue;
+        $pageTitle = (string) $e['title'];
+        $desc = trim((string) ($e['subtitle'] ?? ''));
+        if ($desc === '') $desc = trim((string) ($e['description'] ?? ''));
+        $desc = (string) preg_replace('/\s+/', ' ', $desc);
+        if (function_exists('mb_strlen') && mb_strlen($desc) > 200) {
+            $desc = mb_substr($desc, 0, 197) . '…';
+        }
+        if ($desc !== '') $pageDescription = $desc;
+        if (!empty($e['cover_image'])) $pageImage = (string) $e['cover_image'];
+        $pageType = 'article';
+        break;
+    }
+}
+
 // Event structured data (schema.org/Event) for Google rich results.
 $ldBase = rtrim((string) config('app.url'), '/');
 $eventsLd = [];
@@ -96,7 +118,9 @@ require __DIR__ . '/../includes/header.php';
         $catVal = strtolower(trim((string) ($event['category'] ?? '')));
         $searchText = strtolower(trim(($event['title'] ?? '') . ' ' . ($event['subtitle'] ?? '') . ' '
             . ($event['description'] ?? '') . ' ' . ($event['facilitator'] ?? '') . ' ' . ($event['location'] ?? '')));
-        $shareUrl = $ldBase . '/public/events.php#event-' . (int) $event['id'];
+        // ?event=ID lets the WhatsApp/Facebook crawler read this event's
+        // OG title/description/cover; #event-ID scrolls humans to the card.
+        $shareUrl = $ldBase . '/public/events.php?event=' . (int) $event['id'] . '#event-' . (int) $event['id'];
         $shareUrlEnc = rawurlencode($shareUrl);
         $shareTextEnc = rawurlencode($event['title'] . ' · ' . brand_name());
       ?>
