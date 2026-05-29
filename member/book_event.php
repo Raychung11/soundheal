@@ -134,6 +134,7 @@ if (is_post()) {
 
 require __DIR__ . '/../includes/header.php';
 ?>
+<div x-data="{ useCredit: false, qty: 1 }">
 <section class="max-w-2xl mx-auto px-6 py-16">
   <p class="text-gold-400/80 tracking-[0.3em] uppercase text-xs">Reserve</p>
   <h1 class="font-serif text-4xl text-beige-100 mt-4"><?= e($event['title']) ?></h1>
@@ -143,7 +144,7 @@ require __DIR__ . '/../includes/header.php';
     <p class="mt-4 text-red-300/80"><?= e($err) ?></p>
   <?php endforeach; ?>
 
-  <form method="post" class="mt-10 space-y-6" x-data="{ useCredit: false }">
+  <form id="bookForm" method="post" class="mt-10 space-y-6">
     <?= csrf_field() ?>
 
     <?php if ($creditBalance > 0 && $unitPrice > 0): ?>
@@ -164,20 +165,40 @@ require __DIR__ . '/../includes/header.php';
       </div>
       <label class="flex items-center gap-3 text-sm" :class="useCredit ? 'opacity-50 pointer-events-none' : ''">
         <span>Seats</span>
-        <select name="quantity" class="rounded-full bg-navy-950 border border-white/5 px-4 py-2 focus:border-gold-500/50 focus:outline-none" :disabled="useCredit">
+        <select name="quantity" x-model.number="qty" class="rounded-full bg-navy-950 border border-white/5 px-4 py-2 focus:border-gold-500/50 focus:outline-none" :disabled="useCredit">
           <?php for ($i = 1; $i <= 6; $i++): ?><option><?= $i ?></option><?php endfor; ?>
         </select>
       </label>
     </div>
 
-    <button class="w-full px-6 py-4 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition">
-      <span x-show="!useCredit"><?= $unitPrice > 0 ? 'Continue to payment' : 'Confirm reservation' ?></span>
-      <span x-show="useCredit" x-cloak>Redeem 1 credit · confirm reservation</span>
-    </button>
+    <div class="hidden md:block">
+      <button class="w-full px-6 py-4 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition">
+        <span x-show="!useCredit"><?= $unitPrice > 0 ? 'Continue to payment' : 'Confirm reservation' ?></span>
+        <span x-show="useCredit" x-cloak>Redeem 1 credit · confirm reservation</span>
+      </button>
+    </div>
 
     <?php if ($creditBalance === 0 && $unitPrice > 0): ?>
       <p class="text-center text-xs text-beige-100/45">Want to save? <a href="<?= url('/member/checkout_pack.php') ?>" class="text-gold-400 hover:text-gold-300 underline-offset-4 hover:underline">Buy a class pack</a> and pay with credits next time.</p>
     <?php endif; ?>
   </form>
 </section>
+
+<!-- Mobile-only sticky reserve bar (inline so the qty/use-credit Alpine state stays in scope). -->
+<div class="md:hidden fixed inset-x-0 z-40 bg-navy-950/95 backdrop-blur border-t border-white/10 px-4 py-3"
+     style="bottom: calc(64px + env(safe-area-inset-bottom));">
+  <p class="text-[11px] text-beige-100/55 text-center mb-2">
+    <span x-show="useCredit" x-cloak>1 credit · 1 seat</span>
+    <span x-show="!useCredit">
+      <?= e(format_money($unitPrice)) ?> × <span x-text="qty"></span> seat<span x-show="qty > 1" x-cloak>s</span>
+    </span>
+  </p>
+  <button type="submit" form="bookForm"
+          class="w-full py-3.5 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition">
+    <span x-show="!useCredit"><?= $unitPrice > 0 ? 'Continue to payment' : 'Confirm reservation' ?></span>
+    <span x-show="useCredit" x-cloak>Redeem 1 credit · Confirm</span>
+  </button>
+</div>
+<div class="md:hidden h-24" aria-hidden="true"></div>
+</div>
 <?php require __DIR__ . '/../includes/footer.php'; ?>

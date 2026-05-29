@@ -60,4 +60,10 @@ require __DIR__ . '/../includes/header.php';
     </table>
   <?php endif; ?>
 </section>
-<?php require __DIR__ . '/../includes/footer.php'; ?>
+<?php
+if (!$active) {
+    $stickyAction = ['label' => 'Choose a plan', 'href' => '/public/membership.php'];
+    require __DIR__ . '/../includes/sticky_action.php';
+}
+require __DIR__ . '/../includes/footer.php';
+?>

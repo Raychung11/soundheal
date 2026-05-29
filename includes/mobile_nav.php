@@ -18,6 +18,12 @@ if (str_contains($mn_script, '/admin/')) return;
 
 $mn_user = current_user();
 
+// Live credits balance for the Credits tab badge (members only).
+$mn_creditsBadge = 0;
+if ($mn_user && function_exists('credit_balance_for')) {
+    $mn_creditsBadge = (int) credit_balance_for((int) $mn_user['id']);
+}
+
 if ($mn_user) {
     $mn_tabs = [
         ['Home',     '/member/dashboard.php',   'home'],
@@ -53,11 +59,16 @@ $mn_icon = static function (string $name): string {
       $mn_active = $mn_script === $mn_path || str_ends_with($mn_script, $mn_path);
     ?>
       <a href="<?= url($mn_path) ?>"
-         class="flex-1 flex flex-col items-center gap-1 py-2.5 text-[10px] tracking-wide transition
+         class="flex-1 flex flex-col items-center gap-1 py-2 text-[10px] tracking-wide transition
                 <?= $mn_active ? 'text-gold-400' : 'text-beige-100/55 hover:text-gold-400' ?>"
          <?= $mn_active ? 'aria-current="page"' : '' ?>>
-        <svg class="h-[22px] w-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><?= $mn_icon($mn_ic) ?></svg>
+        <span class="relative flex h-8 w-14 items-center justify-center rounded-full transition <?= $mn_active ? 'bg-gold-500/15' : '' ?>">
+          <svg class="h-[22px] w-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="<?= $mn_active ? '1.85' : '1.55' ?>" stroke-linecap="round" stroke-linejoin="round"><?= $mn_icon($mn_ic) ?></svg>
+          <?php if ($mn_label === 'Credits' && $mn_creditsBadge > 0): ?>
+            <span class="absolute top-0 right-2 min-w-[16px] h-[16px] px-1 rounded-full bg-gold-500 text-navy-950 text-[10px] font-semibold leading-[16px] text-center"><?= $mn_creditsBadge ?></span>
+          <?php endif; ?>
+        </span>
         <span><?= e($mn_label) ?></span>
       </a>
     <?php endforeach; ?>

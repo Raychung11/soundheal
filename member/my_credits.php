@@ -108,4 +108,14 @@ require __DIR__ . '/../includes/header.php';
     </div>
   <?php endif; ?>
 </section>
-<?php require __DIR__ . '/../includes/footer.php'; ?>
+<?php
+$stickyAction = [
+    'label' => 'Buy a class pack',
+    'href'  => '/member/checkout_pack.php',
+    'meta'  => $balance > 0
+        ? ('You hold ' . $balance . ' credit' . ($balance === 1 ? '' : 's'))
+        : 'Stock up — each credit unlocks one seat',
+];
+require __DIR__ . '/../includes/sticky_action.php';
+require __DIR__ . '/../includes/footer.php';
+?>
