@@ -42,6 +42,52 @@ if (is_post()) {
 $cfg     = revenue_split_config();
 $summary = revenue_split_summary();
 
+// CSV export of the full ledger for accounting / external books.
+if ((string) input('export') === 'csv') {
+    $rows = db()->query(
+        "SELECT rs.id, rs.payment_id, rs.created_at AS split_at, p.paid_at,
+                u.full_name AS member, p.gateway_bill_id,
+                rs.purpose, rs.gross_amount, rs.currency,
+                rs.company_pct, rs.partner_pct,
+                rs.company_amount, rs.partner_amount,
+                rs.status, rs.partner_payout_status,
+                rs.partner_payout_id, pp.created_at AS payout_at, pp.reference AS payout_reference,
+                rs.reversed_at, rs.note
+           FROM revenue_splits rs
+           JOIN payments p ON p.id = rs.payment_id
+           LEFT JOIN users u ON u.id = p.user_id
+           LEFT JOIN partner_payouts pp ON pp.id = rs.partner_payout_id
+          ORDER BY rs.id DESC"
+    )->fetchAll();
+
+    $filename = 'revenue-splits-' . date('Y-m-d') . '.csv';
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    $out = fopen('php://output', 'w');
+    fwrite($out, "\xEF\xBB\xBF"); // UTF-8 BOM so Excel reads accents correctly
+    fputcsv($out, [
+        'Split ID', 'Payment ID', 'Split date', 'Payment paid at', 'Member', 'Bill ID',
+        'Purpose', 'Gross amount', 'Currency', 'Company %', 'Partner %',
+        'Company amount', 'Partner amount', 'Status', 'Payout status',
+        'Payout ID', 'Payout date', 'Payout reference', 'Reversed at', 'Note',
+    ]);
+    foreach ($rows as $r) {
+        fputcsv($out, [
+            $r['id'], $r['payment_id'], $r['split_at'], $r['paid_at'],
+            $r['member'] ?? '', $r['gateway_bill_id'] ?? '',
+            $r['purpose'], $r['gross_amount'], $r['currency'],
+            $r['company_pct'], $r['partner_pct'],
+            $r['company_amount'], $r['partner_amount'],
+            $r['status'], $r['partner_payout_status'],
+            $r['partner_payout_id'] ?? '', $r['payout_at'] ?? '', $r['payout_reference'] ?? '',
+            $r['reversed_at'] ?? '', $r['note'] ?? '',
+        ]);
+    }
+    fclose($out);
+    audit_log('revenue_split.export', 'revenue_splits', null, ['rows' => count($rows)]);
+    exit;
+}
+
 $splits = db()->query(
     "SELECT rs.*, p.gateway_bill_id, u.full_name
        FROM revenue_splits rs
@@ -67,9 +113,12 @@ function rs_money($v): string { return format_money((float) $v); }
     <h1 class="font-serif text-3xl text-beige-100">Revenue split</h1>
     <p class="text-beige-100/60 mt-1 text-sm">Auto-splits every settled payment between the company and the IT partner.</p>
   </div>
-  <span class="text-xs px-3 py-1.5 rounded-full <?= $cfg['enabled'] ? 'bg-gold-500/20 text-gold-400' : 'bg-white/5 text-beige-100/50' ?>">
-    <?= $cfg['enabled'] ? 'Active' : 'Paused' ?> · <?= e(rtrim(rtrim((string) $cfg['company_pct'], '0'), '.')) ?>% / <?= e(rtrim(rtrim((string) $cfg['partner_pct'], '0'), '.')) ?>%
-  </span>
+  <div class="flex items-center gap-3 flex-wrap">
+    <span class="text-xs px-3 py-1.5 rounded-full <?= $cfg['enabled'] ? 'bg-gold-500/20 text-gold-400' : 'bg-white/5 text-beige-100/50' ?>">
+      <?= $cfg['enabled'] ? 'Active' : 'Paused' ?> · <?= e(rtrim(rtrim((string) $cfg['company_pct'], '0'), '.')) ?>% / <?= e(rtrim(rtrim((string) $cfg['partner_pct'], '0'), '.')) ?>%
+    </span>
+    <a href="<?= url('/admin/revenue_splits.php?export=csv') ?>" class="text-xs px-4 py-1.5 rounded-full border border-white/10 text-beige-100/70 hover:border-gold-500/40 hover:text-gold-400 transition">Download CSV</a>
+  </div>
 </div>
 
 <!-- Summary cards -->
