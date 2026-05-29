@@ -9,7 +9,17 @@ $brandName = brand_name();
 // SEO / social-share metadata. Pages may set $pageImage (a media path)
 // and $pageType ('website' | 'article' | 'profile') before requiring this.
 $pageType  = $pageType ?? 'website';
-$canonical = rtrim((string) config('app.url'), '/') . strtok((string) ($_SERVER['REQUEST_URI'] ?? '/'), '?');
+
+// Canonical URL — keep content-defining query params (e.g. ?event=ID
+// so social crawlers attribute the per-event OG tags correctly) but
+// drop common tracking ones that would otherwise create duplicates.
+$canonicalQuery = $_GET;
+foreach (['utm_source','utm_medium','utm_campaign','utm_content','utm_term','fbclid','gclid','msclkid','ref'] as $tracker) {
+    unset($canonicalQuery[$tracker]);
+}
+$canonicalPath = (string) strtok((string) ($_SERVER['REQUEST_URI'] ?? '/'), '?');
+$canonical = rtrim((string) config('app.url'), '/') . $canonicalPath
+           . ($canonicalQuery ? '?' . http_build_query($canonicalQuery) : '');
 $seoImageRaw = ($pageImage ?? '') !== ''
     ? (string) $pageImage
     : (string) (setting('seo_default_image', '')
