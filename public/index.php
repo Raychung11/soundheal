@@ -129,7 +129,6 @@ if ($ldSocial) $orgLd['sameAs'] = $ldSocial;
 
       <ul class="mt-8 space-y-2 text-sm text-beige-100/70">
         <li class="flex gap-3"><span class="text-gold-400">◦</span> No payment information required</li>
-        <li class="flex gap-3"><span class="text-gold-400">◦</span> <?= (int) $trialDays ?>-day access to the full audio library</li>
         <li class="flex gap-3"><span class="text-gold-400">◦</span> Cancel anytime — softly, in one click</li>
       </ul>
 
@@ -172,12 +171,11 @@ if ($ldSocial) $orgLd['sameAs'] = $ldSocial;
 <?php endif; ?>
 
 <section class="max-w-6xl mx-auto px-6 py-24">
-  <div class="grid md:grid-cols-3 gap-10">
+  <div class="grid md:grid-cols-2 gap-10">
     <?php
     $pillars = [
       ['Sound', 'Crystal bowls, gongs and tuning forks tuned to the frequencies your nervous system listens for.'],
       ['Breath', 'Guided breathwork to soften the chest, slow the heart and arrive in the present moment.'],
-      ['Stillness', 'A held container — minimal, cinematic, and quiet enough to hear yourself again.'],
     ];
     foreach ($pillars as [$title, $body]): ?>
       <div class="border border-white/5 rounded-3xl p-8 bg-navy-900/40 hover:bg-navy-900/70 transition">
