@@ -2,33 +2,38 @@
 require_once __DIR__ . '/../includes/bootstrap.php';
 $pageTitle = 'Upcoming Sessions';
 
-// Match the capacity-hold logic in member/book_event.php — pending
-// bookings hold a seat until they pay, so they count toward the
-// public "seats remaining" total.
-$events = db()->query(
-    "SELECT e.*,
-            (SELECT COALESCE(SUM(quantity), 0)
-               FROM event_bookings b
-              WHERE b.event_id = e.id
-                AND b.status IN ('pending','paid','attended')) AS seats_taken
-     FROM events e
-     WHERE e.status = 'published' AND e.starts_at >= NOW()
-     ORDER BY e.starts_at ASC"
+// Fetch templates (recurring) + non-recurring future sessions; auto-created
+// child instances of recurring templates are excluded — the expansion
+// helper will resolve seats_taken for each occurrence by looking up the
+// child if one already exists.
+$rawEvents = db()->query(
+    "SELECT e.* FROM events e
+      WHERE e.status = 'published'
+        AND e.parent_event_id IS NULL
+        AND (e.recurrence = 'daily' OR e.starts_at >= NOW())
+      ORDER BY e.starts_at ASC"
 )->fetchAll();
+
+$events = expand_event_occurrences($rawEvents, 14);
 
 // Distinct categories for the filter chips.
 $categories = array_values(array_unique(array_filter(array_map(
     fn($e) => trim((string) ($e['category'] ?? '')), $events
 ))));
 
-// Per-event social-share metadata. When ?event=ID is present (the URL
-// the share buttons hand out), override the page-level Open Graph tags
-// so WhatsApp / Facebook / X show that event's title, description and
-// cover image in the preview — not the generic calendar meta.
+// Per-event social-share metadata. When ?event=ID (and optional &date=Y-m-d
+// for a recurring occurrence) is present, override the page-level Open
+// Graph tags so the share preview shows that specific event's title,
+// description and cover image — not the generic calendar meta.
 $shareEventId = (int) input('event', 0);
+$shareDate    = (string) input('date', '');
 if ($shareEventId > 0) {
     foreach ($events as $e) {
-        if ((int) $e['id'] !== $shareEventId) continue;
+        $isMatch = !empty($e['_template_id'])
+            ? ((int) $e['_template_id'] === $shareEventId
+                && ($shareDate === '' || $e['_occurrence_date'] === $shareDate))
+            : ((int) $e['id'] === $shareEventId);
+        if (!$isMatch) continue;
         $pageTitle = (string) $e['title'];
         $desc = trim((string) ($e['subtitle'] ?? ''));
         if ($desc === '') $desc = trim((string) ($e['description'] ?? ''));
@@ -50,6 +55,10 @@ foreach ($events as $e) {
     $img = !empty($e['cover_image']) ? media_src((string) $e['cover_image']) : '';
     if ($img !== '' && !str_starts_with($img, 'http')) $img = $ldBase . '/' . ltrim($img, '/');
     $available = ((int) $e['capacity'] - (int) $e['seats_taken']) > 0;
+    $isOcc = !empty($e['_template_id']);
+    $ldUrl = $isOcc
+        ? $ldBase . '/public/events.php?event=' . (int) $e['_template_id'] . '&date=' . urlencode((string) $e['_occurrence_date'])
+        : $ldBase . '/public/events.php?event=' . (int) $e['id'];
     $eventsLd[] = array_filter([
         '@context'            => 'https://schema.org',
         '@type'               => 'Event',
@@ -59,6 +68,7 @@ foreach ($events as $e) {
         'eventStatus'         => 'https://schema.org/EventScheduled',
         'description'         => (string) ($e['subtitle'] ?: ($e['description'] ?? '')),
         'image'               => $img ?: null,
+        'url'                 => $ldUrl,
         'location'            => !empty($e['location']) ? [
             '@type'   => 'Place',
             'name'    => $e['location'],
@@ -70,7 +80,7 @@ foreach ($events as $e) {
             'price'         => number_format((float) $e['price_public'], 2, '.', ''),
             'priceCurrency' => 'MYR',
             'availability'  => $available ? 'https://schema.org/InStock' : 'https://schema.org/SoldOut',
-            'url'           => $ldBase . '/public/events.php#event-' . (int) $e['id'],
+            'url'           => $ldUrl,
         ],
     ], fn($v) => $v !== null && $v !== '');
 }
@@ -118,13 +128,22 @@ require __DIR__ . '/../includes/header.php';
         $catVal = strtolower(trim((string) ($event['category'] ?? '')));
         $searchText = strtolower(trim(($event['title'] ?? '') . ' ' . ($event['subtitle'] ?? '') . ' '
             . ($event['description'] ?? '') . ' ' . ($event['facilitator'] ?? '') . ' ' . ($event['location'] ?? '')));
-        // ?event=ID lets the WhatsApp/Facebook crawler read this event's
-        // OG title/description/cover; #event-ID scrolls humans to the card.
-        $shareUrl = $ldBase . '/public/events.php?event=' . (int) $event['id'] . '#event-' . (int) $event['id'];
+        // Card key — for recurring occurrences include the date so each
+        // virtual instance has its own unique anchor and share target.
+        $isRecurringOcc = !empty($event['_template_id']);
+        $cardKey = $isRecurringOcc
+            ? 'event-' . (int) $event['_template_id'] . '-' . str_replace('-', '', (string) $event['_occurrence_date'])
+            : 'event-' . (int) $event['id'];
+        $shareEventParam = $isRecurringOcc ? (int) $event['_template_id'] : (int) $event['id'];
+        $shareDateParam  = $isRecurringOcc ? '&date=' . urlencode((string) $event['_occurrence_date']) : '';
+        $reserveUrl = $isRecurringOcc
+            ? '/member/book_event.php?event_id=' . (int) $event['_template_id'] . '&date=' . urlencode((string) $event['_occurrence_date'])
+            : '/member/book_event.php?event_id=' . (int) $event['id'];
+        $shareUrl = $ldBase . '/public/events.php?event=' . $shareEventParam . $shareDateParam . '#' . $cardKey;
         $shareUrlEnc = rawurlencode($shareUrl);
         $shareTextEnc = rawurlencode($event['title'] . ' · ' . brand_name());
       ?>
-        <article id="event-<?= (int)$event['id'] ?>"
+        <article id="<?= e($cardKey) ?>"
                  data-event data-cat="<?= e($catVal) ?>" data-search="<?= e($searchText) ?>"
                  class="group grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] overflow-hidden border border-white/5 rounded-3xl bg-navy-900/40 hover:border-gold-500/30 transition">
 
@@ -209,7 +228,7 @@ require __DIR__ . '/../includes/header.php';
               <?php if ($soldOut): ?>
                 <button class="px-6 py-3 rounded-full bg-navy-800 text-beige-100/40 cursor-not-allowed text-sm" disabled>Fully held</button>
               <?php else: ?>
-                <a href="<?= url('/member/book_event.php?event_id=' . (int)$event['id']) ?>"
+                <a href="<?= url($reserveUrl) ?>"
                    class="px-6 py-3 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition shadow-[0_8px_30px_-12px_rgba(201,164,106,0.5)] text-sm">
                   Reserve →
                 </a>

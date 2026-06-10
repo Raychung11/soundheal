@@ -5,12 +5,30 @@ $user = current_user();
 $pageTitle = 'Reserve';
 
 $eventId = (int) input('event_id', 0);
+$bookDate = trim((string) input('date', ''));
 $stmt = db()->prepare("SELECT * FROM events WHERE id = :id AND status = 'published' LIMIT 1");
 $stmt->execute([':id' => $eventId]);
 $event = $stmt->fetch();
 if (!$event) {
     flash('booking', 'That session is no longer available.', 'error');
     redirect('/public/events.php');
+}
+
+// Recurring template: materialise the concrete child event for the picked
+// date and book against it. Without a date param, bounce them back to the
+// calendar so they pick one.
+if (($event['recurrence'] ?? 'none') === 'daily') {
+    if ($bookDate === '' || !function_exists('find_or_create_recurring_instance')) {
+        flash('booking', 'Please choose a date for this session.', 'error');
+        redirect('/public/events.php');
+    }
+    $child = find_or_create_recurring_instance((int) $event['id'], $bookDate);
+    if (!$child) {
+        flash('booking', 'That date is no longer available.', 'error');
+        redirect('/public/events.php');
+    }
+    $event = $child;
+    $eventId = (int) $child['id'];
 }
 
 // Member pricing if they have an active membership.

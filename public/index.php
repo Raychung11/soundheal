@@ -39,13 +39,16 @@ $homeVideoEyebrow    = (string) setting('home_video_eyebrow', 'Watch');
 $homeVideoHeadline   = (string) setting('home_video_headline', 'Step inside a session');
 $showHomeVideo       = $homeVideoEnabled && $homeVideoId !== '';
 
-$upcoming = db()->query(
-    "SELECT id, slug, title, subtitle, starts_at, location, cover_image
-     FROM events
-     WHERE status = 'published' AND starts_at >= NOW()
-     ORDER BY starts_at ASC
-     LIMIT 3"
+// Templates + non-recurring future events (children of recurring templates
+// are excluded — the expansion helper resolves them per date).
+$upcomingRaw = db()->query(
+    "SELECT e.* FROM events e
+      WHERE e.status = 'published'
+        AND e.parent_event_id IS NULL
+        AND (e.recurrence = 'daily' OR e.starts_at >= NOW())
+      ORDER BY e.starts_at ASC"
 )->fetchAll();
+$upcoming = array_slice(expand_event_occurrences($upcomingRaw, 14), 0, 3);
 
 $testimonials = db()->query(
     "SELECT author_name, author_title, quote, rating
@@ -203,8 +206,15 @@ if ($ldSocial) $orgLd['sameAs'] = $ldSocial;
         <?php foreach ($upcoming as $event):
           $cover = $event['cover_image'] ?? '';
           $coverSrc = $cover ? media_src($cover) : '';
+          $upIsOcc = !empty($event['_template_id']);
+          $upKey   = $upIsOcc
+              ? 'event-' . (int) $event['_template_id'] . '-' . str_replace('-', '', (string) $event['_occurrence_date'])
+              : 'event-' . (int) $event['id'];
+          $upUrl   = $upIsOcc
+              ? '/public/events.php?event=' . (int) $event['_template_id'] . '&date=' . urlencode((string) $event['_occurrence_date']) . '#' . $upKey
+              : '/public/events.php#' . $upKey;
         ?>
-          <a href="<?= url('/public/events.php#event-' . (int)$event['id']) ?>" class="group block rounded-3xl overflow-hidden border border-white/5 bg-navy-950 hover:border-gold-500/40 transition">
+          <a href="<?= url($upUrl) ?>" class="group block rounded-3xl overflow-hidden border border-white/5 bg-navy-950 hover:border-gold-500/40 transition">
             <div class="aspect-[4/3] bg-gradient-to-br from-navy-800 to-navy-900 flex items-center justify-center">
               <?php if ($coverSrc): ?>
                 <img src="<?= e($coverSrc) ?>" alt="<?= e($event['title']) ?>" class="object-cover w-full h-full">

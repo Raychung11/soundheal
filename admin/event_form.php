@@ -6,7 +6,8 @@ $id = (int) input('id', 0);
 $event = ['id' => 0, 'slug' => '', 'title' => '', 'subtitle' => '', 'description' => '',
           'cover_image' => '', 'location' => '', 'starts_at' => '', 'ends_at' => '',
           'capacity' => 30, 'price_public' => 0, 'price_member' => 0,
-          'facilitator' => '', 'category' => '', 'status' => 'draft'];
+          'facilitator' => '', 'category' => '', 'status' => 'draft',
+          'recurrence' => 'none', 'recurrence_until' => ''];
 
 if ($id) {
     $stmt = db()->prepare("SELECT * FROM events WHERE id = :id LIMIT 1");
@@ -34,9 +35,14 @@ if (is_post()) {
         'facilitator'  => trim((string)input('facilitator', '')),
         'category'     => trim((string)input('category', '')),
         'status'       => in_array(input('status'), ['draft','published','archived','cancelled'], true) ? input('status') : 'draft',
+        'recurrence'      => in_array(input('recurrence'), ['none','daily'], true) ? input('recurrence') : 'none',
+        'recurrence_until' => trim((string) input('recurrence_until', '')) ?: null,
     ]);
     if ($event['title'] === '' || !$event['starts_at'] || !$event['ends_at']) {
         $errors[] = 'Title, start and end time are required.';
+    }
+    if ($event['recurrence_until'] !== null && !preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $event['recurrence_until'])) {
+        $errors[] = '"Recurs until" must be a valid date (YYYY-MM-DD).';
     }
 
     // Optional cover image upload — replaces the URL field if a file is sent.
@@ -60,7 +66,8 @@ if (is_post()) {
             $stmt = db()->prepare(
                 "UPDATE events SET title=:t, subtitle=:st, description=:d, cover_image=:ci,
                  location=:l, starts_at=:s, ends_at=:e, capacity=:c, price_public=:pp,
-                 price_member=:pm, facilitator=:f, category=:cat, status=:status
+                 price_member=:pm, facilitator=:f, category=:cat, status=:status,
+                 recurrence=:rec, recurrence_until=:ru
                  WHERE id=:id"
             );
             $stmt->execute([
@@ -69,14 +76,17 @@ if (is_post()) {
                 ':s' => $event['starts_at'], ':e' => $event['ends_at'],
                 ':c' => $event['capacity'], ':pp' => $event['price_public'], ':pm' => $event['price_member'],
                 ':f' => $event['facilitator'], ':cat' => $event['category'], ':status' => $event['status'],
+                ':rec' => $event['recurrence'], ':ru' => $event['recurrence_until'],
                 ':id' => $id,
             ]);
             audit_log('event.update', 'events', $id);
         } else {
             $stmt = db()->prepare(
                 "INSERT INTO events (slug, title, subtitle, description, cover_image, location, starts_at, ends_at,
-                                     capacity, price_public, price_member, facilitator, category, status, created_by)
-                 VALUES (:slug, :t, :st, :d, :ci, :l, :s, :e, :c, :pp, :pm, :f, :cat, :status, :uid)"
+                                     capacity, price_public, price_member, facilitator, category, status,
+                                     recurrence, recurrence_until, created_by)
+                 VALUES (:slug, :t, :st, :d, :ci, :l, :s, :e, :c, :pp, :pm, :f, :cat, :status,
+                         :rec, :ru, :uid)"
             );
             $stmt->execute([
                 ':slug' => $slug, ':t' => $event['title'], ':st' => $event['subtitle'],
@@ -84,6 +94,7 @@ if (is_post()) {
                 ':s' => $event['starts_at'], ':e' => $event['ends_at'],
                 ':c' => $event['capacity'], ':pp' => $event['price_public'], ':pm' => $event['price_member'],
                 ':f' => $event['facilitator'], ':cat' => $event['category'], ':status' => $event['status'],
+                ':rec' => $event['recurrence'], ':ru' => $event['recurrence_until'],
                 ':uid' => current_user_id(),
             ]);
             $id = (int) db()->lastInsertId();
@@ -166,6 +177,19 @@ require __DIR__ . '/../includes/admin_layout.php';
           <option value="<?= $opt ?>" <?= $event['status'] === $opt ? 'selected' : '' ?>><?= $opt ?></option>
         <?php endforeach; ?>
       </select>
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Recurrence</span>
+      <select name="recurrence" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+        <option value="none" <?= ($event['recurrence'] ?? 'none') === 'none' ? 'selected' : '' ?>>One-off session</option>
+        <option value="daily" <?= ($event['recurrence'] ?? 'none') === 'daily' ? 'selected' : '' ?>>Every day (uses the time from “Starts at”)</option>
+      </select>
+      <span class="text-[11px] text-beige-100/40 mt-1 block">Daily sessions auto-show for the next 14 days; a concrete event is created for each date when someone books.</span>
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Recurs until <span class="text-beige-100/30">(optional)</span></span>
+      <input name="recurrence_until" type="date" value="<?= e((string) ($event['recurrence_until'] ?? '')) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+      <span class="text-[11px] text-beige-100/40 mt-1 block">Leave blank for indefinite. Only used when recurrence is Daily.</span>
     </label>
   </div>
 
