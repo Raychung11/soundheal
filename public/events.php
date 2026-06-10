@@ -93,7 +93,7 @@ require __DIR__ . '/../includes/header.php';
 <section class="max-w-6xl mx-auto px-6 py-24">
   <p class="text-gold-400/80 tracking-[0.3em] uppercase text-xs">Calendar</p>
   <h1 class="font-serif text-5xl text-beige-100 mt-4">Upcoming sessions</h1>
-  <p class="mt-6 max-w-2xl text-beige-100/70 leading-relaxed">Reserve your seat. Members enjoy quiet pricing and priority booking on every session.</p>
+  <p class="mt-6 max-w-2xl text-beige-100/70 leading-relaxed">Reserve your seat. Choose the comforts you want — we'll hold space for you either way.</p>
 
   <?php if ($events): ?>
     <div class="mt-10 flex flex-col gap-4 md:flex-row md:items-center md:justify-between" data-events-toolbar>
@@ -217,11 +217,11 @@ require __DIR__ . '/../includes/header.php';
             <div class="mt-auto flex items-end justify-between gap-4 pt-5 border-t border-white/5">
               <div class="space-y-1">
                 <div class="flex items-baseline gap-3">
-                  <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Public</span>
+                  <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Comfort</span>
                   <span class="font-serif text-xl text-beige-100"><?= e(format_money((float)$event['price_public'])) ?></span>
                 </div>
                 <div class="flex items-baseline gap-3">
-                  <span class="text-[10px] uppercase tracking-widest text-gold-400/80">Member</span>
+                  <span class="text-[10px] uppercase tracking-widest text-gold-400/80">BYO Zen</span>
                   <span class="font-serif text-xl text-gold-400"><?= e(format_money((float)$event['price_member'])) ?></span>
                 </div>
               </div>

@@ -31,11 +31,12 @@ if (($event['recurrence'] ?? 'none') === 'daily') {
     $eventId = (int) $child['id'];
 }
 
-// Member pricing if they have an active membership.
-$mStmt = db()->prepare("SELECT id FROM memberships WHERE user_id = :u AND status = 'active' LIMIT 1");
-$mStmt->execute([':u' => $user['id']]);
-$isMember = (bool) $mStmt->fetch();
-$unitPrice = $isMember ? (float)$event['price_member'] : (float)$event['price_public'];
+// Package pricing — the two amenity tiers anyone can pick at booking.
+// We re-use the existing price_public / price_member columns as the
+// Comfort / Bring-Your-Own-Zen prices to avoid a schema migration on
+// every event row.
+$comfortPrice = (float) $event['price_public'];   // Comfort (welcome drink + mat + blanket)
+$byoPrice     = (float) $event['price_member'];   // Bring-Your-Own-Zen
 
 // Credit balance — lets the member pay with a pack credit instead of cash.
 $creditBalance = credit_balance_for((int) $user['id']);
@@ -44,8 +45,14 @@ $errors = [];
 
 if (is_post()) {
     csrf_verify();
+    $package = (string) input('package', 'comfort');
+    if (!in_array($package, ['comfort', 'byo'], true)) {
+        $package = 'comfort';
+    }
     $useCredit = !empty($_POST['use_credit']) && $creditBalance > 0;
     $qty = $useCredit ? 1 : max(1, min(6, (int) input('quantity', 1)));
+    $unitPrice = $package === 'byo' ? $byoPrice : $comfortPrice;
+    $packageLabel = $package === 'byo' ? 'Bring-Your-Own-Zen' : 'Comfort';
 
     db()->beginTransaction();
     try {
@@ -71,8 +78,8 @@ if (is_post()) {
         $total = $effectiveUnit * $qty;
 
         $ins = db()->prepare(
-            "INSERT INTO event_bookings (booking_ref, user_id, event_id, quantity, unit_price, total_amount, status, paid_with_credit)
-             VALUES (:ref, :u, :e, :q, :up, :tot, :status, :pwc)"
+            "INSERT INTO event_bookings (booking_ref, user_id, event_id, quantity, unit_price, total_amount, status, paid_with_credit, package)
+             VALUES (:ref, :u, :e, :q, :up, :tot, :status, :pwc, :pkg)"
         );
         $ins->execute([
             ':ref' => $bookingRef,
@@ -83,6 +90,7 @@ if (is_post()) {
             ':tot' => $total,
             ':status' => ($useCredit || $effectiveUnit <= 0) ? 'paid' : 'pending',
             ':pwc' => $useCredit ? 1 : 0,
+            ':pkg' => $package,
         ]);
         $bookingId = (int) db()->lastInsertId();
 
@@ -118,7 +126,7 @@ if (is_post()) {
                 'booking',
                 $bookingId,
                 build_booking_line_items([
-                    'event_title'  => $event['title'],
+                    'event_title'  => $event['title'] . ' · ' . $packageLabel . ' package',
                     'event_id'     => $eventId,
                     'starts_at'    => $event['starts_at'],
                     'quantity'     => $qty,
@@ -152,7 +160,15 @@ if (is_post()) {
 
 require __DIR__ . '/../includes/header.php';
 ?>
-<div x-data="{ useCredit: false, qty: 1 }">
+<div x-data="{
+    useCredit: false,
+    qty: 1,
+    pkg: 'comfort',
+    prices: { comfort: <?= json_encode($comfortPrice) ?>, byo: <?= json_encode($byoPrice) ?> },
+    label() { return this.pkg === 'comfort' ? 'Comfort' : 'BYO Zen'; },
+    unit()  { return this.prices[this.pkg]; },
+    total() { return this.useCredit ? 0 : this.unit() * this.qty; }
+  }">
 <section class="max-w-2xl mx-auto px-6 py-16">
   <p class="text-gold-400/80 tracking-[0.3em] uppercase text-xs">Reserve</p>
   <h1 class="font-serif text-4xl text-beige-100 mt-4"><?= e($event['title']) ?></h1>
@@ -162,27 +178,74 @@ require __DIR__ . '/../includes/header.php';
     <p class="mt-4 text-red-300/80"><?= e($err) ?></p>
   <?php endforeach; ?>
 
-  <form id="bookForm" method="post" class="mt-10 space-y-6">
+  <form id="bookForm" method="post" class="mt-10 space-y-5">
     <?= csrf_field() ?>
 
-    <?php if ($creditBalance > 0 && $unitPrice > 0): ?>
+    <p class="text-[10px] uppercase tracking-[0.3em] text-gold-400/80">Choose your package</p>
+
+    <!-- Comfort package -->
+    <label class="block cursor-pointer">
+      <input type="radio" name="package" value="comfort" x-model="pkg" class="sr-only">
+      <div :class="pkg === 'comfort' ? 'border-gold-500/50 bg-gold-500/10 ring-1 ring-gold-500/30' : 'border-white/10 bg-navy-900/40 hover:border-gold-500/30'"
+           class="rounded-2xl border p-5 transition">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="font-serif text-xl text-beige-100">Comfort</p>
+            <p class="text-[11px] text-beige-100/55 mt-0.5 uppercase tracking-widest">All-inclusive</p>
+          </div>
+          <span class="font-serif text-2xl text-gold-400 whitespace-nowrap"><?= e(format_money($comfortPrice)) ?></span>
+        </div>
+        <ul class="mt-3 space-y-1.5 text-sm text-beige-100/70">
+          <li class="flex gap-2"><span class="text-gold-400">✦</span> Welcome drink</li>
+          <li class="flex gap-2"><span class="text-gold-400">✦</span> Yoga mat provided</li>
+          <li class="flex gap-2"><span class="text-gold-400">✦</span> Cozy blanket provided</li>
+          <li class="flex gap-2"><span class="text-gold-400">✦</span> Full sound healing experience</li>
+        </ul>
+      </div>
+    </label>
+
+    <!-- Bring-Your-Own-Zen package -->
+    <label class="block cursor-pointer">
+      <input type="radio" name="package" value="byo" x-model="pkg" class="sr-only">
+      <div :class="pkg === 'byo' ? 'border-gold-500/50 bg-gold-500/10 ring-1 ring-gold-500/30' : 'border-white/10 bg-navy-900/40 hover:border-gold-500/30'"
+           class="rounded-2xl border p-5 transition">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="font-serif text-xl text-beige-100">Bring-Your-Own-Zen</p>
+            <p class="text-[11px] text-beige-100/55 mt-0.5 uppercase tracking-widest">Simple &amp; comfy</p>
+          </div>
+          <span class="font-serif text-2xl text-gold-400 whitespace-nowrap"><?= e(format_money($byoPrice)) ?></span>
+        </div>
+        <ul class="mt-3 space-y-1.5 text-sm text-beige-100/70">
+          <li class="flex gap-2"><span class="text-gold-400">✦</span> Full sound healing experience</li>
+          <li class="flex gap-2"><span class="text-gold-400">✦</span> Bring your own mat and blanket</li>
+        </ul>
+      </div>
+    </label>
+
+    <?php if ($creditBalance > 0): ?>
       <label class="flex items-start gap-3 border border-gold-500/30 rounded-2xl p-5 bg-gold-500/5 cursor-pointer">
         <input type="checkbox" name="use_credit" value="1" x-model="useCredit" class="mt-1 accent-gold-500">
         <span>
           <span class="text-beige-100">Use 1 credit instead of paying</span>
-          <span class="block text-xs text-beige-100/60 mt-1">You currently hold <strong class="text-gold-400"><?= (int)$creditBalance ?> credit<?= $creditBalance === 1 ? '' : 's' ?></strong>. One credit = one seat. <a href="<?= url('/member/my_credits.php') ?>" class="text-gold-400 hover:text-gold-300 underline-offset-4 hover:underline">View balance</a></span>
+          <span class="block text-xs text-beige-100/60 mt-1">You hold <strong class="text-gold-400"><?= (int)$creditBalance ?> credit<?= $creditBalance === 1 ? '' : 's' ?></strong> · one credit = one seat. <a href="<?= url('/member/my_credits.php') ?>" class="text-gold-400 hover:text-gold-300 underline-offset-4 hover:underline">View balance</a></span>
         </span>
       </label>
     <?php endif; ?>
 
-    <div class="border border-white/5 rounded-3xl p-6 bg-navy-900/40 flex justify-between items-center">
-      <div>
-        <p class="text-beige-100">Per seat <?= $isMember ? '(member)' : '(public)' ?></p>
-        <p class="font-serif text-2xl text-gold-400 mt-1" :class="useCredit ? 'line-through opacity-50' : ''"><?= e(format_money($unitPrice)) ?></p>
-        <p class="text-xs text-gold-400 mt-1" x-show="useCredit" x-cloak>Paid with 1 credit</p>
+    <div class="border border-white/5 rounded-2xl p-5 bg-navy-900/40 flex justify-between items-center gap-4">
+      <div class="min-w-0">
+        <p class="text-[10px] uppercase tracking-widest text-beige-100/55">Total</p>
+        <p class="font-serif text-2xl text-gold-400 mt-1" :class="useCredit ? 'opacity-60' : ''">
+          <span x-show="!useCredit">RM <span x-text="total().toFixed(2)"></span></span>
+          <span x-show="useCredit" x-cloak>1 credit</span>
+        </p>
+        <p class="text-[11px] text-beige-100/45 mt-0.5">
+          <span x-text="label()"></span> · <span x-text="qty"></span> seat<span x-show="qty > 1" x-cloak>s</span>
+        </p>
       </div>
-      <label class="flex items-center gap-3 text-sm" :class="useCredit ? 'opacity-50 pointer-events-none' : ''">
-        <span>Seats</span>
+      <label class="flex items-center gap-3 text-sm shrink-0" :class="useCredit ? 'opacity-50 pointer-events-none' : ''">
+        <span class="text-beige-100/70">Seats</span>
         <select name="quantity" x-model.number="qty" class="rounded-full bg-navy-950 border border-white/5 px-4 py-2 focus:border-gold-500/50 focus:outline-none" :disabled="useCredit">
           <?php for ($i = 1; $i <= 6; $i++): ?><option><?= $i ?></option><?php endfor; ?>
         </select>
@@ -191,29 +254,29 @@ require __DIR__ . '/../includes/header.php';
 
     <div class="hidden md:block">
       <button class="w-full px-6 py-4 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition">
-        <span x-show="!useCredit"><?= $unitPrice > 0 ? 'Continue to payment' : 'Confirm reservation' ?></span>
+        <span x-show="!useCredit" x-text="unit() > 0 ? 'Continue to payment' : 'Confirm reservation'"></span>
         <span x-show="useCredit" x-cloak>Redeem 1 credit · confirm reservation</span>
       </button>
     </div>
 
-    <?php if ($creditBalance === 0 && $unitPrice > 0): ?>
+    <?php if ($creditBalance === 0): ?>
       <p class="text-center text-xs text-beige-100/45">Want to save? <a href="<?= url('/member/checkout_pack.php') ?>" class="text-gold-400 hover:text-gold-300 underline-offset-4 hover:underline">Buy a class pack</a> and pay with credits next time.</p>
     <?php endif; ?>
   </form>
 </section>
 
-<!-- Mobile-only sticky reserve bar (inline so the qty/use-credit Alpine state stays in scope). -->
+<!-- Mobile-only sticky reserve bar (inline so the package / qty / use-credit Alpine state stays in scope). -->
 <div class="md:hidden fixed inset-x-0 z-40 bg-navy-950/95 backdrop-blur border-t border-white/10 px-4 py-3"
      style="bottom: calc(64px + env(safe-area-inset-bottom));">
   <p class="text-[11px] text-beige-100/55 text-center mb-2">
     <span x-show="useCredit" x-cloak>1 credit · 1 seat</span>
     <span x-show="!useCredit">
-      <?= e(format_money($unitPrice)) ?> × <span x-text="qty"></span> seat<span x-show="qty > 1" x-cloak>s</span>
+      <span x-text="label()"></span> · RM <span x-text="total().toFixed(2)"></span>
     </span>
   </p>
   <button type="submit" form="bookForm"
           class="w-full py-3.5 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition">
-    <span x-show="!useCredit"><?= $unitPrice > 0 ? 'Continue to payment' : 'Confirm reservation' ?></span>
+    <span x-show="!useCredit" x-text="unit() > 0 ? 'Continue to payment' : 'Confirm reservation'"></span>
     <span x-show="useCredit" x-cloak>Redeem 1 credit · Confirm</span>
   </button>
 </div>
