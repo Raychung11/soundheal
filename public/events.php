@@ -199,9 +199,13 @@ require __DIR__ . '/../includes/header.php';
                   <span class="text-gold-400"><?= $remaining ?> seat<?= $remaining === 1 ? '' : 's' ?> left</span>
                 <?php endif; ?>
                 <span class="text-beige-100/35"> · </span>
-                <span class="text-beige-100/70">BYO <?= e(format_money((float)$event['price_member'])) ?></span>
+                <?php
+                  $rowAName = trim((string) ($event['package_a_label'] ?? '')) ?: 'Comfort';
+                  $rowBName = trim((string) ($event['package_b_label'] ?? '')) ?: 'BYO';
+                ?>
+                <span class="text-beige-100/70"><?= e($rowBName) ?> <?= e(format_money((float)$event['price_member'])) ?></span>
                 <span class="text-beige-100/35"> · </span>
-                <span class="text-beige-100/70">Comfort <?= e(format_money((float)$event['price_public'])) ?></span>
+                <span class="text-beige-100/70"><?= e($rowAName) ?> <?= e(format_money((float)$event['price_public'])) ?></span>
               </p>
             </div>
 

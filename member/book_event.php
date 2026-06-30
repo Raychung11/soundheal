@@ -31,12 +31,25 @@ if (($event['recurrence'] ?? 'none') === 'daily') {
     $eventId = (int) $child['id'];
 }
 
-// Package pricing — the two amenity tiers anyone can pick at booking.
-// We re-use the existing price_public / price_member columns as the
-// Comfort / Bring-Your-Own-Zen prices to avoid a schema migration on
-// every event row.
-$comfortPrice = (float) $event['price_public'];   // Comfort (welcome drink + mat + blanket)
-$byoPrice     = (float) $event['price_member'];   // Bring-Your-Own-Zen
+// Package pricing — two amenity tiers anyone can pick at booking. The
+// event row's price_public / price_member columns are the two prices;
+// the labels and perk bullets fall back to the site-wide defaults
+// (Comfort / BYO Zen) unless the event overrides them via the
+// package_a_* / package_b_* columns (special workshops, etc.).
+$comfortPrice = (float) $event['price_public'];
+$byoPrice     = (float) $event['price_member'];
+
+$defaultComfortPerks = ['Welcome drink', 'Yoga mat provided', 'Cozy blanket provided', 'Full sound healing experience'];
+$defaultByoPerks     = ['Full sound healing experience', 'Bring your own mat and blanket'];
+
+$comfortName  = trim((string) ($event['package_a_label'] ?? '')) ?: 'Comfort';
+$byoName      = trim((string) ($event['package_b_label'] ?? '')) ?: 'Bring-Your-Own-Zen';
+$comfortPerks = array_values(array_filter(array_map('trim',
+    preg_split('/\r?\n/', (string) ($event['package_a_perks'] ?? '')))));
+if (!$comfortPerks) $comfortPerks = $defaultComfortPerks;
+$byoPerks = array_values(array_filter(array_map('trim',
+    preg_split('/\r?\n/', (string) ($event['package_b_perks'] ?? '')))));
+if (!$byoPerks) $byoPerks = $defaultByoPerks;
 
 // Credit balance — lets the member pay with a pack credit instead of cash.
 $creditBalance = credit_balance_for((int) $user['id']);
@@ -52,7 +65,7 @@ if (is_post()) {
     $useCredit = !empty($_POST['use_credit']) && $creditBalance > 0;
     $qty = $useCredit ? 1 : max(1, min(6, (int) input('quantity', 1)));
     $unitPrice = $package === 'byo' ? $byoPrice : $comfortPrice;
-    $packageLabel = $package === 'byo' ? 'Bring-Your-Own-Zen' : 'Comfort';
+    $packageLabel = $package === 'byo' ? $byoName : $comfortName;
 
     db()->beginTransaction();
     try {
@@ -165,7 +178,8 @@ require __DIR__ . '/../includes/header.php';
     qty: 1,
     pkg: 'comfort',
     prices: { comfort: <?= json_encode($comfortPrice) ?>, byo: <?= json_encode($byoPrice) ?> },
-    label() { return this.pkg === 'comfort' ? 'Comfort' : 'BYO Zen'; },
+    labels: { comfort: <?= json_encode($comfortName) ?>, byo: <?= json_encode($byoName) ?> },
+    label() { return this.labels[this.pkg]; },
     unit()  { return this.prices[this.pkg]; },
     total() { return this.useCredit ? 0 : this.unit() * this.qty; }
   }">
@@ -183,42 +197,36 @@ require __DIR__ . '/../includes/header.php';
 
     <p class="text-[10px] uppercase tracking-[0.3em] text-gold-400/80">Choose your package</p>
 
-    <!-- Comfort package -->
+    <!-- Package A (price_public) -->
     <label class="block cursor-pointer">
       <input type="radio" name="package" value="comfort" x-model="pkg" class="sr-only">
       <div :class="pkg === 'comfort' ? 'border-gold-500/50 bg-gold-500/10 ring-1 ring-gold-500/30' : 'border-white/10 bg-navy-900/40 hover:border-gold-500/30'"
            class="rounded-2xl border p-5 transition">
         <div class="flex items-start justify-between gap-3">
-          <div>
-            <p class="font-serif text-xl text-beige-100">Comfort</p>
-            <p class="text-[11px] text-beige-100/55 mt-0.5 uppercase tracking-widest">All-inclusive</p>
-          </div>
+          <p class="font-serif text-xl text-beige-100"><?= e($comfortName) ?></p>
           <span class="font-serif text-2xl text-gold-400 whitespace-nowrap"><?= e(format_money($comfortPrice)) ?></span>
         </div>
         <ul class="mt-3 space-y-1.5 text-sm text-beige-100/70">
-          <li class="flex gap-2"><span class="text-gold-400">✦</span> Welcome drink</li>
-          <li class="flex gap-2"><span class="text-gold-400">✦</span> Yoga mat provided</li>
-          <li class="flex gap-2"><span class="text-gold-400">✦</span> Cozy blanket provided</li>
-          <li class="flex gap-2"><span class="text-gold-400">✦</span> Full sound healing experience</li>
+          <?php foreach ($comfortPerks as $perk): ?>
+            <li class="flex gap-2"><span class="text-gold-400">✦</span> <?= e($perk) ?></li>
+          <?php endforeach; ?>
         </ul>
       </div>
     </label>
 
-    <!-- Bring-Your-Own-Zen package -->
+    <!-- Package B (price_member) -->
     <label class="block cursor-pointer">
       <input type="radio" name="package" value="byo" x-model="pkg" class="sr-only">
       <div :class="pkg === 'byo' ? 'border-gold-500/50 bg-gold-500/10 ring-1 ring-gold-500/30' : 'border-white/10 bg-navy-900/40 hover:border-gold-500/30'"
            class="rounded-2xl border p-5 transition">
         <div class="flex items-start justify-between gap-3">
-          <div>
-            <p class="font-serif text-xl text-beige-100">Bring-Your-Own-Zen</p>
-            <p class="text-[11px] text-beige-100/55 mt-0.5 uppercase tracking-widest">Simple &amp; comfy</p>
-          </div>
+          <p class="font-serif text-xl text-beige-100"><?= e($byoName) ?></p>
           <span class="font-serif text-2xl text-gold-400 whitespace-nowrap"><?= e(format_money($byoPrice)) ?></span>
         </div>
         <ul class="mt-3 space-y-1.5 text-sm text-beige-100/70">
-          <li class="flex gap-2"><span class="text-gold-400">✦</span> Full sound healing experience</li>
-          <li class="flex gap-2"><span class="text-gold-400">✦</span> Bring your own mat and blanket</li>
+          <?php foreach ($byoPerks as $perk): ?>
+            <li class="flex gap-2"><span class="text-gold-400">✦</span> <?= e($perk) ?></li>
+          <?php endforeach; ?>
         </ul>
       </div>
     </label>

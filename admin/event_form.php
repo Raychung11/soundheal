@@ -7,7 +7,9 @@ $event = ['id' => 0, 'slug' => '', 'title' => '', 'subtitle' => '', 'description
           'cover_image' => '', 'location' => '', 'starts_at' => '', 'ends_at' => '',
           'capacity' => 30, 'price_public' => 0, 'price_member' => 0,
           'facilitator' => '', 'category' => '', 'status' => 'draft',
-          'recurrence' => 'none', 'recurrence_until' => ''];
+          'recurrence' => 'none', 'recurrence_until' => '',
+          'package_a_label' => '', 'package_a_perks' => '',
+          'package_b_label' => '', 'package_b_perks' => ''];
 
 if ($id) {
     $stmt = db()->prepare("SELECT * FROM events WHERE id = :id LIMIT 1");
@@ -37,6 +39,10 @@ if (is_post()) {
         'status'       => in_array(input('status'), ['draft','published','archived','cancelled'], true) ? input('status') : 'draft',
         'recurrence'      => in_array(input('recurrence'), ['none','daily'], true) ? input('recurrence') : 'none',
         'recurrence_until' => trim((string) input('recurrence_until', '')) ?: null,
+        'package_a_label' => trim((string) input('package_a_label', '')),
+        'package_a_perks' => trim((string) input('package_a_perks', '')),
+        'package_b_label' => trim((string) input('package_b_label', '')),
+        'package_b_perks' => trim((string) input('package_b_perks', '')),
     ]);
     if ($event['title'] === '' || !$event['starts_at'] || !$event['ends_at']) {
         $errors[] = 'Title, start and end time are required.';
@@ -67,7 +73,9 @@ if (is_post()) {
                 "UPDATE events SET title=:t, subtitle=:st, description=:d, cover_image=:ci,
                  location=:l, starts_at=:s, ends_at=:e, capacity=:c, price_public=:pp,
                  price_member=:pm, facilitator=:f, category=:cat, status=:status,
-                 recurrence=:rec, recurrence_until=:ru
+                 recurrence=:rec, recurrence_until=:ru,
+                 package_a_label=:pal, package_a_perks=:pap,
+                 package_b_label=:pbl, package_b_perks=:pbp
                  WHERE id=:id"
             );
             $stmt->execute([
@@ -77,6 +85,10 @@ if (is_post()) {
                 ':c' => $event['capacity'], ':pp' => $event['price_public'], ':pm' => $event['price_member'],
                 ':f' => $event['facilitator'], ':cat' => $event['category'], ':status' => $event['status'],
                 ':rec' => $event['recurrence'], ':ru' => $event['recurrence_until'],
+                ':pal' => $event['package_a_label'] ?: null,
+                ':pap' => $event['package_a_perks'] ?: null,
+                ':pbl' => $event['package_b_label'] ?: null,
+                ':pbp' => $event['package_b_perks'] ?: null,
                 ':id' => $id,
             ]);
             audit_log('event.update', 'events', $id);
@@ -84,9 +96,11 @@ if (is_post()) {
             $stmt = db()->prepare(
                 "INSERT INTO events (slug, title, subtitle, description, cover_image, location, starts_at, ends_at,
                                      capacity, price_public, price_member, facilitator, category, status,
-                                     recurrence, recurrence_until, created_by)
+                                     recurrence, recurrence_until,
+                                     package_a_label, package_a_perks, package_b_label, package_b_perks,
+                                     created_by)
                  VALUES (:slug, :t, :st, :d, :ci, :l, :s, :e, :c, :pp, :pm, :f, :cat, :status,
-                         :rec, :ru, :uid)"
+                         :rec, :ru, :pal, :pap, :pbl, :pbp, :uid)"
             );
             $stmt->execute([
                 ':slug' => $slug, ':t' => $event['title'], ':st' => $event['subtitle'],
@@ -95,6 +109,10 @@ if (is_post()) {
                 ':c' => $event['capacity'], ':pp' => $event['price_public'], ':pm' => $event['price_member'],
                 ':f' => $event['facilitator'], ':cat' => $event['category'], ':status' => $event['status'],
                 ':rec' => $event['recurrence'], ':ru' => $event['recurrence_until'],
+                ':pal' => $event['package_a_label'] ?: null,
+                ':pap' => $event['package_a_perks'] ?: null,
+                ':pbl' => $event['package_b_label'] ?: null,
+                ':pbp' => $event['package_b_perks'] ?: null,
                 ':uid' => current_user_id(),
             ]);
             $id = (int) db()->lastInsertId();
@@ -192,6 +210,39 @@ require __DIR__ . '/../includes/admin_layout.php';
       <span class="text-[11px] text-beige-100/40 mt-1 block">Leave blank for indefinite. Only used when recurrence is Daily.</span>
     </label>
   </div>
+
+  <section class="border-t border-white/5 pt-6 space-y-5">
+    <div>
+      <h2 class="font-serif text-xl text-gold-400">Booking packages</h2>
+      <p class="text-[11px] text-beige-100/45 mt-1">Optional — override the default "Comfort" / "Bring-Your-Own-Zen" labels and perks for this event (e.g. special workshops with their own tiers). Leave blank to use the site defaults.</p>
+    </div>
+
+    <div class="grid sm:grid-cols-2 gap-5">
+      <div class="space-y-3">
+        <p class="text-[10px] uppercase tracking-widest text-beige-100/55">Package A · price <?= e(format_money((float) ($event['price_public'] ?? 0))) ?></p>
+        <label class="block">
+          <span class="text-xs uppercase tracking-widest text-beige-100/60">Label</span>
+          <input name="package_a_label" placeholder="Comfort" value="<?= e((string) ($event['package_a_label'] ?? '')) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+        </label>
+        <label class="block">
+          <span class="text-xs uppercase tracking-widest text-beige-100/60">Perks (one per line)</span>
+          <textarea name="package_a_perks" rows="5" placeholder="Welcome drink&#10;Yoga mat provided&#10;Cozy blanket provided&#10;Full sound healing experience" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3"><?= e((string) ($event['package_a_perks'] ?? '')) ?></textarea>
+        </label>
+      </div>
+
+      <div class="space-y-3">
+        <p class="text-[10px] uppercase tracking-widest text-beige-100/55">Package B · price <?= e(format_money((float) ($event['price_member'] ?? 0))) ?></p>
+        <label class="block">
+          <span class="text-xs uppercase tracking-widest text-beige-100/60">Label</span>
+          <input name="package_b_label" placeholder="Bring-Your-Own-Zen" value="<?= e((string) ($event['package_b_label'] ?? '')) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+        </label>
+        <label class="block">
+          <span class="text-xs uppercase tracking-widest text-beige-100/60">Perks (one per line)</span>
+          <textarea name="package_b_perks" rows="5" placeholder="Full sound healing experience&#10;Bring your own mat and blanket" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3"><?= e((string) ($event['package_b_perks'] ?? '')) ?></textarea>
+        </label>
+      </div>
+    </div>
+  </section>
 
   <div class="flex gap-3">
     <button class="px-6 py-3 rounded-full bg-gold-500 text-navy-950 hover:bg-gold-400 transition">Save</button>
