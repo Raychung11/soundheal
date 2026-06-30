@@ -67,6 +67,43 @@ if (is_post()) {
     $unitPrice = $package === 'byo' ? $byoPrice : $comfortPrice;
     $packageLabel = $package === 'byo' ? $byoName : $comfortName;
 
+    // Per-event intake — currently only the pet workshop uses this.
+    $intakeData = null;
+    if (($event['intake_type'] ?? 'none') === 'pet') {
+        $i = (array) ($_POST['intake'] ?? []);
+        $intake = [
+            'pawrent' => [
+                'name'   => trim((string) ($i['pawrent_name'] ?? '')),
+                'mobile' => trim((string) ($i['pawrent_mobile'] ?? '')),
+                'email'  => trim((string) ($i['pawrent_email'] ?? '')),
+            ],
+            'pets' => [],
+        ];
+        if ($intake['pawrent']['name'] === '' || $intake['pawrent']['mobile'] === '' || $intake['pawrent']['email'] === '') {
+            $errors[] = 'Please share your name, mobile and email so we can welcome you.';
+        }
+        $petsNeeded = $package === 'comfort' ? 2 : 1;
+        for ($p = 1; $p <= $petsNeeded; $p++) {
+            $pet = [
+                'name'      => trim((string) ($i["pet_{$p}_name"] ?? '')),
+                'breed'     => trim((string) ($i["pet_{$p}_breed"] ?? '')),
+                'age'       => trim((string) ($i["pet_{$p}_age"] ?? '')),
+                'neutered'  => trim((string) ($i["pet_{$p}_neutered"] ?? '')),
+                'medical'   => trim((string) ($i["pet_{$p}_medical"] ?? '')),
+                'character' => array_values(array_filter(array_map('strval', (array) ($i["pet_{$p}_character"] ?? [])))),
+            ];
+            if ($pet['name'] === '') {
+                $errors[] = $petsNeeded > 1
+                    ? "Please tell us pet #{$p}'s name."
+                    : "Please tell us your pet's name.";
+            }
+            $intake['pets'][] = $pet;
+        }
+        if (!$errors) {
+            $intakeData = json_encode($intake, JSON_UNESCAPED_UNICODE);
+        }
+    }
+    if (!$errors) {
     db()->beginTransaction();
     try {
         $cap = db()->prepare(
@@ -91,8 +128,8 @@ if (is_post()) {
         $total = $effectiveUnit * $qty;
 
         $ins = db()->prepare(
-            "INSERT INTO event_bookings (booking_ref, user_id, event_id, quantity, unit_price, total_amount, status, paid_with_credit, package)
-             VALUES (:ref, :u, :e, :q, :up, :tot, :status, :pwc, :pkg)"
+            "INSERT INTO event_bookings (booking_ref, user_id, event_id, quantity, unit_price, total_amount, status, paid_with_credit, package, intake_data)
+             VALUES (:ref, :u, :e, :q, :up, :tot, :status, :pwc, :pkg, :intake)"
         );
         $ins->execute([
             ':ref' => $bookingRef,
@@ -104,6 +141,7 @@ if (is_post()) {
             ':status' => ($useCredit || $effectiveUnit <= 0) ? 'paid' : 'pending',
             ':pwc' => $useCredit ? 1 : 0,
             ':pkg' => $package,
+            ':intake' => $intakeData,
         ]);
         $bookingId = (int) db()->lastInsertId();
 
@@ -169,6 +207,7 @@ if (is_post()) {
         db()->rollBack();
         $errors[] = $e->getMessage();
     }
+    } // end if (!$errors)
 }
 
 require __DIR__ . '/../includes/header.php';
@@ -239,6 +278,85 @@ require __DIR__ . '/../includes/header.php';
           <span class="block text-xs text-beige-100/60 mt-1">You hold <strong class="text-gold-400"><?= (int)$creditBalance ?> credit<?= $creditBalance === 1 ? '' : 's' ?></strong> · one credit = one seat. <a href="<?= url('/member/my_credits.php') ?>" class="text-gold-400 hover:text-gold-300 underline-offset-4 hover:underline">View balance</a></span>
         </span>
       </label>
+    <?php endif; ?>
+
+    <?php if (($event['intake_type'] ?? 'none') === 'pet'):
+      $charOptions = ['playful','friendly','calm','shy','anxious','aggressive'];
+      $petFields = function (int $idx) use ($charOptions) {
+        $name = $idx === 1 ? "your pet" : "pet #{$idx}";
+        ?>
+        <div class="grid sm:grid-cols-2 gap-3">
+          <label class="block">
+            <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Pet name</span>
+            <input name="intake[pet_<?= $idx ?>_name]" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none">
+          </label>
+          <label class="block">
+            <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Breed</span>
+            <input name="intake[pet_<?= $idx ?>_breed]" placeholder="e.g. Golden Retriever" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none">
+          </label>
+          <label class="block">
+            <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Age</span>
+            <input name="intake[pet_<?= $idx ?>_age]" placeholder="e.g. 4 years" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none">
+          </label>
+          <label class="block">
+            <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Neutered / Spayed</span>
+            <select name="intake[pet_<?= $idx ?>_neutered]" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none">
+              <option value="">—</option>
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+              <option value="na">Prefer not to say</option>
+            </select>
+          </label>
+          <label class="block sm:col-span-2">
+            <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Medical history <span class="text-beige-100/30">(allergies, conditions, meds — write “none” if so)</span></span>
+            <textarea name="intake[pet_<?= $idx ?>_medical]" rows="2" placeholder="None" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none"></textarea>
+          </label>
+          <div class="sm:col-span-2">
+            <span class="text-[11px] uppercase tracking-widest text-beige-100/60 block">Character <span class="text-beige-100/30">(tick all that apply)</span></span>
+            <div class="mt-2 flex flex-wrap gap-2">
+              <?php foreach ($charOptions as $c): ?>
+                <label class="cursor-pointer">
+                  <input type="checkbox" name="intake[pet_<?= $idx ?>_character][]" value="<?= e($c) ?>" class="peer sr-only">
+                  <span class="px-3 py-1.5 rounded-full text-xs border border-white/10 bg-navy-950 text-beige-100/70 capitalize hover:border-gold-500/40 peer-checked:border-gold-500/50 peer-checked:bg-gold-500/15 peer-checked:text-gold-400 transition"><?= e($c) ?></span>
+                </label>
+              <?php endforeach; ?>
+            </div>
+          </div>
+        </div>
+        <?php
+      };
+    ?>
+    <div class="border border-gold-500/25 rounded-2xl p-5 bg-gold-500/5 space-y-5">
+      <div>
+        <p class="text-[10px] uppercase tracking-[0.3em] text-gold-400/80">Pawrent &amp; pet details</p>
+        <p class="text-xs text-beige-100/55 mt-1">So we can welcome you and your fur companion properly.</p>
+      </div>
+
+      <div class="grid sm:grid-cols-2 gap-3">
+        <label class="block">
+          <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Your name</span>
+          <input name="intake[pawrent_name]" required value="<?= e((string) $user['full_name']) ?>" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none">
+        </label>
+        <label class="block">
+          <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Mobile</span>
+          <input name="intake[pawrent_mobile]" required type="tel" placeholder="+60…" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none">
+        </label>
+        <label class="block sm:col-span-2">
+          <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Email</span>
+          <input name="intake[pawrent_email]" required type="email" value="<?= e((string) $user['email']) ?>" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none">
+        </label>
+      </div>
+
+      <div class="border-t border-white/5 pt-4 space-y-3">
+        <p class="text-[10px] uppercase tracking-[0.3em] text-gold-400/80">Pet 1</p>
+        <?php $petFields(1); ?>
+      </div>
+
+      <div class="border-t border-white/5 pt-4 space-y-3" x-show="pkg === 'comfort'" x-cloak>
+        <p class="text-[10px] uppercase tracking-[0.3em] text-gold-400/80">Pet 2 <span class="text-beige-100/40 normal-case tracking-normal">(shown for the 2-pet package)</span></p>
+        <?php $petFields(2); ?>
+      </div>
+    </div>
     <?php endif; ?>
 
     <div class="border border-white/5 rounded-2xl p-5 bg-navy-900/40 flex justify-between items-center gap-4">

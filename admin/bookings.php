@@ -113,7 +113,7 @@ if (in_array($status, ['pending','paid','cancelled','refunded','attended','no_sh
 }
 
 $stmt = db()->prepare(
-    "SELECT b.*, e.title AS event_title, e.starts_at, u.full_name, u.email
+    "SELECT b.*, e.title AS event_title, e.starts_at, e.intake_type, u.full_name, u.email
      FROM event_bookings b
      JOIN events e ON e.id = b.event_id
      JOIN users u ON u.id = b.user_id
@@ -185,6 +185,51 @@ require __DIR__ . '/../includes/admin_layout.php';
             <?php endif; ?>
           </td>
         </tr>
+        <?php
+          $intake = $b['intake_data'] ? (json_decode((string) $b['intake_data'], true) ?: null) : null;
+          if ($intake && (!empty($intake['pawrent']) || !empty($intake['pets']))):
+        ?>
+          <tr class="bg-navy-950/30">
+            <td colspan="8" class="px-4 py-3">
+              <details class="text-xs">
+                <summary class="cursor-pointer text-gold-400/90 hover:text-gold-300 inline-flex items-center gap-2">
+                  <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z"/><path d="M17 7a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM5 8a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM4 16a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM20 17a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z"/><path d="M14 14c2 0 4 2 4 4l-2 2H8l-2-2c0-2 2-4 4-4Z"/></svg>
+                  Pet intake · <?= count($intake['pets'] ?? []) ?> pet<?= count($intake['pets'] ?? []) === 1 ? '' : 's' ?>
+                  <?php if ($b['package']): ?><span class="text-beige-100/40">· <?= e((string) $b['package']) ?></span><?php endif; ?>
+                </summary>
+                <div class="mt-3 grid gap-3 sm:grid-cols-2 text-beige-100/80">
+                  <?php if (!empty($intake['pawrent'])): ?>
+                    <div class="border border-white/5 rounded-lg p-3 bg-navy-900/40">
+                      <p class="text-[10px] uppercase tracking-widest text-gold-400/70 mb-1.5">Pawrent</p>
+                      <p><?= e((string) ($intake['pawrent']['name'] ?? '—')) ?></p>
+                      <p class="text-beige-100/70 mt-0.5"><?= e((string) ($intake['pawrent']['mobile'] ?? '—')) ?></p>
+                      <p class="text-beige-100/70"><?= e((string) ($intake['pawrent']['email'] ?? '—')) ?></p>
+                    </div>
+                  <?php endif; ?>
+                  <?php foreach ($intake['pets'] ?? [] as $pi => $pet): ?>
+                    <div class="border border-white/5 rounded-lg p-3 bg-navy-900/40">
+                      <p class="text-[10px] uppercase tracking-widest text-gold-400/70 mb-1.5">Pet <?= $pi + 1 ?></p>
+                      <p class="font-medium"><?= e((string) ($pet['name'] ?? '—')) ?>
+                        <?php if (!empty($pet['breed'])): ?><span class="text-beige-100/60"> · <?= e((string) $pet['breed']) ?></span><?php endif; ?>
+                        <?php if (!empty($pet['age'])): ?><span class="text-beige-100/60"> · <?= e((string) $pet['age']) ?></span><?php endif; ?>
+                      </p>
+                      <?php $n = (string) ($pet['neutered'] ?? '');
+                        $nLabel = $n === 'yes' ? 'Neutered/Spayed' : ($n === 'no' ? 'Not neutered' : ($n === 'na' ? 'Not disclosed' : ''));
+                      ?>
+                      <?php if ($nLabel !== ''): ?><p class="text-beige-100/70 mt-0.5"><?= e($nLabel) ?></p><?php endif; ?>
+                      <?php if (!empty($pet['character'])): ?>
+                        <p class="text-beige-100/70 mt-0.5">Character: <?= e(implode(', ', (array) $pet['character'])) ?></p>
+                      <?php endif; ?>
+                      <?php if (!empty($pet['medical'])): ?>
+                        <p class="text-beige-100/70 mt-1.5"><span class="text-beige-100/50">Medical:</span> <?= e((string) $pet['medical']) ?></p>
+                      <?php endif; ?>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+              </details>
+            </td>
+          </tr>
+        <?php endif; ?>
       <?php endforeach; ?>
       <?php if (!$bookings): ?>
         <tr><td colspan="8" class="px-4 py-6 text-beige-100/60">No bookings.</td></tr>
