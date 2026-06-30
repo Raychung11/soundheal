@@ -1,18 +1,40 @@
 <?php
 require_once __DIR__ . '/../includes/bootstrap.php';
 $pageTitle = 'Upcoming Sessions';
+// Bump the page title if filtered to an experience (set after we know).
+
+
+// Optional filter — when arriving from an Experience card the URL is
+// /public/events.php?experience=<slug>, and we narrow the listing to
+// just that experience's sessions. We resolve the slug to an id so the
+// query stays simple and indexed.
+$filterExperience = null;
+$filterSlug = trim((string) input('experience', ''));
+if ($filterSlug !== '') {
+    $xStmt = db()->prepare("SELECT id, title FROM experiences WHERE slug = :s AND status = 'active' LIMIT 1");
+    $xStmt->execute([':s' => $filterSlug]);
+    $filterExperience = $xStmt->fetch() ?: null;
+}
 
 // Fetch templates (recurring) + non-recurring future sessions; auto-created
 // child instances of recurring templates are excluded — the expansion
 // helper will resolve seats_taken for each occurrence by looking up the
 // child if one already exists.
-$rawEvents = db()->query(
+$eventsSql =
     "SELECT e.* FROM events e
       WHERE e.status = 'published'
         AND e.parent_event_id IS NULL
-        AND (e.recurrence = 'daily' OR e.starts_at >= NOW())
-      ORDER BY e.starts_at ASC"
-)->fetchAll();
+        AND (e.recurrence = 'daily' OR e.starts_at >= NOW())"
+    . ($filterExperience ? " AND e.experience_id = :xid" : "")
+    . " ORDER BY e.starts_at ASC";
+$eventsStmt = db()->prepare($eventsSql);
+if ($filterExperience) $eventsStmt->execute([':xid' => (int) $filterExperience['id']]);
+else $eventsStmt->execute();
+$rawEvents = $eventsStmt->fetchAll();
+
+if ($filterExperience) {
+    $pageTitle = (string) $filterExperience['title'] . ' · Sessions';
+}
 
 // Expand recurring templates 60 days out so the calendar has dots on
 // future dates. One-off events further out pass through unchanged.
@@ -94,8 +116,15 @@ require __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 <section class="max-w-6xl mx-auto px-6 py-24">
   <p class="text-gold-400/80 tracking-[0.3em] uppercase text-xs">Calendar</p>
-  <h1 class="font-serif text-5xl text-beige-100 mt-4">Upcoming sessions</h1>
+  <h1 class="font-serif text-5xl text-beige-100 mt-4"><?= $filterExperience ? e($filterExperience['title']) : 'Upcoming sessions' ?></h1>
   <p class="mt-6 max-w-2xl text-beige-100/70 leading-relaxed">Reserve your seat. Choose the comforts you want — we'll hold space for you either way.</p>
+
+  <?php if ($filterExperience): ?>
+    <div class="mt-6 inline-flex items-center gap-3 px-4 py-2 rounded-full border border-gold-500/30 bg-gold-500/5 text-xs text-beige-100/75">
+      <span>Filtered to <strong class="text-gold-400"><?= e($filterExperience['title']) ?></strong> sessions</span>
+      <a href="<?= url('/public/events.php') ?>" class="text-beige-100/55 hover:text-gold-400 underline-offset-4 hover:underline">Show all →</a>
+    </div>
+  <?php endif; ?>
 
   <?php
   // Group occurrences by day for the cinema-style date strip.
@@ -109,7 +138,64 @@ require __DIR__ . '/../includes/header.php';
   ?>
 
   <?php if ($events): ?>
-    <div class="mt-10 flex flex-col gap-4 md:flex-row md:items-center md:justify-between" data-events-toolbar>
+    <!-- Coming up — a visual lead-in showing the next 3 sessions so the
+         page attracts before it filters. -->
+    <h2 class="mt-12 font-serif text-2xl text-beige-100">Coming up next</h2>
+    <div class="mt-5 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <?php foreach (array_slice($events, 0, 3) as $fe):
+        $feCover    = !empty($fe['cover_image']) ? media_src((string) $fe['cover_image']) : '';
+        $feIsOcc    = !empty($fe['_template_id']);
+        $feReserve  = $feIsOcc
+            ? '/member/book_event.php?event_id=' . (int) $fe['_template_id'] . '&date=' . urlencode((string) $fe['_occurrence_date'])
+            : '/member/book_event.php?event_id=' . (int) $fe['id'];
+        $feRemain   = max(0, (int) $fe['capacity'] - (int) $fe['seats_taken']);
+        $feSold     = $feRemain <= 0;
+        $feFromPrice = min((float) $fe['price_member'], (float) $fe['price_public']);
+      ?>
+        <article class="group relative rounded-3xl overflow-hidden border border-white/5 bg-navy-900/40 hover:border-gold-500/30 transition flex flex-col">
+          <div class="relative aspect-[4/3] bg-gradient-to-br from-navy-800 to-navy-950 overflow-hidden">
+            <?php if ($feCover): ?>
+              <img src="<?= e($feCover) ?>" alt="<?= e($fe['title']) ?>" loading="lazy"
+                   onerror="this.style.display='none'"
+                   class="absolute inset-0 w-full h-full object-cover transition duration-700 group-hover:scale-[1.04]">
+              <div class="absolute inset-0 bg-gradient-to-t from-navy-950/80 via-navy-950/20 to-transparent"></div>
+            <?php else: ?>
+              <span class="absolute inset-0 flex items-center justify-center font-serif text-5xl text-gold-400/30">◯</span>
+            <?php endif; ?>
+            <?php if ($feSold): ?>
+              <span class="absolute top-3 right-3 text-[10px] uppercase tracking-[0.3em] px-3 py-1 rounded-full bg-navy-950/80 text-beige-100/70 border border-white/10">Fully held</span>
+            <?php else: ?>
+              <span class="absolute top-3 right-3 text-[10px] uppercase tracking-[0.3em] px-3 py-1 rounded-full bg-navy-950/70 text-gold-400 border border-gold-500/30 backdrop-blur">
+                <?= $feRemain ?> seat<?= $feRemain === 1 ? '' : 's' ?> left
+              </span>
+            <?php endif; ?>
+          </div>
+          <div class="p-5 flex flex-col gap-3 flex-1">
+            <p class="text-[10px] uppercase tracking-[0.3em] text-gold-400/80"><?= e(format_datetime($fe['starts_at'], 'D, d M · g:i A')) ?></p>
+            <h3 class="font-serif text-xl text-beige-100 leading-tight"><?= e($fe['title']) ?></h3>
+            <?php if (!empty($fe['subtitle'])): ?>
+              <p class="text-xs text-beige-100/60 line-clamp-2"><?= e($fe['subtitle']) ?></p>
+            <?php endif; ?>
+            <div class="mt-auto flex items-end justify-between gap-2 pt-3 border-t border-white/5">
+              <div>
+                <p class="text-[10px] uppercase tracking-widest text-beige-100/50">From</p>
+                <p class="font-serif text-xl text-gold-400"><?= e(format_money($feFromPrice)) ?></p>
+              </div>
+              <?php if ($feSold): ?>
+                <button class="px-4 py-2 rounded-full bg-navy-800 text-beige-100/40 cursor-not-allowed text-sm" disabled>Held</button>
+              <?php else: ?>
+                <a href="<?= url($feReserve) ?>"
+                   class="px-4 py-2 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition text-sm whitespace-nowrap">Reserve →</a>
+              <?php endif; ?>
+            </div>
+          </div>
+        </article>
+      <?php endforeach; ?>
+    </div>
+
+    <h2 class="mt-14 font-serif text-2xl text-beige-100">All sessions</h2>
+
+    <div class="mt-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between" data-events-toolbar>
       <label class="relative md:max-w-xs w-full">
         <svg class="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-beige-100/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
         <input type="search" data-events-search placeholder="Search sessions…"

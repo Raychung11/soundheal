@@ -4,11 +4,28 @@ $pageTitle = 'Experiences';
 $packs = active_packs();
 
 $experiences = db()->query(
-    "SELECT title, duration, description, cover_image
+    "SELECT id, slug, title, duration, description, cover_image
        FROM experiences
       WHERE status = 'active'
       ORDER BY sort_order ASC, title ASC"
 )->fetchAll();
+
+// For each experience, look up the soonest bookable session linked to
+// it (one-off in the future, OR a daily-recurring template). Drives the
+// "Next session" line + the Reserve button target.
+$nextStmt = db()->prepare(
+    "SELECT id, title, starts_at, recurrence, capacity, ends_at
+       FROM events
+      WHERE status = 'published'
+        AND parent_event_id IS NULL
+        AND experience_id = :xid
+        AND (recurrence = 'daily' OR starts_at >= NOW())
+      ORDER BY starts_at ASC LIMIT 1"
+);
+foreach ($experiences as $idx => $exp) {
+    $nextStmt->execute([':xid' => (int) $exp['id']]);
+    $experiences[$idx]['next_event'] = $nextStmt->fetch() ?: null;
+}
 
 require __DIR__ . '/../includes/header.php';
 ?>
@@ -52,9 +69,41 @@ require __DIR__ . '/../includes/header.php';
                 <?= render_rich_text((string) $exp['description']) ?>
               </div>
             <?php endif; ?>
-            <a href="<?= url('/public/events.php') ?>" class="mt-8 inline-flex items-center gap-2 text-sm text-gold-400 hover:text-gold-300">
-              Reserve →
-            </a>
+
+            <?php
+              $nxt = $exp['next_event'] ?? null;
+              $reserveUrl = '/public/events.php?experience=' . urlencode((string) $exp['slug']);
+              $nextLine = '';
+              if ($nxt) {
+                  if (($nxt['recurrence'] ?? 'none') === 'daily') {
+                      $nextLine = 'Daily at ' . date('g:i A', strtotime((string) $nxt['starts_at']));
+                  } else {
+                      $nextLine = format_datetime($nxt['starts_at'], 'D, d M Y · g:i A');
+                  }
+              }
+            ?>
+
+            <div class="mt-8 pt-5 border-t border-white/5 flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <?php if ($nextLine !== ''): ?>
+                  <p class="text-[10px] uppercase tracking-[0.25em] text-beige-100/45">Next session</p>
+                  <p class="text-sm text-gold-400 mt-0.5 truncate"><?= e($nextLine) ?></p>
+                <?php else: ?>
+                  <p class="text-xs text-beige-100/50 italic">New dates coming soon.</p>
+                <?php endif; ?>
+              </div>
+              <?php if ($nxt): ?>
+                <a href="<?= url($reserveUrl) ?>"
+                   class="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gold-500 text-navy-950 text-sm font-medium hover:bg-gold-400 transition">
+                  Reserve →
+                </a>
+              <?php else: ?>
+                <a href="<?= url('/public/contact.php') ?>"
+                   class="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full border border-gold-500/40 text-gold-400 text-sm hover:bg-gold-500/10 transition">
+                  Notify me
+                </a>
+              <?php endif; ?>
+            </div>
           </div>
         </article>
       <?php endforeach; ?>

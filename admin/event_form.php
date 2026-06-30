@@ -9,7 +9,12 @@ $event = ['id' => 0, 'slug' => '', 'title' => '', 'subtitle' => '', 'description
           'facilitator' => '', 'category' => '', 'status' => 'draft',
           'recurrence' => 'none', 'recurrence_until' => '',
           'package_a_label' => '', 'package_a_perks' => '',
-          'package_b_label' => '', 'package_b_perks' => ''];
+          'package_b_label' => '', 'package_b_perks' => '',
+          'experience_id' => null];
+
+$experienceOptions = db()->query(
+    "SELECT id, title FROM experiences WHERE status = 'active' ORDER BY sort_order ASC, title ASC"
+)->fetchAll();
 
 if ($id) {
     $stmt = db()->prepare("SELECT * FROM events WHERE id = :id LIMIT 1");
@@ -43,6 +48,7 @@ if (is_post()) {
         'package_a_perks' => trim((string) input('package_a_perks', '')),
         'package_b_label' => trim((string) input('package_b_label', '')),
         'package_b_perks' => trim((string) input('package_b_perks', '')),
+        'experience_id'   => ($v = (int) input('experience_id', 0)) > 0 ? $v : null,
     ]);
     if ($event['title'] === '' || !$event['starts_at'] || !$event['ends_at']) {
         $errors[] = 'Title, start and end time are required.';
@@ -75,7 +81,8 @@ if (is_post()) {
                  price_member=:pm, facilitator=:f, category=:cat, status=:status,
                  recurrence=:rec, recurrence_until=:ru,
                  package_a_label=:pal, package_a_perks=:pap,
-                 package_b_label=:pbl, package_b_perks=:pbp
+                 package_b_label=:pbl, package_b_perks=:pbp,
+                 experience_id=:xid
                  WHERE id=:id"
             );
             $stmt->execute([
@@ -89,6 +96,7 @@ if (is_post()) {
                 ':pap' => $event['package_a_perks'] ?: null,
                 ':pbl' => $event['package_b_label'] ?: null,
                 ':pbp' => $event['package_b_perks'] ?: null,
+                ':xid' => $event['experience_id'],
                 ':id' => $id,
             ]);
             audit_log('event.update', 'events', $id);
@@ -98,9 +106,9 @@ if (is_post()) {
                                      capacity, price_public, price_member, facilitator, category, status,
                                      recurrence, recurrence_until,
                                      package_a_label, package_a_perks, package_b_label, package_b_perks,
-                                     created_by)
+                                     experience_id, created_by)
                  VALUES (:slug, :t, :st, :d, :ci, :l, :s, :e, :c, :pp, :pm, :f, :cat, :status,
-                         :rec, :ru, :pal, :pap, :pbl, :pbp, :uid)"
+                         :rec, :ru, :pal, :pap, :pbl, :pbp, :xid, :uid)"
             );
             $stmt->execute([
                 ':slug' => $slug, ':t' => $event['title'], ':st' => $event['subtitle'],
@@ -113,6 +121,7 @@ if (is_post()) {
                 ':pap' => $event['package_a_perks'] ?: null,
                 ':pbl' => $event['package_b_label'] ?: null,
                 ':pbp' => $event['package_b_perks'] ?: null,
+                ':xid' => $event['experience_id'],
                 ':uid' => current_user_id(),
             ]);
             $id = (int) db()->lastInsertId();
@@ -170,6 +179,16 @@ require __DIR__ . '/../includes/admin_layout.php';
     <label class="block">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Category</span>
       <input name="category" value="<?= e($event['category']) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Experience <span class="text-beige-100/30">(optional)</span></span>
+      <select name="experience_id" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+        <option value="">— not linked —</option>
+        <?php foreach ($experienceOptions as $xo): ?>
+          <option value="<?= (int) $xo['id'] ?>" <?= ((int) ($event['experience_id'] ?? 0)) === (int) $xo['id'] ? 'selected' : '' ?>><?= e($xo['title']) ?></option>
+        <?php endforeach; ?>
+      </select>
+      <span class="text-[11px] text-beige-100/40 mt-1 block">Links this event to an Experiences-page card so its "Reserve" button opens this session.</span>
     </label>
     <label class="block">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Public price (MYR)</span>
