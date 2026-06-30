@@ -93,6 +93,51 @@ function redirect(string $path, int $code = 302): void
     exit;
 }
 
+/**
+ * Render a multi-line admin-entered description as clean HTML:
+ *   - blank lines  → <p> paragraphs
+ *   - single \n    → <br>
+ *   - a block whose every line begins with an emoji or '-'/'*' marker
+ *     is rendered as a <ul>; the marker stays as the visual bullet.
+ * Always escapes underlying content — safe to pass user input.
+ */
+function render_rich_text(string $text): string
+{
+    $text = trim($text);
+    if ($text === '') {
+        return '';
+    }
+    $text = str_replace(["\r\n", "\r"], "\n", $text);
+    $blocks = preg_split('/\n\s*\n/', $text) ?: [];
+    $html = '';
+    foreach ($blocks as $block) {
+        $block = trim($block);
+        if ($block === '') continue;
+
+        $lines = array_values(array_filter(array_map('trim', preg_split('/\n/', $block) ?: []), fn($l) => $l !== ''));
+        $allBullets = count($lines) >= 2;
+        foreach ($lines as $line) {
+            if (!preg_match('/^([-*•—]|[\x{2600}-\x{27BF}]|[\x{1F300}-\x{1FAFF}]|\p{So}|\p{Sk})\s+/u', $line)) {
+                $allBullets = false;
+                break;
+            }
+        }
+        if ($allBullets) {
+            $html .= '<ul class="mt-1 space-y-1.5 list-none pl-0">';
+            foreach ($lines as $line) {
+                // Strip plain ASCII / em-dash bullets so the visible bullet is
+                // whatever marker the admin chose (emoji stays as-is).
+                $line = preg_replace('/^[-*•—]\s+/u', '', $line);
+                $html .= '<li>' . e((string) $line) . '</li>';
+            }
+            $html .= '</ul>';
+        } else {
+            $html .= '<p class="leading-relaxed">' . nl2br(e($block)) . '</p>';
+        }
+    }
+    return $html;
+}
+
 function flash(string $key, ?string $message = null, string $type = 'info')
 {
     if ($message === null) {

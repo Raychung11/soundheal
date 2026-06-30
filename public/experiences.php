@@ -48,7 +48,9 @@ require __DIR__ . '/../includes/header.php';
             <?php endif; ?>
             <h3 class="font-serif text-3xl text-gold-400 mt-3"><?= e($exp['title']) ?></h3>
             <?php if (!empty($exp['description'])): ?>
-              <p class="mt-5 text-beige-100/70 leading-relaxed text-sm"><?= e($exp['description']) ?></p>
+              <div class="mt-5 text-beige-100/70 text-sm space-y-3">
+                <?= render_rich_text((string) $exp['description']) ?>
+              </div>
             <?php endif; ?>
             <a href="<?= url('/public/events.php') ?>" class="mt-8 inline-flex items-center gap-2 text-sm text-gold-400 hover:text-gold-300">
               Reserve →
