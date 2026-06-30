@@ -14,7 +14,9 @@ $rawEvents = db()->query(
       ORDER BY e.starts_at ASC"
 )->fetchAll();
 
-$events = expand_event_occurrences($rawEvents, 14);
+// Expand recurring templates 60 days out so the calendar has dots on
+// future dates. One-off events further out pass through unchanged.
+$events = expand_event_occurrences($rawEvents, 60);
 
 // Distinct categories for the filter chips.
 $categories = array_values(array_unique(array_filter(array_map(
@@ -123,22 +125,56 @@ require __DIR__ . '/../includes/header.php';
       <?php endif; ?>
     </div>
 
-    <!-- Date strip (cinema-style) -->
-    <div class="mt-6 flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0" data-day-strip>
-      <?php foreach ($daysList as $day):
-        $dayDate = new DateTimeImmutable($day);
-        $count = $sessionsByDay[$day] ?? 0;
-        $active = $day === $initialDay;
-      ?>
-        <button type="button" data-day="<?= e($day) ?>" aria-pressed="<?= $active ? 'true' : 'false' ?>"
-                class="shrink-0 w-[72px] px-3 py-3 rounded-2xl border text-center transition
-                       <?= $active ? 'border-gold-500/50 bg-gold-500/10 text-gold-400' : 'border-white/10 bg-navy-900/40 text-beige-100/70 hover:border-gold-500/30 hover:text-gold-400' ?>">
-          <p class="text-[10px] uppercase tracking-widest opacity-70"><?= e($dayDate->format('D')) ?></p>
-          <p class="font-serif text-2xl mt-0.5"><?= e($dayDate->format('d')) ?></p>
-          <p class="text-[9px] uppercase tracking-widest opacity-70"><?= e($dayDate->format('M')) ?></p>
-          <p class="text-[10px] mt-1 opacity-80"><?= (int) $count ?> sess<?= $count === 1 ? '' : 'n' ?></p>
+    <!-- Inline month-grid calendar — dates with sessions are clickable
+         and show a small gold dot. Prev / next month buttons let the
+         visitor browse further out without scrolling a long strip. -->
+    <div class="mt-6" x-data="sessionCalendar(<?= htmlspecialchars(json_encode($sessionsByDay), ENT_QUOTES) ?>, <?= htmlspecialchars(json_encode($initialDay), ENT_QUOTES) ?>)" x-cloak>
+      <div class="flex items-center gap-2 mb-3 flex-wrap">
+        <button type="button" @click="setDay('')"
+                :class="!activeDay ? 'border-gold-500/50 bg-gold-500/10 text-gold-400' : 'border-white/10 text-beige-100/70 hover:border-gold-500/30 hover:text-gold-400'"
+                class="px-4 py-1.5 rounded-full border text-xs uppercase tracking-[0.2em] transition">
+          All upcoming
         </button>
-      <?php endforeach; ?>
+        <span class="text-xs text-beige-100/40 ml-1" x-show="activeDay" x-cloak>
+          Showing <span x-text="formattedSelected"></span>
+        </span>
+      </div>
+
+      <div class="border border-white/5 rounded-2xl bg-navy-900/40 p-4 sm:p-5 max-w-md">
+        <div class="flex items-center justify-between mb-3">
+          <button type="button" @click="prevMonth()"
+                  class="p-2 rounded-full text-beige-100/70 hover:text-gold-400 hover:bg-white/5 transition" aria-label="Previous month">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></svg>
+          </button>
+          <p class="font-serif text-lg text-beige-100" x-text="monthLabel"></p>
+          <button type="button" @click="nextMonth()"
+                  class="p-2 rounded-full text-beige-100/70 hover:text-gold-400 hover:bg-white/5 transition" aria-label="Next month">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+          </button>
+        </div>
+
+        <div class="grid grid-cols-7 gap-1 text-center text-[10px] uppercase tracking-widest text-beige-100/45 mb-1.5">
+          <template x-for="d in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']" :key="d">
+            <div x-text="d"></div>
+          </template>
+        </div>
+
+        <div class="grid grid-cols-7 gap-1">
+          <template x-for="(cell, idx) in cells" :key="idx">
+            <button type="button"
+                    @click="cell.hasSession && setDay(cell.iso)"
+                    :disabled="!cell.hasSession"
+                    :class="cellClass(cell)"
+                    class="relative h-10 sm:h-11 rounded-lg text-sm transition">
+              <span x-show="!cell.filler" x-text="cell.day"></span>
+              <span x-show="cell.hasSession"
+                    class="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-gold-400"></span>
+            </button>
+          </template>
+        </div>
+
+        <p class="text-[10px] text-beige-100/40 mt-3 text-center">Dates with a · have sessions. Tap to filter the list below.</p>
+      </div>
     </div>
   <?php endif; ?>
 
@@ -244,12 +280,64 @@ require __DIR__ . '/../includes/header.php';
 </section>
 
 <script>
+// Alpine state for the inline month calendar. Receives the map of
+// dates-with-sessions from PHP and dispatches a custom event whenever
+// the visitor picks a date, which the vanilla filter below listens to.
+function sessionCalendar(sessionDays, initial) {
+  return {
+    sessionDays: sessionDays || {},
+    activeDay: initial || '',
+    viewYear: null,
+    viewMonth: null,
+    monthNames: ['January','February','March','April','May','June','July','August','September','October','November','December'],
+    init() {
+      const seed = this.activeDay && this.sessionDays[this.activeDay]
+        ? new Date(this.activeDay + 'T00:00:00')
+        : new Date();
+      this.viewYear = seed.getFullYear();
+      this.viewMonth = seed.getMonth();
+      this.dispatch();
+    },
+    get monthLabel() { return this.monthNames[this.viewMonth] + ' ' + this.viewYear; },
+    get formattedSelected() {
+      if (!this.activeDay) return '';
+      const d = new Date(this.activeDay + 'T00:00:00');
+      return d.toLocaleDateString('en-GB', {weekday:'short', day:'numeric', month:'short'});
+    },
+    get cells() {
+      const pad = (n) => String(n).padStart(2, '0');
+      const firstDay = new Date(this.viewYear, this.viewMonth, 1);
+      const startOffset = firstDay.getDay();
+      const daysInMonth = new Date(this.viewYear, this.viewMonth + 1, 0).getDate();
+      const cells = [];
+      for (let i = 0; i < startOffset; i++) cells.push({ filler: true, day: '', iso: '' });
+      for (let d = 1; d <= daysInMonth; d++) {
+        const iso = `${this.viewYear}-${pad(this.viewMonth + 1)}-${pad(d)}`;
+        cells.push({ filler: false, day: d, iso, hasSession: !!this.sessionDays[iso] });
+      }
+      while (cells.length % 7 !== 0) cells.push({ filler: true, day: '', iso: '' });
+      return cells;
+    },
+    cellClass(cell) {
+      if (cell.filler) return 'opacity-0 pointer-events-none';
+      if (cell.iso === this.activeDay) return 'bg-gold-500 text-navy-950 font-medium shadow-[0_4px_20px_-8px_rgba(201,164,106,0.5)]';
+      if (cell.hasSession) return 'bg-navy-950/60 text-beige-100 hover:bg-navy-800 cursor-pointer';
+      return 'text-beige-100/25 cursor-not-allowed';
+    },
+    prevMonth() { if (--this.viewMonth < 0) { this.viewMonth = 11; this.viewYear--; } },
+    nextMonth() { if (++this.viewMonth > 11) { this.viewMonth = 0; this.viewYear++; } },
+    setDay(day) { this.activeDay = day; this.dispatch(); },
+    dispatch() {
+      window.dispatchEvent(new CustomEvent('events:setDay', { detail: this.activeDay }));
+    },
+  };
+}
+
 (function () {
-  const search     = document.querySelector('[data-events-search]');
-  const filters    = document.querySelectorAll('[data-events-filters] button');
-  const dayChips   = document.querySelectorAll('[data-day-strip] button');
-  const cards      = Array.from(document.querySelectorAll('[data-event]'));
-  const empty      = document.querySelector('[data-events-empty]');
+  const search   = document.querySelector('[data-events-search]');
+  const filters  = document.querySelectorAll('[data-events-filters] button');
+  const cards    = Array.from(document.querySelectorAll('[data-event]'));
+  const empty    = document.querySelector('[data-events-empty]');
   let activeCat = '';
   let activeDay = <?= json_encode($initialDay) ?>;
 
@@ -265,15 +353,6 @@ require __DIR__ . '/../includes/header.php';
       if (show) shown++;
     });
     if (empty) empty.classList.toggle('hidden', shown !== 0);
-  }
-
-  function setPressed(btn, on) {
-    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    btn.classList.toggle('border-gold-500/50', on);
-    btn.classList.toggle('bg-gold-500/10', on);
-    btn.classList.toggle('text-gold-400', on);
-    btn.classList.toggle('border-white/10', !on);
-    btn.classList.toggle('text-beige-100/70', !on);
   }
 
   search?.addEventListener('input', apply);
@@ -292,11 +371,10 @@ require __DIR__ . '/../includes/header.php';
     apply();
   }));
 
-  dayChips.forEach((btn) => btn.addEventListener('click', () => {
-    activeDay = btn.dataset.day || '';
-    dayChips.forEach((b) => setPressed(b, b === btn));
+  window.addEventListener('events:setDay', (e) => {
+    activeDay = e.detail || '';
     apply();
-  }));
+  });
 
   document.querySelectorAll('[data-copy-link]').forEach((btn) => {
     btn.addEventListener('click', async () => {

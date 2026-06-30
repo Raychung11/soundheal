@@ -83,6 +83,7 @@ if (empty($skipTracking)) {
       }
     </script>
     <link rel="stylesheet" href="<?= asset('css/app.css') ?>">
+    <style>[x-cloak]{display:none!important}</style>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
 <body class="bg-navy-950 text-beige-100 font-sans antialiased min-h-screen flex flex-col">
