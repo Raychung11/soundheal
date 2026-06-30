@@ -11,7 +11,10 @@ $pageTitle = 'Upcoming Sessions';
 $filterExperience = null;
 $filterSlug = trim((string) input('experience', ''));
 if ($filterSlug !== '') {
-    $xStmt = db()->prepare("SELECT id, title FROM experiences WHERE slug = :s AND status = 'active' LIMIT 1");
+    $xStmt = db()->prepare(
+        "SELECT id, title, description, cover_image
+           FROM experiences WHERE slug = :s AND status = 'active' LIMIT 1"
+    );
     $xStmt->execute([':s' => $filterSlug]);
     $filterExperience = $xStmt->fetch() ?: null;
 }
@@ -34,6 +37,19 @@ $rawEvents = $eventsStmt->fetchAll();
 
 if ($filterExperience) {
     $pageTitle = (string) $filterExperience['title'] . ' · Sessions';
+    $pageType  = 'article';
+    // Use the experience's own cover + description for the WhatsApp /
+    // Facebook share preview, so the link doesn't fall back to the
+    // generic site image.
+    if (!empty($filterExperience['cover_image'])) {
+        $pageImage = (string) $filterExperience['cover_image'];
+    }
+    $xDesc = trim((string) ($filterExperience['description'] ?? ''));
+    $xDesc = (string) preg_replace('/\s+/', ' ', $xDesc);
+    if (function_exists('mb_strlen') && mb_strlen($xDesc) > 200) {
+        $xDesc = mb_substr($xDesc, 0, 197) . '…';
+    }
+    if ($xDesc !== '') $pageDescription = $xDesc;
 }
 
 // Expand recurring templates 60 days out so the calendar has dots on
