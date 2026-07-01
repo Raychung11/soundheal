@@ -228,7 +228,8 @@ require __DIR__ . '/../includes/admin_layout.php';
   <p class="mt-3 text-red-300/80"><?= e($err) ?></p>
 <?php endforeach; ?>
 
-<form method="post" enctype="multipart/form-data" class="mt-8 space-y-5 max-w-3xl">
+<form method="post" enctype="multipart/form-data" class="mt-8 space-y-5 max-w-3xl"
+      x-data="{ pkgB: <?= (int) ($event['package_b_enabled'] ?? 1) === 1 ? 'true' : 'false' ?> }">
   <?= csrf_field() ?>
   <label class="block">
     <span class="text-xs uppercase tracking-widest text-beige-100/60">Title</span>
@@ -287,13 +288,24 @@ require __DIR__ . '/../includes/admin_layout.php';
       <span class="text-[11px] text-beige-100/40 mt-1 block">Cash to the referrer when a friend attends this session. Blank uses the site default (<?= e(format_money((float) setting('referral_event_reward_default', 50.00))) ?>).</span>
     </label>
     <label class="block">
-      <span class="text-xs uppercase tracking-widest text-beige-100/60">Public price (MYR)</span>
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Primary price · Comfort (MYR)</span>
       <input name="price_public" type="number" step="0.01" value="<?= e((string)$event['price_public']) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+      <span class="text-[11px] text-beige-100/40 mt-1 block">Charged for the Comfort (Package A) tier. Every event has this price.</span>
     </label>
-    <label class="block">
-      <span class="text-xs uppercase tracking-widest text-beige-100/60">Member price (MYR)</span>
+    <!-- Second-tier price shown only when Package B is enabled below.
+         Hidden fully so admins running a single-price event aren't
+         puzzled by a stray "Member price" field. -->
+    <label class="block" x-show="pkgB" x-cloak>
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Second-tier price · BYO (MYR)</span>
       <input name="price_member" type="number" step="0.01" value="<?= e((string)$event['price_member']) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+      <span class="text-[11px] text-beige-100/40 mt-1 block">Only used when the Bring-Your-Own-Zen tier is offered — toggled in the Booking packages section below.</span>
     </label>
+    <div class="block" x-show="!pkgB" x-cloak>
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Second-tier price</span>
+      <p class="mt-2 rounded-2xl border border-dashed border-white/10 bg-navy-950/40 px-4 py-3 text-sm text-beige-100/50">
+        Not offered for this event. Turn on the second tier in "Booking packages" below to set a price.
+      </p>
+    </div>
     <label class="block sm:col-span-2">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Cover image</span>
       <?php if (!empty($event['cover_image'])): ?>
@@ -419,27 +431,29 @@ require __DIR__ . '/../includes/admin_layout.php';
       <div class="space-y-3">
         <p class="text-[10px] uppercase tracking-widest text-beige-100/55">Package B · price <?= e(format_money((float) ($event['price_member'] ?? 0))) ?></p>
 
-        <!-- Toggle. When off, the booking page hides this card entirely
-             and Comfort takes the full width. Default on for existing
-             events so they don't change silently. -->
+        <!-- Toggle bound to shared Alpine state so the "Second-tier price"
+             field above and the label/perks inputs below react together.
+             Default on for existing events so they don't change silently. -->
         <label class="flex items-start gap-3 rounded-2xl border border-gold-500/20 bg-gold-500/5 px-4 py-3 cursor-pointer">
           <input type="checkbox" name="package_b_enabled" value="1"
-                 <?= (int) ($event['package_b_enabled'] ?? 1) === 1 ? 'checked' : '' ?>
+                 x-model="pkgB"
                  class="mt-1 accent-gold-500">
           <span>
             <span class="text-sm text-beige-100">Offer this package on the booking page</span>
-            <span class="block text-[11px] text-beige-100/50 mt-1">Turn off for events that only ship one tier — e.g. a single-price workshop or a private corporate session. Comfort will fill the whole card row.</span>
+            <span class="block text-[11px] text-beige-100/50 mt-1">Turn off for events that only ship one tier — e.g. a single-price workshop or a private corporate session. Comfort will fill the whole card row and the second-tier price above will be hidden.</span>
           </span>
         </label>
 
-        <label class="block">
-          <span class="text-xs uppercase tracking-widest text-beige-100/60">Label</span>
-          <input name="package_b_label" placeholder="Bring-Your-Own-Zen" value="<?= e((string) ($event['package_b_label'] ?? '')) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
-        </label>
-        <label class="block">
-          <span class="text-xs uppercase tracking-widest text-beige-100/60">Perks (one per line)</span>
-          <textarea name="package_b_perks" rows="5" placeholder="Full sound healing experience&#10;Bring your own mat and blanket" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3"><?= e((string) ($event['package_b_perks'] ?? '')) ?></textarea>
-        </label>
+        <div x-show="pkgB" x-cloak class="space-y-3">
+          <label class="block">
+            <span class="text-xs uppercase tracking-widest text-beige-100/60">Label</span>
+            <input name="package_b_label" placeholder="Bring-Your-Own-Zen" value="<?= e((string) ($event['package_b_label'] ?? '')) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+          </label>
+          <label class="block">
+            <span class="text-xs uppercase tracking-widest text-beige-100/60">Perks (one per line)</span>
+            <textarea name="package_b_perks" rows="5" placeholder="Full sound healing experience&#10;Bring your own mat and blanket" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3"><?= e((string) ($event['package_b_perks'] ?? '')) ?></textarea>
+          </label>
+        </div>
       </div>
     </div>
   </section>
