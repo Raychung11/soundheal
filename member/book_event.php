@@ -226,12 +226,19 @@ if (is_post()) {
 
 require __DIR__ . '/../includes/header.php';
 ?>
+<?php
+  // json_encode on a string produces "..." with double quotes. The outer
+  // x-data attribute is also double-quoted, so raw output would close
+  // the attribute early. htmlspecialchars keeps the JSON valid inside
+  // the attribute value.
+  $ax = static fn($v) => htmlspecialchars(json_encode($v), ENT_QUOTES, 'UTF-8');
+?>
 <div x-data="{
     useCredit: false,
     qty: 1,
     pkg: 'comfort',
-    prices: { comfort: <?= json_encode($comfortPrice) ?>, byo: <?= json_encode($byoPrice) ?> },
-    labels: { comfort: <?= json_encode($comfortName) ?>, byo: <?= json_encode($byoName) ?> },
+    prices: { comfort: <?= $ax($comfortPrice) ?>, byo: <?= $ax($byoPrice) ?> },
+    labels: { comfort: <?= $ax($comfortName) ?>, byo: <?= $ax($byoName) ?> },
     label() { return this.labels[this.pkg]; },
     unit()  { return this.prices[this.pkg]; },
     total() { return this.useCredit ? 0 : this.unit() * this.qty; }
