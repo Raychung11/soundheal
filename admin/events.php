@@ -22,6 +22,7 @@ if (is_post()) {
 // the seat and are excluded.
 $events = db()->query(
     "SELECT e.*,
+            x.title AS experience_title, x.slug AS experience_slug,
             (SELECT COALESCE(SUM(quantity), 0)
                FROM event_bookings
                WHERE event_id = e.id
@@ -31,6 +32,7 @@ $events = db()->query(
                WHERE event_id = e.id
                  AND status IN ('paid','attended')) AS seats_paid
      FROM events e
+     LEFT JOIN experiences x ON x.id = e.experience_id
      ORDER BY e.starts_at DESC LIMIT 100"
 )->fetchAll();
 
@@ -45,7 +47,7 @@ require __DIR__ . '/../includes/admin_layout.php';
   <table class="w-full text-sm">
     <thead class="text-left text-beige-100/50 text-xs uppercase tracking-wider bg-navy-950/40">
       <tr>
-        <th class="px-4 py-3">Title</th><th>When</th><th>Status</th><th>Seats</th><th></th>
+        <th class="px-4 py-3">Title</th><th>Experience</th><th>When</th><th>Status</th><th>Seats</th><th></th>
       </tr>
     </thead>
     <tbody class="divide-y divide-white/5">
@@ -54,6 +56,14 @@ require __DIR__ . '/../includes/admin_layout.php';
           <td class="px-4 py-3">
             <p class="text-beige-100"><?= e($e['title']) ?></p>
             <p class="text-xs text-beige-100/40"><?= e($e['location'] ?? '') ?></p>
+          </td>
+          <td>
+            <?php if (!empty($e['experience_title'])): ?>
+              <span class="text-xs px-2 py-1 rounded-full bg-gold-500/10 text-gold-400 border border-gold-500/25"><?= e($e['experience_title']) ?></span>
+            <?php else: ?>
+              <a href="<?= url('/admin/event_form.php?id=' . (int)$e['id']) ?>#experience_id"
+                 class="text-xs text-beige-100/45 hover:text-gold-400 underline-offset-4 hover:underline">— link</a>
+            <?php endif; ?>
           </td>
           <td><?= e(format_datetime($e['starts_at'])) ?></td>
           <td><span class="text-xs px-2 py-1 rounded-full <?= $e['status'] === 'published' ? 'bg-gold-500/20 text-gold-400' : 'bg-white/5 text-beige-100/60' ?>"><?= e($e['status']) ?></span></td>
@@ -78,7 +88,7 @@ require __DIR__ . '/../includes/admin_layout.php';
         </tr>
       <?php endforeach; ?>
       <?php if (!$events): ?>
-        <tr><td colspan="5" class="px-4 py-6 text-beige-100/60">No events yet.</td></tr>
+        <tr><td colspan="6" class="px-4 py-6 text-beige-100/60">No events yet.</td></tr>
       <?php endif; ?>
     </tbody>
   </table>
