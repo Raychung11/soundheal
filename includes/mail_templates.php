@@ -14,6 +14,7 @@ function render_mail_template(string $name, array $vars): array
         'booking_reminder_24h' => 'mail_template_booking_reminder_24h',
         'booking_reminder_2h'  => 'mail_template_booking_reminder_2h',
         'waitlist_seat_open'   => 'mail_template_waitlist_seat_open',
+        'booking_thank_you'    => 'mail_template_booking_thank_you',
         'contact_received'=> 'mail_template_contact_received',
         'corporate_lead'  => 'mail_template_corporate_lead',
     ];
@@ -163,6 +164,39 @@ function mail_template_booking_reminder_2h(array $v): array
 HTML;
     $text = "Your session starts in about 2 hours: {$title} at {$when}, {$loc}. Booking {$ref}.";
     return [mail_layout("See you soon — your session is in about 2 hours.", $body), $text];
+}
+
+function mail_template_booking_thank_you(array $v): array
+{
+    $name       = e($v['name'] ?? 'friend');
+    $title      = e($v['event_title'] ?? 'today\'s session');
+    $shareUrl   = e($v['share_url'] ?? '#');
+    $upcoming   = $v['upcoming'] ?? [];    // [ ['title','when','url'], ... ]
+    $upcomingHtml = '';
+    if ($upcoming) {
+        $upcomingHtml = '<p style="font-family:Georgia,\'Cormorant Garamond\',serif;font-size:18px;color:#e7d2a3;margin:32px 0 8px;">If you\'d like to return, we\'re here:</p><ul style="padding-left:0;list-style:none;margin:0 0 24px;">';
+        foreach ($upcoming as $u) {
+            $upcomingHtml .= '<li style="margin:8px 0;padding:12px 16px;border:1px solid rgba(255,255,255,0.08);border-radius:12px;">'
+                . '<a href="' . e((string) $u['url']) . '" style="color:#c9a46a;text-decoration:none;font-family:Inter,Arial,sans-serif;">'
+                . e((string) $u['title'])
+                . ' <span style="color:rgba(246,239,229,0.55);font-size:13px;">· ' . e((string) $u['when']) . '</span>'
+                . '</a></li>';
+        }
+        $upcomingHtml .= '</ul>';
+    }
+
+    $body = <<<HTML
+<p style="font-family:Georgia,'Cormorant Garamond',serif;font-size:22px;color:#e7d2a3;">Thank you for arriving, {$name}.</p>
+<p>We hope <strong style="color:#e7d2a3;">{$title}</strong> gave your nervous system a soft place to rest.</p>
+<p>If a word or feeling stayed with you, we'd be honoured to hear it. Approved reflections quietly help others take their first step.</p>
+<p style="margin:24px 0;">
+  <a href="{$shareUrl}" style="display:inline-block;background:#c9a46a;color:#0a1027;padding:14px 28px;border-radius:999px;text-decoration:none;font-family:Inter,Arial,sans-serif;font-weight:500;">Share your reflection</a>
+</p>
+{$upcomingHtml}
+<p style="color:rgba(246,239,229,0.65);">Held with care.</p>
+HTML;
+    $text = "Thank you for joining {$title}. Share your reflection: {$shareUrl}";
+    return [mail_layout('Thank you — held with care.', $body), $text];
 }
 
 function mail_template_waitlist_seat_open(array $v): array

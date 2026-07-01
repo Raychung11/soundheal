@@ -109,16 +109,89 @@ $runSweep = function (string $col, string $template, string $subject, string $wi
     date('Y-m-d H:i:s', strtotime('+150 minutes'))
 );
 
+// Post-session thank-you sweep — starts_at is now 2-6h in the past
+// so the session has just ended. Includes a small "if you'd like to
+// return" list of 2 upcoming public sessions (same experience first,
+// then falling back to any).
+$appBase = rtrim((string) config('app.url'), '/');
+$postStmt = db()->prepare(
+    "SELECT b.id, b.booking_ref, e.id AS event_id, e.title AS event_title,
+            e.experience_id, u.email, u.full_name
+       FROM event_bookings b
+       JOIN events e ON e.id = b.event_id
+       JOIN users  u ON u.id = b.user_id
+      WHERE b.status IN ('paid','attended')
+        AND b.postsession_sent_at IS NULL
+        AND e.starts_at BETWEEN :ws AND :we
+        AND u.email IS NOT NULL AND u.email <> ''"
+);
+$postStmt->execute([
+    ':ws' => date('Y-m-d H:i:s', strtotime('-6 hours')),
+    ':we' => date('Y-m-d H:i:s', strtotime('-2 hours')),
+]);
+
+$aPost = 0; $sPost = 0; $fPost = 0;
+foreach ($postStmt->fetchAll() as $r) {
+    $aPost++;
+    // Curate cross-sell: 2 upcoming public sessions, same experience
+    // preferred, else any. Excludes the session they just attended.
+    $upStmt = db()->prepare(
+        "SELECT id, title, starts_at, experience_id, recurrence
+           FROM events
+          WHERE status = 'published'
+            AND (audience IS NULL OR audience = 'public')
+            AND parent_event_id IS NULL
+            AND id <> :self
+            AND (recurrence = 'daily' OR starts_at >= NOW())
+          ORDER BY (experience_id = :xid) DESC, starts_at ASC
+          LIMIT 2"
+    );
+    $upStmt->execute([':self' => (int) $r['event_id'], ':xid' => (int) ($r['experience_id'] ?? 0)]);
+    $upcoming = array_map(function ($u) use ($appBase) {
+        $when = ($u['recurrence'] ?? '') === 'daily'
+            ? 'Daily at ' . date('g:i A', strtotime((string) $u['starts_at']))
+            : format_datetime($u['starts_at'], 'D, d M · g:i A');
+        return [
+            'title' => (string) $u['title'],
+            'when'  => $when,
+            'url'   => $appBase . '/public/event.php?id=' . (int) $u['id'],
+        ];
+    }, $upStmt->fetchAll());
+
+    $firstName = trim(explode(' ', (string) $r['full_name'])[0]) ?: 'friend';
+    $ok = send_mail(
+        (string) $r['email'],
+        (string) $r['full_name'],
+        'Thank you for joining · ' . $r['event_title'],
+        'booking_thank_you',
+        [
+            'name'        => $firstName,
+            'event_title' => $r['event_title'],
+            'share_url'   => $appBase . '/public/share_experience.php',
+            'upcoming'    => $upcoming,
+        ]
+    );
+    if ($ok) {
+        $sPost++;
+        db()->prepare("UPDATE event_bookings SET postsession_sent_at = NOW() WHERE id = :id")
+            ->execute([':id' => (int) $r['id']]);
+    } else {
+        $fPost++;
+    }
+}
+
 audit_log('reminders.sweep', 'event_bookings', null, [
-    'sent_24h' => $s24, 'failed_24h' => $f24,
-    'sent_2h'  => $s2,  'failed_2h'  => $f2,
+    'sent_24h'  => $s24,  'failed_24h'  => $f24,
+    'sent_2h'   => $s2,   'failed_2h'   => $f2,
+    'sent_post' => $sPost,'failed_post' => $fPost,
 ]);
 
 $result = [
-    'ok'      => true,
-    'ran_at'  => date('c'),
-    '24h'     => ['attempted' => $a24, 'sent' => $s24, 'failed' => $f24],
-    '2h'      => ['attempted' => $a2,  'sent' => $s2,  'failed' => $f2],
+    'ok'         => true,
+    'ran_at'     => date('c'),
+    '24h'        => ['attempted' => $a24,   'sent' => $s24,  'failed' => $f24],
+    '2h'         => ['attempted' => $a2,    'sent' => $s2,   'failed' => $f2],
+    'postsession'=> ['attempted' => $aPost, 'sent' => $sPost,'failed' => $fPost],
 ];
 
 if ($isCli) {
