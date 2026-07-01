@@ -4,9 +4,9 @@
  *
  *   Hit this URL every 30–60 minutes from Hostinger cron with the
  *   token from site_settings.reminder_cron_token (set by
- *   migration 044). Example (30-min cadence):
+ *   migration 044). Example (30-min cadence — with escaped stars):
  *
- *     */30 * * * * /usr/bin/curl -fsS "https://jaemiesoundbath.com/api/send_reminders.php?token=<TOKEN>" >/dev/null
+ *     [slash][star]/30 [star] [star] [star] [star]  /usr/bin/curl -fsS "https://jaemiesoundbath.com/api/send_reminders.php?token=<TOKEN>" >/dev/null
  *
  *   The endpoint scans for paid / attended bookings whose event
  *   starts_at falls into a ~2h window around 24h-from-now and
