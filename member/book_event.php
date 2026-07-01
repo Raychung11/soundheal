@@ -128,7 +128,22 @@ if (is_post()) {
         // When paying with a credit, the booking is effectively prepaid:
         // unit_price/total are recorded as 0 and the credit ledger is the source of truth.
         $effectiveUnit = $useCredit ? 0.0 : $unitPrice;
-        $total = $effectiveUnit * $qty;
+        $subtotal = $effectiveUnit * $qty;
+
+        // Promo code — validated on the current subtotal. Rejected for
+        // credit-paid bookings (nothing to discount).
+        $promoInput      = trim((string) input('promo_code', ''));
+        $promoCodeStored = null;
+        $discountAmount  = 0.0;
+        if ($promoInput !== '' && !$useCredit) {
+            $vp = validate_promo_code($promoInput, $subtotal);
+            if (!$vp['ok']) {
+                throw new RuntimeException($vp['error']);
+            }
+            $discountAmount  = (float) $vp['discount'];
+            $promoCodeStored = strtoupper($promoInput);
+        }
+        $total = max(0.0, round($subtotal - $discountAmount, 2));
 
         $ins = db()->prepare(
             "INSERT INTO event_bookings (booking_ref, user_id, event_id, quantity, unit_price, total_amount, status, paid_with_credit, package, intake_data)
@@ -147,6 +162,16 @@ if (is_post()) {
             ':intake' => $intakeData,
         ]);
         $bookingId = (int) db()->lastInsertId();
+
+        // Consume the promo code atomically. record_promo_use returns
+        // false if a concurrent booking hit the cap between validate
+        // and use — reject the whole booking so the total the user
+        // paid always reflects the code they actually used.
+        if ($promoCodeStored !== null) {
+            if (!record_promo_use($bookingId, $promoCodeStored, $discountAmount)) {
+                throw new RuntimeException('That promo code was just claimed by someone else. Please try again.');
+            }
+        }
 
         // Burn the credit before issuing the ticket so we never double-spend.
         if ($useCredit) {
@@ -388,6 +413,25 @@ require __DIR__ . '/../includes/header.php';
       </div>
     </div>
     <?php endif; ?>
+
+    <?php
+      // Prefill the promo field from ?promo=CODE in the URL (referral /
+      // marketing links) or from the last-submitted value on validation
+      // error. Hidden when a credit is being redeemed.
+      $promoPrefill = trim((string) input('promo_code', (string) input('promo', '')));
+    ?>
+    <details class="rounded-2xl border border-white/5 bg-navy-900/40 p-4" <?= $promoPrefill !== '' ? 'open' : '' ?> x-show="!useCredit" x-cloak>
+      <summary class="cursor-pointer text-sm text-beige-100/75 hover:text-gold-400 transition">
+        Have a promo code?
+      </summary>
+      <div class="mt-3 flex flex-col sm:flex-row gap-2">
+        <input name="promo_code" placeholder="Enter code"
+               value="<?= e($promoPrefill) ?>"
+               maxlength="60"
+               class="flex-1 rounded-full bg-navy-950 border border-white/10 px-4 py-2.5 text-sm uppercase tracking-widest focus:border-gold-500/50 focus:outline-none">
+      </div>
+      <p class="mt-2 text-[11px] text-beige-100/45">Applied at checkout. Codes can't stack with credit redemption.</p>
+    </details>
 
     <div class="border border-white/5 rounded-2xl p-5 bg-navy-900/40 flex justify-between items-center gap-4">
       <div class="min-w-0">
