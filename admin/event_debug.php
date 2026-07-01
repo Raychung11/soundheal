@@ -13,6 +13,104 @@ $pageTitle = 'Event debug';
  * which fields are out of sync. Read-only — never mutates anything.
  */
 
+// Actions — a small write path bolted onto an otherwise read-only page.
+// Kept minimal so anything mutating requires an explicit POST with CSRF.
+if (is_post()) {
+    csrf_verify();
+    $action = (string) input('action', '');
+    $targetId = (int) input('id', 0);
+
+    if ($action === 'cascade' && $targetId > 0) {
+        $tStmt = db()->prepare("SELECT * FROM events WHERE id = :id LIMIT 1");
+        $tStmt->execute([':id' => $targetId]);
+        $tpl = $tStmt->fetch();
+        if ($tpl && empty($tpl['parent_event_id'])) {
+            // Same UPDATE as admin/event_form.php's save handler. Only
+            // touches children with no live bookings so a member's
+            // paid seat is never retroactively rewritten.
+            db()->prepare(
+                "UPDATE events c
+                    LEFT JOIN event_bookings b
+                      ON b.event_id = c.id
+                     AND b.status IN ('pending','paid','attended')
+                    SET c.title = :t, c.subtitle = :st, c.description = :d,
+                        c.cover_image = :ci, c.location = :l,
+                        c.capacity = :c, c.price_public = :pp, c.price_member = :pm,
+                        c.facilitator = :f, c.category = :cat, c.status = :status,
+                        c.experience_id = :xid, c.audience = :aud, c.credit_eligible = :cel,
+                        c.referral_reward_amount = :rra,
+                        c.package_a_label = :pal, c.package_a_perks = :pap,
+                        c.package_b_label = :pbl, c.package_b_perks = :pbp,
+                        c.package_b_enabled = :pbe
+                  WHERE c.parent_event_id = :id
+                    AND b.id IS NULL"
+            )->execute([
+                ':t' => $tpl['title'], ':st' => $tpl['subtitle'], ':d' => $tpl['description'],
+                ':ci' => $tpl['cover_image'], ':l' => $tpl['location'],
+                ':c' => $tpl['capacity'], ':pp' => $tpl['price_public'], ':pm' => $tpl['price_member'],
+                ':f' => $tpl['facilitator'], ':cat' => $tpl['category'], ':status' => $tpl['status'],
+                ':xid' => $tpl['experience_id'],
+                ':aud' => $tpl['audience'] ?? 'public',
+                ':cel' => (int) ($tpl['credit_eligible'] ?? 1),
+                ':rra' => $tpl['referral_reward_amount'],
+                ':pal' => $tpl['package_a_label'],
+                ':pap' => $tpl['package_a_perks'],
+                ':pbl' => $tpl['package_b_label'],
+                ':pbp' => $tpl['package_b_perks'],
+                ':pbe' => (int) ($tpl['package_b_enabled'] ?? 1),
+                ':id' => $targetId,
+            ]);
+            audit_log('event.cascade', 'events', $targetId);
+            flash('debug', 'Cascaded template → unbooked children.', 'success');
+        } else {
+            flash('debug', 'Not a template row.', 'error');
+        }
+        redirect('/admin/event_debug.php?id=' . $targetId);
+    }
+
+    if ($action === 'promote_child' && $targetId > 0) {
+        // Copy the child's differing config UP to the template. Useful
+        // when the admin has been editing a child by mistake and wants
+        // to preserve those settings.
+        $cStmt = db()->prepare("SELECT * FROM events WHERE id = :id LIMIT 1");
+        $cStmt->execute([':id' => $targetId]);
+        $child = $cStmt->fetch();
+        if ($child && !empty($child['parent_event_id'])) {
+            db()->prepare(
+                "UPDATE events SET
+                    status = :status,
+                    experience_id = :xid, audience = :aud, credit_eligible = :cel,
+                    referral_reward_amount = :rra,
+                    package_a_label = :pal, package_a_perks = :pap,
+                    package_b_label = :pbl, package_b_perks = :pbp,
+                    package_b_enabled = :pbe,
+                    price_public = :pp, price_member = :pm,
+                    capacity = :c, location = :l, facilitator = :f, category = :cat
+                  WHERE id = :id"
+            )->execute([
+                ':status' => $child['status'],
+                ':xid' => $child['experience_id'],
+                ':aud' => $child['audience'] ?? 'public',
+                ':cel' => (int) ($child['credit_eligible'] ?? 1),
+                ':rra' => $child['referral_reward_amount'],
+                ':pal' => $child['package_a_label'],
+                ':pap' => $child['package_a_perks'],
+                ':pbl' => $child['package_b_label'],
+                ':pbp' => $child['package_b_perks'],
+                ':pbe' => (int) ($child['package_b_enabled'] ?? 1),
+                ':pp' => $child['price_public'], ':pm' => $child['price_member'],
+                ':c' => $child['capacity'], ':l' => $child['location'],
+                ':f' => $child['facilitator'], ':cat' => $child['category'],
+                ':id' => (int) $child['parent_event_id'],
+            ]);
+            audit_log('event.promote_child', 'events', (int) $child['parent_event_id'], ['from_child' => $targetId]);
+            flash('debug', 'Copied child config up to template. Cascade again to spread to siblings.', 'success');
+            redirect('/admin/event_debug.php?id=' . (int) $child['parent_event_id']);
+        }
+        redirect('/admin/event_debug.php?id=' . $targetId);
+    }
+}
+
 $id = (int) input('id', 0);
 if ($id <= 0) {
     $eventsList = db()->query(
@@ -121,11 +219,29 @@ function fmt_val($v): string {
 
 <div class="flex items-center justify-between gap-3 flex-wrap">
   <h1 class="font-serif text-3xl text-beige-100">Event debug · #<?= (int) $template['id'] ?></h1>
-  <div class="flex gap-3">
+  <div class="flex gap-3 items-center">
     <a href="<?= url('/admin/event_debug.php') ?>" class="text-xs text-beige-100/60 hover:text-gold-400">← back to list</a>
     <a href="<?= url('/admin/event_form.php?id=' . (int) $template['id']) ?>" class="text-xs text-gold-400 hover:text-gold-300">Edit template →</a>
+
+    <?php if ($children): ?>
+      <!-- Force-cascade: pushes the template's current values down to
+           every unbooked child right now, without touching the form.
+           Same UPDATE the form save runs. -->
+      <form method="post" onsubmit="return confirm('Push template config to every unbooked child instance?');" class="inline">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="cascade">
+        <input type="hidden" name="id" value="<?= (int) $template['id'] ?>">
+        <button class="text-xs px-3 py-1.5 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400">
+          Cascade template → children
+        </button>
+      </form>
+    <?php endif; ?>
   </div>
 </div>
+
+<?php $flashDebug = flash('debug'); if ($flashDebug): ?>
+  <p class="mt-3 text-sm <?= ($flashDebug['type'] ?? '') === 'error' ? 'text-red-300/80' : 'text-emerald-300/80' ?>"><?= e($flashDebug['message']) ?></p>
+<?php endif; ?>
 
 <!-- Template card -->
 <section class="mt-6 border border-gold-500/30 rounded-2xl bg-navy-900/40 p-5">
@@ -208,8 +324,20 @@ function fmt_val($v): string {
             </p>
             <p class="text-[11px] text-beige-100/50 mt-0.5">status=<?= e((string) $c['status']) ?></p>
           </div>
-          <a href="<?= url('/admin/session_sheet.php?event_id=' . (int) $c['id']) ?>"
-             class="text-xs text-gold-400/80 hover:text-gold-300">Session sheet →</a>
+          <div class="flex items-center gap-3">
+            <a href="<?= url('/admin/session_sheet.php?event_id=' . (int) $c['id']) ?>"
+               class="text-xs text-gold-400/80 hover:text-gold-300">Session sheet →</a>
+            <?php if ($mismatches): ?>
+              <form method="post" onsubmit="return confirm('Copy this child's config UP to the template? You'll still need to Cascade to push it to sibling children.');" class="inline">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="promote_child">
+                <input type="hidden" name="id" value="<?= (int) $c['id'] ?>">
+                <button class="text-xs px-3 py-1.5 rounded-full border border-red-500/40 text-red-200 hover:bg-red-500/10">
+                  Promote to template
+                </button>
+              </form>
+            <?php endif; ?>
+          </div>
         </div>
 
         <?php if ($mismatches): ?>

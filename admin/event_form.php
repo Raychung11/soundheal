@@ -265,6 +265,23 @@ require __DIR__ . '/../includes/admin_layout.php';
 ?>
 <h1 class="font-serif text-3xl text-beige-100"><?= $id ? 'Edit session' : 'New session' ?></h1>
 
+<?php if ($id && !empty($event['parent_event_id'])): ?>
+  <!-- Editing a CHILD instance. Changes here only affect this one
+       date, not the template or the sibling occurrences. Loudly warn
+       so admins stop chasing "my Package B toggle didn't take effect
+       across all dates" bugs. -->
+  <div class="mt-4 border border-red-500/40 bg-red-500/10 rounded-2xl p-4 text-sm">
+    <p class="text-red-200 font-medium">You are editing one occurrence (#<?= (int) $id ?>) of a recurring template (#<?= (int) $event['parent_event_id'] ?>).</p>
+    <p class="text-red-200/85 mt-1 text-xs">Changes here only touch this specific date. To change every occurrence at once — Package B, prices, labels, experience link, status — edit the template instead.</p>
+    <p class="mt-2 flex gap-3 text-xs">
+      <a href="<?= url('/admin/event_form.php?id=' . (int) $event['parent_event_id']) ?>"
+         class="px-3 py-1.5 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400">Edit template #<?= (int) $event['parent_event_id'] ?> →</a>
+      <a href="<?= url('/admin/event_debug.php?id=' . (int) $event['parent_event_id']) ?>"
+         class="px-3 py-1.5 rounded-full border border-red-500/40 text-red-200 hover:bg-red-500/10">Debug view</a>
+    </p>
+  </div>
+<?php endif; ?>
+
 <?php foreach ($errors as $err): ?>
   <p class="mt-3 text-red-300/80"><?= e($err) ?></p>
 <?php endforeach; ?>
