@@ -39,7 +39,9 @@ return [
     'name'        => getenv('APP_NAME') ?: 'jaemie sound bath',
     'tagline'     => '',
     'env'         => getenv('APP_ENV') ?: 'production',
-    'debug'       => filter_var(getenv('APP_DEBUG') ?: 'false', FILTER_VALIDATE_BOOLEAN),
+    // TEMP: debug flipped ON to surface the 500 error. Revert to
+    // 'false' as the default once the underlying issue is fixed.
+    'debug'       => filter_var(getenv('APP_DEBUG') ?: 'true', FILTER_VALIDATE_BOOLEAN),
     'url'         => rtrim($envUrl !== '' ? $envUrl : $detectedUrl, '/'),
     'timezone'    => getenv('APP_TIMEZONE') ?: 'Asia/Kuala_Lumpur',
     'currency'    => 'MYR',
