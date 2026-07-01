@@ -20,7 +20,7 @@ $nextStmt = db()->prepare(
         AND (audience IS NULL OR audience = 'public')
         AND parent_event_id IS NULL
         AND experience_id = :xid
-        AND (recurrence IN ('daily','weekly') OR starts_at >= NOW())
+        AND (recurrence IN ('daily','weekly','monthly') OR starts_at >= NOW())
       ORDER BY starts_at ASC LIMIT 1"
 );
 foreach ($experiences as $idx => $exp) {
@@ -76,7 +76,7 @@ require __DIR__ . '/../includes/header.php';
               $reserveUrl = '/public/events.php?experience=' . urlencode((string) $exp['slug']);
               $nextLine = '';
               if ($nxt) {
-                  $nextLine = in_array($nxt['recurrence'] ?? 'none', ['daily','weekly'], true)
+                  $nextLine = in_array($nxt['recurrence'] ?? 'none', ['daily','weekly','monthly'], true)
                       ? describe_event_schedule($nxt)
                       : format_datetime($nxt['starts_at'], 'D, d M Y · g:i A');
               }

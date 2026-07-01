@@ -45,14 +45,25 @@ if (is_post()) {
         'facilitator'  => trim((string)input('facilitator', '')),
         'category'     => trim((string)input('category', '')),
         'status'       => in_array(input('status'), ['draft','published','archived','cancelled'], true) ? input('status') : 'draft',
-        'recurrence'      => in_array(input('recurrence'), ['none','daily','weekly'], true) ? input('recurrence') : 'none',
+        'recurrence'      => in_array(input('recurrence'), ['none','daily','weekly','monthly'], true) ? input('recurrence') : 'none',
         'recurrence_until' => trim((string) input('recurrence_until', '')) ?: null,
         'recurrence_days' => (function () {
-            $days = array_values(array_unique(array_filter(array_map('intval',
-                (array) ($_POST['recurrence_days'] ?? [])),
-                fn($n) => $n >= 0 && $n <= 6)));
-            sort($days);
-            return $days ? implode(',', $days) : null;
+            $mode = (string) input('recurrence', 'none');
+            if ($mode === 'weekly') {
+                $days = array_values(array_unique(array_filter(array_map('intval',
+                    (array) ($_POST['recurrence_days'] ?? [])),
+                    fn($n) => $n >= 0 && $n <= 6)));
+                sort($days);
+                return $days ? implode(',', $days) : null;
+            }
+            if ($mode === 'monthly') {
+                $ord  = (string) input('recurrence_monthly_ordinal', '1');
+                $dow  = (string) input('recurrence_monthly_dow', 'SUN');
+                if (!in_array($ord, ['1','2','3','4','5','L'], true))                       $ord = '1';
+                if (!in_array($dow, ['SUN','MON','TUE','WED','THU','FRI','SAT'], true))     $dow = 'SUN';
+                return $ord . $dow;
+            }
+            return null;
         })(),
         'package_a_label' => trim((string) input('package_a_label', '')),
         'package_a_perks' => trim((string) input('package_a_perks', '')),
@@ -151,8 +162,55 @@ if (is_post()) {
             $id = (int) db()->lastInsertId();
             audit_log('event.create', 'events', $id);
         }
+        // Sync skip dates (recurrence exceptions). Simple replace-all —
+        // parse the textarea, keep only valid YYYY-MM-DD dates, then
+        // wipe + reinsert. Only touched when the input was submitted so
+        // absent field never destroys existing exceptions unexpectedly.
+        if (array_key_exists('recurrence_exceptions', $_POST)) {
+            $raw   = (string) input('recurrence_exceptions', '');
+            $lines = preg_split('/[\r\n,;]+/', $raw) ?: [];
+            $dates = [];
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ($line === '') continue;
+                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $line) && strtotime($line) !== false) {
+                    $dates[$line] = true; // dedupe
+                }
+            }
+            db()->prepare("DELETE FROM event_recurrence_exceptions WHERE event_id = :id")
+                ->execute([':id' => $id]);
+            if ($dates) {
+                $ins = db()->prepare("INSERT IGNORE INTO event_recurrence_exceptions (event_id, exception_date) VALUES (:e, :d)");
+                foreach (array_keys($dates) as $d) {
+                    $ins->execute([':e' => $id, ':d' => $d]);
+                }
+            }
+        }
+
         flash('event', 'Saved.', 'success');
         redirect('/admin/events.php');
+    }
+}
+
+// Existing skip dates (recurrence exceptions) for prefilling the textarea.
+$existingExceptions = [];
+if ($id > 0) {
+    $exStmt = db()->prepare(
+        "SELECT exception_date FROM event_recurrence_exceptions
+          WHERE event_id = :id ORDER BY exception_date ASC"
+    );
+    $exStmt->execute([':id' => $id]);
+    $existingExceptions = array_column($exStmt->fetchAll(), 'exception_date');
+}
+
+// Existing monthly pattern → prefill ordinal + dow selects.
+$monthlyOrdinal = '1';
+$monthlyDow     = 'SUN';
+if (($event['recurrence'] ?? 'none') === 'monthly') {
+    $raw = strtoupper((string) ($event['recurrence_days'] ?? ''));
+    if (preg_match('/^([1-5L])(SUN|MON|TUE|WED|THU|FRI|SAT)$/', $raw, $mm)) {
+        $monthlyOrdinal = $mm[1];
+        $monthlyDow     = $mm[2];
     }
 }
 
@@ -254,6 +312,7 @@ require __DIR__ . '/../includes/admin_layout.php';
           <option value="none">One-off session (pick a specific date)</option>
           <option value="daily">Every day at the "Starts at" time</option>
           <option value="weekly">Every week on selected days</option>
+          <option value="monthly">Monthly on the Nth weekday</option>
         </select>
         <span class="text-[11px] text-beige-100/40 mt-1 block">Recurring templates auto-show as bookable cards on the calendar (next 60 days) — a concrete event materialises per date when someone reserves.</span>
       </label>
@@ -275,6 +334,39 @@ require __DIR__ . '/../includes/admin_layout.php';
           <?php endforeach; ?>
         </div>
         <span class="text-[11px] text-beige-100/40 mt-2 block">Session generates on each ticked day at the "Starts at" time.</span>
+      </div>
+
+      <div x-show="rec === 'monthly'" x-cloak class="mt-4 rounded-2xl border border-white/10 bg-navy-950/40 p-4">
+        <p class="text-[11px] uppercase tracking-widest text-beige-100/55 mb-3">Nth weekday</p>
+        <div class="grid sm:grid-cols-2 gap-3">
+          <label class="block">
+            <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Ordinal</span>
+            <select name="recurrence_monthly_ordinal" class="mt-1 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-2.5 text-sm">
+              <?php foreach (['1'=>'First','2'=>'Second','3'=>'Third','4'=>'Fourth','5'=>'Fifth','L'=>'Last'] as $v => $lbl): ?>
+                <option value="<?= e($v) ?>" <?= $monthlyOrdinal === $v ? 'selected' : '' ?>><?= e($lbl) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <label class="block">
+            <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Weekday</span>
+            <select name="recurrence_monthly_dow" class="mt-1 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-2.5 text-sm">
+              <?php foreach (['SUN'=>'Sunday','MON'=>'Monday','TUE'=>'Tuesday','WED'=>'Wednesday','THU'=>'Thursday','FRI'=>'Friday','SAT'=>'Saturday'] as $v => $lbl): ?>
+                <option value="<?= e($v) ?>" <?= $monthlyDow === $v ? 'selected' : '' ?>><?= e($lbl) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+        </div>
+        <span class="text-[11px] text-beige-100/40 mt-2 block">e.g. "First Sunday" or "Last Friday" — the session generates once each month on that day at the "Starts at" time.</span>
+      </div>
+
+      <div x-show="rec !== 'none'" x-cloak class="mt-4">
+        <label class="block">
+          <span class="text-xs uppercase tracking-widest text-beige-100/60">Skip these dates <span class="text-beige-100/30">(one YYYY-MM-DD per line)</span></span>
+          <textarea name="recurrence_exceptions" rows="3"
+                    placeholder="2026-08-31&#10;2026-12-25"
+                    class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3 font-mono text-sm"><?= e(implode("\n", $existingExceptions)) ?></textarea>
+          <span class="text-[11px] text-beige-100/40 mt-1 block">Public holidays, facilitator away, venue booked — dates listed here disappear from the calendar and can't be booked. Existing bookings on skipped dates aren't touched.</span>
+        </label>
       </div>
     </div>
     <label class="block">

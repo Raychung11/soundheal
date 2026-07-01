@@ -18,6 +18,52 @@ declare(strict_types=1);
 
 if (!function_exists('expand_event_occurrences')) {
 
+    /**
+     * Compute the Nth (1..5) or 'L' (last) weekday of a given
+     * calendar month. Returns YYYY-MM-DD or null if the ordinal
+     * doesn't exist that month (e.g. no 5th Sunday).
+     */
+    function nth_weekday_of_month(int $year, int $month, $ordinal, int $dow): ?string
+    {
+        $firstTs   = mktime(0, 0, 0, $month, 1, $year);
+        $daysCount = (int) date('t', $firstTs);
+        $firstDow  = (int) date('w', $firstTs);
+        if ($ordinal === 'L') {
+            $lastTs  = mktime(0, 0, 0, $month, $daysCount, $year);
+            $lastDow = (int) date('w', $lastTs);
+            $day     = $daysCount - (($lastDow - $dow + 7) % 7);
+        } else {
+            $ord = (int) $ordinal;
+            if ($ord < 1 || $ord > 5) return null;
+            $day = 1 + (($dow - $firstDow + 7) % 7) + ($ord - 1) * 7;
+            if ($day > $daysCount) return null;
+        }
+        return sprintf('%04d-%02d-%02d', $year, $month, $day);
+    }
+
+    /**
+     * Parse a monthly pattern like "1SUN" or "LFRI" into
+     * [ordinal, dow] or null on invalid input.
+     */
+    function parse_monthly_pattern(string $raw): ?array
+    {
+        $raw = strtoupper(trim($raw));
+        if (!preg_match('/^([1-5L])(SUN|MON|TUE|WED|THU|FRI|SAT)$/', $raw, $m)) return null;
+        $dowMap = ['SUN'=>0,'MON'=>1,'TUE'=>2,'WED'=>3,'THU'=>4,'FRI'=>5,'SAT'=>6];
+        return [$m[1] === 'L' ? 'L' : (int) $m[1], $dowMap[$m[2]]];
+    }
+
+    /** Load skip dates for one template as a set of YYYY-MM-DD strings. */
+    function load_event_exceptions(int $eventId): array
+    {
+        static $cache = [];
+        if (isset($cache[$eventId])) return $cache[$eventId];
+        $stmt = db()->prepare("SELECT exception_date FROM event_recurrence_exceptions WHERE event_id = :id");
+        $stmt->execute([':id' => $eventId]);
+        $dates = array_fill_keys(array_column($stmt->fetchAll(), 'exception_date'), true);
+        return $cache[$eventId] = $dates;
+    }
+
     function expand_event_occurrences(array $rows, int $days = 14): array
     {
         $now      = time();
@@ -37,7 +83,7 @@ if (!function_exists('expand_event_occurrences')) {
         foreach ($rows as $e) {
             $recurrence = (string) ($e['recurrence'] ?? 'none');
 
-            if ($recurrence !== 'daily' && $recurrence !== 'weekly') {
+            if (!in_array($recurrence, ['daily','weekly','monthly'], true)) {
                 // One-off — pass through if in the future.
                 if (strtotime((string) $e['starts_at']) >= $now) {
                     $e['_template_id']     = 0;
@@ -55,26 +101,46 @@ if (!function_exists('expand_event_occurrences')) {
             $untilTs      = !empty($e['recurrence_until'])
                 ? strtotime($e['recurrence_until'] . ' 23:59:59')
                 : null;
+            $exceptions   = load_event_exceptions((int) $e['id']);
 
-            // For weekly, parse the CSV of allowed day-of-week numbers
-            // (0=Sun..6=Sat). Empty / unparseable = no occurrences.
-            $allowedDays = null;
-            if ($recurrence === 'weekly') {
+            // Build the list of candidate dates for this recurrence.
+            $candidates = [];
+            if ($recurrence === 'daily') {
+                for ($i = 0; $i < $days; $i++) {
+                    $candidates[] = date('Y-m-d', $startDay + $i * 86400);
+                }
+            } elseif ($recurrence === 'weekly') {
                 $allowedDays = array_values(array_filter(array_map('intval',
                     explode(',', (string) ($e['recurrence_days'] ?? '')))
                     , fn($n) => $n >= 0 && $n <= 6));
                 if (!$allowedDays) continue;
+                for ($i = 0; $i < $days; $i++) {
+                    $ts = $startDay + $i * 86400;
+                    if (in_array((int) date('w', $ts), $allowedDays, true)) {
+                        $candidates[] = date('Y-m-d', $ts);
+                    }
+                }
+            } else { // monthly
+                $parsed = parse_monthly_pattern((string) ($e['recurrence_days'] ?? ''));
+                if (!$parsed) continue;
+                [$ordinal, $dow] = $parsed;
+                $windowEnd = $startDay + $days * 86400;
+                $iter      = strtotime(date('Y-m-01', $startDay));
+                while ($iter <= $windowEnd) {
+                    $y = (int) date('Y', $iter);
+                    $m = (int) date('n', $iter);
+                    $d = nth_weekday_of_month($y, $m, $ordinal, $dow);
+                    if ($d !== null && strtotime($d) >= $startDay) $candidates[] = $d;
+                    $iter = strtotime('+1 month', $iter);
+                }
             }
 
-            for ($i = 0; $i < $days; $i++) {
-                $occDay   = $startDay + $i * 86400;
-                $occDate  = date('Y-m-d', $occDay);
+            foreach ($candidates as $occDate) {
+                if (isset($exceptions[$occDate])) continue;
                 $occStart = $occDate . ' ' . $templateTime;
                 $occTs    = strtotime($occStart);
-
                 if ($occTs <= $now) continue;
                 if ($untilTs !== null && $occTs > $untilTs) continue;
-                if ($recurrence === 'weekly' && !in_array((int) date('w', $occTs), $allowedDays, true)) continue;
 
                 $childStmt->execute([':pid' => $e['id'], ':d' => $occDate]);
                 $child = $childStmt->fetch();
@@ -120,6 +186,14 @@ if (!function_exists('expand_event_occurrences')) {
                 : implode(', ', array_slice($names, 0, -1)) . ' & ' . end($names));
             return 'Every ' . $joined . ' at ' . $time;
         }
+        if ($rec === 'monthly') {
+            $parsed = parse_monthly_pattern((string) ($e['recurrence_days'] ?? ''));
+            if (!$parsed) return 'Monthly · date TBA';
+            [$ord, $dow] = $parsed;
+            $labels = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+            $ordName = $ord === 'L' ? 'Last' : [null,'First','Second','Third','Fourth','Fifth'][$ord];
+            return $ordName . ' ' . $labels[$dow] . ' of every month at ' . $time;
+        }
         return format_datetime($e['starts_at'], 'l, d M Y · g:i A');
     }
 
@@ -137,17 +211,30 @@ if (!function_exists('expand_event_occurrences')) {
         $tpl = $tplStmt->fetch();
         if (!$tpl) return null;
         $rec = (string) ($tpl['recurrence'] ?? 'none');
-        if ($rec !== 'daily' && $rec !== 'weekly') return null;
+        if (!in_array($rec, ['daily','weekly','monthly'], true)) return null;
 
-        // For weekly templates, only accept a date that falls on one of
-        // the allowed day-of-week numbers — otherwise the booking would
-        // create a session outside the advertised schedule.
+        // Reject any excepted date up-front — the admin explicitly
+        // skipped it, so no booking should materialise on that day.
+        $exceptions = load_event_exceptions((int) $tpl['id']);
+        if (isset($exceptions[$date])) return null;
+
+        // Weekly: date must land on an allowed day-of-week.
         if ($rec === 'weekly') {
             $allowed = array_values(array_filter(array_map('intval',
                 explode(',', (string) ($tpl['recurrence_days'] ?? '')))
                 , fn($n) => $n >= 0 && $n <= 6));
             $dow = (int) date('w', strtotime($date . ' 00:00:00'));
             if (!$allowed || !in_array($dow, $allowed, true)) return null;
+        }
+        // Monthly: date must equal the pattern's Nth-weekday for that month.
+        if ($rec === 'monthly') {
+            $parsed = parse_monthly_pattern((string) ($tpl['recurrence_days'] ?? ''));
+            if (!$parsed) return null;
+            [$ordinal, $dow] = $parsed;
+            $y = (int) date('Y', strtotime($date));
+            $m = (int) date('n', strtotime($date));
+            $expected = nth_weekday_of_month($y, $m, $ordinal, $dow);
+            if ($expected !== $date) return null;
         }
 
         $childStmt = db()->prepare(

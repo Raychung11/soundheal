@@ -28,7 +28,7 @@ $eventsSql =
       WHERE e.status = 'published'
         AND (e.audience IS NULL OR e.audience = 'public')
         AND e.parent_event_id IS NULL
-        AND (e.recurrence = 'daily' OR e.starts_at >= NOW())"
+        AND (e.recurrence IN ('daily','weekly','monthly') OR e.starts_at >= NOW())"
     . ($filterExperience ? " AND e.experience_id = :xid" : "")
     . " ORDER BY e.starts_at ASC";
 $eventsStmt = db()->prepare($eventsSql);
