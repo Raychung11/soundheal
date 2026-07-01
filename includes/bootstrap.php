@@ -52,3 +52,10 @@ require_once __DIR__ . '/revenue.php';
 require_once __DIR__ . '/events_recurrence.php';
 require_once __DIR__ . '/aria.php';
 require_once __DIR__ . '/aria_tools.php';
+
+// If the visitor arrived with ?ref=<code> on any public page, drop the
+// referral cookie so it can fire on later signup / booking. No-op when
+// no ref param is present.
+if (function_exists('capture_referral_cookie')) {
+    capture_referral_cookie();
+}
