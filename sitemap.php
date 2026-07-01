@@ -21,6 +21,7 @@ $pages = [
     '/public/terms.php'       => ['yearly',  '0.3'],
     '/public/privacy.php'     => ['yearly',  '0.3'],
     '/public/refund.php'      => ['yearly',  '0.3'],
+    '/public/waiver.php'      => ['yearly',  '0.3'],
 ];
 
 echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n";

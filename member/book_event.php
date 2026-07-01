@@ -54,6 +54,17 @@ if (!$byoPerks) $byoPerks = $defaultByoPerks;
 // Credit balance — lets the member pay with a pack credit instead of cash.
 $creditBalance = credit_balance_for((int) $user['id']);
 
+// Waiver / health disclosure — show the acknowledgement panel if the
+// member hasn't accepted yet OR the admin has updated the waiver body
+// since their last acceptance.
+$waiverBody      = trim((string) setting('legal_waiver_body', ''));
+$waiverUpdatedAt = trim((string) setting('legal_waiver_updated_at', ''));
+$acceptedAt      = trim((string) ($user['waiver_accepted_at'] ?? ''));
+$needsWaiver     = $waiverBody !== '' && (
+    $acceptedAt === '' ||
+    ($waiverUpdatedAt !== '' && substr($acceptedAt, 0, 10) < $waiverUpdatedAt)
+);
+
 $errors = [];
 
 if (is_post()) {
@@ -66,6 +77,16 @@ if (is_post()) {
     // events the admin has flagged as credit_eligible.
     $eventCreditsAllowed = !array_key_exists('credit_eligible', $event) || (int) $event['credit_eligible'] === 1;
     $useCredit = !empty($_POST['use_credit']) && $creditBalance > 0 && $eventCreditsAllowed;
+
+    // Waiver acceptance + health disclosure.
+    $waiverAcceptedNow = !empty($_POST['waiver_accepted']);
+    if ($needsWaiver && !$waiverAcceptedNow) {
+        $errors[] = 'Please read and tick the session waiver to continue.';
+    }
+    $healthDisclosure = trim((string) input('health_disclosure', ''));
+    if (mb_strlen($healthDisclosure) > 2000) {
+        $errors[] = 'Please keep the health note under 2000 characters.';
+    }
     $qty = $useCredit ? 1 : max(1, min(6, (int) input('quantity', 1)));
     $unitPrice = $package === 'byo' ? $byoPrice : $comfortPrice;
     $packageLabel = $package === 'byo' ? $byoName : $comfortName;
@@ -146,8 +167,8 @@ if (is_post()) {
         $total = max(0.0, round($subtotal - $discountAmount, 2));
 
         $ins = db()->prepare(
-            "INSERT INTO event_bookings (booking_ref, user_id, event_id, quantity, unit_price, total_amount, status, paid_with_credit, package, intake_data)
-             VALUES (:ref, :u, :e, :q, :up, :tot, :status, :pwc, :pkg, :intake)"
+            "INSERT INTO event_bookings (booking_ref, user_id, event_id, quantity, unit_price, total_amount, status, paid_with_credit, package, intake_data, health_disclosure)
+             VALUES (:ref, :u, :e, :q, :up, :tot, :status, :pwc, :pkg, :intake, :health)"
         );
         $ins->execute([
             ':ref' => $bookingRef,
@@ -160,6 +181,7 @@ if (is_post()) {
             ':pwc' => $useCredit ? 1 : 0,
             ':pkg' => $package,
             ':intake' => $intakeData,
+            ':health' => $healthDisclosure !== '' ? $healthDisclosure : null,
         ]);
         $bookingId = (int) db()->lastInsertId();
 
@@ -192,6 +214,13 @@ if (is_post()) {
                     ':token' => generate_token(24),
                 ]);
             }
+        }
+
+        // Stamp the member's waiver acceptance once the booking is
+        // in — the checkbox was validated above.
+        if ($needsWaiver && $waiverAcceptedNow) {
+            db()->prepare("UPDATE users SET waiver_accepted_at = NOW() WHERE id = :id")
+                ->execute([':id' => (int) $user['id']]);
         }
 
         db()->commit();
@@ -420,6 +449,29 @@ require __DIR__ . '/../includes/header.php';
       // error. Hidden when a credit is being redeemed.
       $promoPrefill = trim((string) input('promo_code', (string) input('promo', '')));
     ?>
+    <!-- Optional health disclosure — always shown so front-of-house sees any allergies / conditions on the prep sheet. -->
+    <label class="block">
+      <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Anything we should know? <span class="text-beige-100/35 lowercase tracking-normal">(optional — allergies, injuries, pregnancy, medication)</span></span>
+      <textarea name="health_disclosure" rows="2" maxlength="2000" placeholder="Held in confidence."
+                class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3 text-sm focus:border-gold-500/50 focus:outline-none"><?= e((string) input('health_disclosure', '')) ?></textarea>
+    </label>
+
+    <?php if ($needsWaiver): ?>
+      <div class="border border-gold-500/25 rounded-2xl p-5 bg-gold-500/5 space-y-4">
+        <p class="text-[10px] uppercase tracking-[0.3em] text-gold-400/80">Session waiver</p>
+        <div class="text-xs text-beige-100/70 leading-relaxed max-h-40 overflow-y-auto pr-2 space-y-2">
+          <?= $waiverBody /* admin-authored HTML, editable at /admin/legal_settings.php?which=waiver */ ?>
+        </div>
+        <label class="flex items-start gap-3 cursor-pointer">
+          <input type="checkbox" name="waiver_accepted" value="1" <?= !empty($_POST['waiver_accepted']) ? 'checked' : '' ?> class="mt-1 accent-gold-500" required>
+          <span class="text-sm text-beige-100">I've read and agree to the session waiver above.</span>
+        </label>
+        <p class="text-[11px] text-beige-100/45">
+          <a href="<?= url('/public/waiver.php') ?>" target="_blank" class="text-gold-400/80 hover:text-gold-300 underline-offset-4 hover:underline">Open the full waiver in a new tab →</a>
+        </p>
+      </div>
+    <?php endif; ?>
+
     <details class="rounded-2xl border border-white/5 bg-navy-900/40 p-4" <?= $promoPrefill !== '' ? 'open' : '' ?> x-show="!useCredit" x-cloak>
       <summary class="cursor-pointer text-sm text-beige-100/75 hover:text-gold-400 transition">
         Have a promo code?

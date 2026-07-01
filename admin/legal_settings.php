@@ -7,6 +7,7 @@ $policies = [
     'terms'   => ['Terms of Service', '/public/terms.php'],
     'privacy' => ['Privacy Policy',   '/public/privacy.php'],
     'refund'  => ['Refund Policy',    '/public/refund.php'],
+    'waiver'  => ['Booking Waiver',   '/public/waiver.php'],
 ];
 
 if (is_post()) {

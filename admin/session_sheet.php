@@ -35,7 +35,7 @@ $isRecurringTemplate = ($event['recurrence'] ?? 'none') === 'daily' && empty($ev
 $bookingsStmt = db()->prepare(
     "SELECT b.id, b.booking_ref, b.status, b.quantity, b.package,
             b.paid_with_credit, b.unit_price, b.total_amount,
-            b.intake_data, b.created_at,
+            b.intake_data, b.health_disclosure, b.created_at,
             u.full_name, u.email, u.phone
        FROM event_bookings b
        JOIN users u ON u.id = b.user_id
@@ -211,6 +211,10 @@ require __DIR__ . '/../includes/admin_layout.php';
           <span class="text-beige-100/85">
             <?= e($packageName($b['package'] ?? null)) ?> · <?= (int) $b['quantity'] ?> seat<?= (int) $b['quantity'] === 1 ? '' : 's' ?>
           </span>
+          <?php if (!empty($b['health_disclosure'])): ?>
+            <span class="text-[10px] uppercase tracking-widest text-red-300/70">Health note</span>
+            <span class="text-sm text-red-100/80"><?= nl2br(e((string) $b['health_disclosure'])) ?></span>
+          <?php endif; ?>
         </div>
 
         <?php if ($pets): ?>
