@@ -5,6 +5,7 @@ $brandTagline = (string) setting('company_tagline', (string) config('app.tagline
 $nav = [
     ['Experiences', '/public/experiences.php'],
     ['Sessions',    '/public/events.php'],
+    ['Gallery',     '/public/gallery.php'],
     ['Membership',  '/public/membership.php'],
     ['About',       '/public/about.php'],
     ['Contact',     '/public/contact.php'],

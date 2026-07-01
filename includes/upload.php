@@ -12,6 +12,7 @@ const UPLOAD_BUCKETS = [
     'experiences'  => ['max' => 5_000_000, 'mimes' => ['image/jpeg','image/png','image/webp']],
     'content'      => ['max' => 16_000_000,'mimes' => ['audio/mpeg','audio/mp4','audio/wav','audio/x-wav','audio/ogg','image/jpeg','image/png','image/webp']],
     'testimonials' => ['max' => 3_000_000, 'mimes' => ['image/jpeg','image/png','image/webp']],
+    'gallery'      => ['max' => 8_000_000, 'mimes' => ['image/jpeg','image/png','image/webp']],
     'avatars'      => ['max' => 2_000_000, 'mimes' => ['image/jpeg','image/png','image/webp']],
     'home'         => ['max' => 8_000_000, 'mimes' => ['image/jpeg','image/png','image/webp','audio/mpeg','audio/mp4','audio/wav','audio/x-wav','audio/ogg']],
 ];
