@@ -84,7 +84,9 @@ require __DIR__ . '/../includes/admin_layout.php';
               </span>
             <?php endif; ?>
           </td>
-          <td class="text-right pr-4">
+          <td class="text-right pr-4 whitespace-nowrap">
+            <a href="<?= url('/admin/session_sheet.php?event_id=' . (int)$e['id']) ?>"
+               class="text-gold-400/80 text-xs hover:text-gold-300 mr-3">Sheet</a>
             <a href="<?= url('/admin/event_form.php?id=' . (int)$e['id']) ?>" class="text-gold-400 text-sm hover:text-gold-300">Edit</a>
             <form method="post" class="inline ml-3" onsubmit="return confirm('Archive this event?');">
               <?= csrf_field() ?>
