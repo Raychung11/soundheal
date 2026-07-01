@@ -98,6 +98,31 @@ if (is_post()) {
             audit_log('experience.create', 'experiences', $newId);
             flash('experiences', 'Experience created.', 'success');
         }
+
+        // Auto-claim any orphan events whose title matches this experience
+        // (normalised — emojis and punctuation stripped, case-insensitive).
+        // Preserves manual links: only touches events with experience_id NULL.
+        $expId    = $id > 0 ? $id : $newId;
+        $normTitle = strtolower(preg_replace('/[^A-Za-z0-9]+/', '', $title));
+        if ($expId > 0 && $normTitle !== '') {
+            $linked = db()->prepare(
+                "UPDATE events e
+                    SET e.experience_id = :xid
+                  WHERE e.experience_id IS NULL
+                    AND e.parent_event_id IS NULL
+                    AND (
+                         LOWER(REGEXP_REPLACE(e.title, '[^A-Za-z0-9]+', ''))
+                           LIKE CONCAT('%', :nt, '%')
+                      OR :nt2
+                           LIKE CONCAT('%', LOWER(REGEXP_REPLACE(e.title, '[^A-Za-z0-9]+', '')), '%')
+                    )"
+            );
+            $linked->execute([':xid' => $expId, ':nt' => $normTitle, ':nt2' => $normTitle]);
+            if ($linked->rowCount() > 0) {
+                audit_log('experience.autolink', 'experiences', $expId, ['events_linked' => $linked->rowCount()]);
+            }
+        }
+
         redirect('/admin/experiences.php');
     }
 

@@ -62,7 +62,10 @@ if (is_post()) {
     if (!in_array($package, ['comfort', 'byo'], true)) {
         $package = 'comfort';
     }
-    $useCredit = !empty($_POST['use_credit']) && $creditBalance > 0;
+    // Server-side guard mirroring the UI: credits can only pay for
+    // events the admin has flagged as credit_eligible.
+    $eventCreditsAllowed = !array_key_exists('credit_eligible', $event) || (int) $event['credit_eligible'] === 1;
+    $useCredit = !empty($_POST['use_credit']) && $creditBalance > 0 && $eventCreditsAllowed;
     $qty = $useCredit ? 1 : max(1, min(6, (int) input('quantity', 1)));
     $unitPrice = $package === 'byo' ? $byoPrice : $comfortPrice;
     $packageLabel = $package === 'byo' ? $byoName : $comfortName;
@@ -291,7 +294,11 @@ require __DIR__ . '/../includes/header.php';
       </div>
     </label>
 
-    <?php if ($creditBalance > 0): ?>
+    <?php
+      // credit_eligible defaults to 1 for pre-migration rows.
+      $creditsAllowed = !array_key_exists('credit_eligible', $event) || (int) $event['credit_eligible'] === 1;
+    ?>
+    <?php if ($creditsAllowed && $creditBalance > 0): ?>
       <label class="flex items-start gap-3 border border-gold-500/30 rounded-2xl p-5 bg-gold-500/5 cursor-pointer">
         <input type="checkbox" name="use_credit" value="1" x-model="useCredit" class="mt-1 accent-gold-500">
         <span>
@@ -299,6 +306,8 @@ require __DIR__ . '/../includes/header.php';
           <span class="block text-xs text-beige-100/60 mt-1">You hold <strong class="text-gold-400"><?= (int)$creditBalance ?> credit<?= $creditBalance === 1 ? '' : 's' ?></strong> · one credit = one seat. <a href="<?= url('/member/my_credits.php') ?>" class="text-gold-400 hover:text-gold-300 underline-offset-4 hover:underline">View balance</a></span>
         </span>
       </label>
+    <?php elseif (!$creditsAllowed && $creditBalance > 0): ?>
+      <p class="text-[11px] text-beige-100/45 italic px-2">Class-pack credits can't be used for this session — it must be paid.</p>
     <?php endif; ?>
 
     <?php if (($event['intake_type'] ?? 'none') === 'pet'):

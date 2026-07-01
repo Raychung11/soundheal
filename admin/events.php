@@ -66,7 +66,15 @@ require __DIR__ . '/../includes/admin_layout.php';
             <?php endif; ?>
           </td>
           <td><?= e(format_datetime($e['starts_at'])) ?></td>
-          <td><span class="text-xs px-2 py-1 rounded-full <?= $e['status'] === 'published' ? 'bg-gold-500/20 text-gold-400' : 'bg-white/5 text-beige-100/60' ?>"><?= e($e['status']) ?></span></td>
+          <td>
+            <span class="text-xs px-2 py-1 rounded-full <?= $e['status'] === 'published' ? 'bg-gold-500/20 text-gold-400' : 'bg-white/5 text-beige-100/60' ?>"><?= e($e['status']) ?></span>
+            <?php if (($e['audience'] ?? 'public') === 'private'): ?>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-beige-100/55 border border-white/10 ml-1" title="Hidden from public browse">private</span>
+            <?php endif; ?>
+            <?php if (array_key_exists('credit_eligible', $e) && (int) $e['credit_eligible'] === 0): ?>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-beige-100/55 border border-white/10 ml-1" title="Class-pack credits can't book this session">no credits</span>
+            <?php endif; ?>
+          </td>
           <td>
             <span class="text-beige-100"><?= (int)$e['seats_taken'] ?></span>
             <span class="text-beige-100/40">/ <?= (int)$e['capacity'] ?></span>

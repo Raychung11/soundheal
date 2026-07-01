@@ -44,6 +44,7 @@ $showHomeVideo       = $homeVideoEnabled && $homeVideoId !== '';
 $upcomingRaw = db()->query(
     "SELECT e.* FROM events e
       WHERE e.status = 'published'
+        AND (e.audience IS NULL OR e.audience = 'public')
         AND e.parent_event_id IS NULL
         AND (e.recurrence = 'daily' OR e.starts_at >= NOW())
       ORDER BY e.starts_at ASC"

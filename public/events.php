@@ -26,6 +26,7 @@ if ($filterSlug !== '') {
 $eventsSql =
     "SELECT e.* FROM events e
       WHERE e.status = 'published'
+        AND (e.audience IS NULL OR e.audience = 'public')
         AND e.parent_event_id IS NULL
         AND (e.recurrence = 'daily' OR e.starts_at >= NOW())"
     . ($filterExperience ? " AND e.experience_id = :xid" : "")

@@ -11,7 +11,9 @@ $event = ['id' => 0, 'slug' => '', 'title' => '', 'subtitle' => '', 'description
           'package_a_label' => '', 'package_a_perks' => '',
           'package_b_label' => '', 'package_b_perks' => '',
           'experience_id' => null,
-          'referral_reward_amount' => ''];
+          'referral_reward_amount' => '',
+          'audience' => 'public',
+          'credit_eligible' => 1];
 
 $experienceOptions = db()->query(
     "SELECT id, title FROM experiences WHERE status = 'active' ORDER BY sort_order ASC, title ASC"
@@ -51,6 +53,8 @@ if (is_post()) {
         'package_b_perks' => trim((string) input('package_b_perks', '')),
         'experience_id'   => ($v = (int) input('experience_id', 0)) > 0 ? $v : null,
         'referral_reward_amount' => (($ra = trim((string) input('referral_reward_amount', ''))) !== '' && (float) $ra > 0) ? (float) $ra : null,
+        'audience'        => in_array(input('audience'), ['public','private'], true) ? input('audience') : 'public',
+        'credit_eligible' => !empty($_POST['credit_eligible']) ? 1 : 0,
     ]);
     if ($event['title'] === '' || !$event['starts_at'] || !$event['ends_at']) {
         $errors[] = 'Title, start and end time are required.';
@@ -85,7 +89,8 @@ if (is_post()) {
                  package_a_label=:pal, package_a_perks=:pap,
                  package_b_label=:pbl, package_b_perks=:pbp,
                  experience_id=:xid,
-                 referral_reward_amount=:rra
+                 referral_reward_amount=:rra,
+                 audience=:aud, credit_eligible=:cel
                  WHERE id=:id"
             );
             $stmt->execute([
@@ -101,6 +106,8 @@ if (is_post()) {
                 ':pbp' => $event['package_b_perks'] ?: null,
                 ':xid' => $event['experience_id'],
                 ':rra' => $event['referral_reward_amount'],
+                ':aud' => $event['audience'],
+                ':cel' => (int) $event['credit_eligible'],
                 ':id' => $id,
             ]);
             audit_log('event.update', 'events', $id);
@@ -110,9 +117,10 @@ if (is_post()) {
                                      capacity, price_public, price_member, facilitator, category, status,
                                      recurrence, recurrence_until,
                                      package_a_label, package_a_perks, package_b_label, package_b_perks,
-                                     experience_id, referral_reward_amount, created_by)
+                                     experience_id, referral_reward_amount,
+                                     audience, credit_eligible, created_by)
                  VALUES (:slug, :t, :st, :d, :ci, :l, :s, :e, :c, :pp, :pm, :f, :cat, :status,
-                         :rec, :ru, :pal, :pap, :pbl, :pbp, :xid, :rra, :uid)"
+                         :rec, :ru, :pal, :pap, :pbl, :pbp, :xid, :rra, :aud, :cel, :uid)"
             );
             $stmt->execute([
                 ':slug' => $slug, ':t' => $event['title'], ':st' => $event['subtitle'],
@@ -127,6 +135,8 @@ if (is_post()) {
                 ':pbp' => $event['package_b_perks'] ?: null,
                 ':xid' => $event['experience_id'],
                 ':rra' => $event['referral_reward_amount'],
+                ':aud' => $event['audience'],
+                ':cel' => (int) $event['credit_eligible'],
                 ':uid' => current_user_id(),
             ]);
             $id = (int) db()->lastInsertId();
@@ -240,6 +250,21 @@ require __DIR__ . '/../includes/admin_layout.php';
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Recurs until <span class="text-beige-100/30">(optional)</span></span>
       <input name="recurrence_until" type="date" value="<?= e((string) ($event['recurrence_until'] ?? '')) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
       <span class="text-[11px] text-beige-100/40 mt-1 block">Leave blank for indefinite. Only used when recurrence is Daily.</span>
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Audience</span>
+      <select name="audience" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+        <option value="public"  <?= ($event['audience'] ?? 'public') === 'public'  ? 'selected' : '' ?>>Public — appears on the calendar</option>
+        <option value="private" <?= ($event['audience'] ?? 'public') === 'private' ? 'selected' : '' ?>>Private — hidden from public browse (direct link only)</option>
+      </select>
+      <span class="text-[11px] text-beige-100/40 mt-1 block">Private sessions still open via their direct URL so you can share an invite with specific customers.</span>
+    </label>
+    <label class="flex items-start gap-3 rounded-2xl border border-white/5 bg-navy-900/40 p-4">
+      <input type="checkbox" name="credit_eligible" value="1" <?= !empty($event['credit_eligible']) || !isset($event['credit_eligible']) ? 'checked' : '' ?> class="mt-1 accent-gold-500">
+      <span>
+        <span class="text-sm text-beige-100">Class-pack credits can book this session</span>
+        <span class="block text-[11px] text-beige-100/45 mt-1">Uncheck for premium / group / partner sessions that must be paid — the "Use 1 credit" option is hidden on the booking form.</span>
+      </span>
     </label>
   </div>
 

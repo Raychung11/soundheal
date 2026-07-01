@@ -17,6 +17,7 @@ $nextStmt = db()->prepare(
     "SELECT id, title, starts_at, recurrence, capacity, ends_at
        FROM events
       WHERE status = 'published'
+        AND (audience IS NULL OR audience = 'public')
         AND parent_event_id IS NULL
         AND experience_id = :xid
         AND (recurrence = 'daily' OR starts_at >= NOW())
