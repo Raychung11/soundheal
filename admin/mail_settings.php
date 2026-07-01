@@ -250,4 +250,33 @@ $allSet = $cfg['host'] !== '' && $cfg['username'] !== '' && $cfg['password'] !==
   </ol>
 </div>
 
+<?php
+  $reminderToken = (string) setting('reminder_cron_token', '');
+  $reminderUrl   = rtrim((string) config('app.url'), '/') . '/api/send_reminders.php?token=' . urlencode($reminderToken);
+?>
+
+<div class="mt-10 max-w-3xl border border-white/5 rounded-3xl p-6 bg-navy-900/40 space-y-3">
+  <h2 class="font-serif text-2xl text-gold-400">Booking reminders · cron</h2>
+  <p class="text-sm text-beige-100/70 leading-relaxed">
+    Automated <em>"your session is tomorrow"</em> and <em>"starting in 2 hours"</em> emails go out when this
+    endpoint is hit periodically. Add a cron in Hostinger hPanel → Advanced → Cron Jobs, every 30 minutes:
+  </p>
+  <?php if ($reminderToken === ''): ?>
+    <p class="text-sm text-red-300/80">The reminder token isn't set yet — apply <code>database/migrations/044_phase7_booking_reminders.sql</code> first.</p>
+  <?php else: ?>
+    <label class="block text-sm">
+      <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Cron URL</span>
+      <input type="text" readonly value="<?= e($reminderUrl) ?>"
+             onclick="this.select()"
+             class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3 font-mono text-xs text-beige-100/85">
+    </label>
+    <p class="text-xs text-beige-100/55">
+      Hostinger cron command:
+      <code class="block mt-2 p-3 rounded-xl bg-navy-950/70 border border-white/5 text-[11px] break-all">*/30 * * * * /usr/bin/curl -fsS "<?= e($reminderUrl) ?>" &gt;/dev/null 2&gt;&amp;1</code>
+    </p>
+    <a href="<?= e($reminderUrl) ?>" target="_blank" rel="noopener"
+       class="inline-block mt-2 text-xs text-gold-400 hover:text-gold-300">Run once now →</a>
+  <?php endif; ?>
+</div>
+
 <?php require __DIR__ . '/../includes/admin_layout_end.php'; ?>

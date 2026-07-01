@@ -10,7 +10,9 @@ function render_mail_template(string $name, array $vars): array
         'welcome'         => 'mail_template_welcome',
         'password_reset'  => 'mail_template_password_reset',
         'verify_email'    => 'mail_template_verify_email',
-        'booking_confirm' => 'mail_template_booking_confirm',
+        'booking_confirm'     => 'mail_template_booking_confirm',
+        'booking_reminder_24h' => 'mail_template_booking_reminder_24h',
+        'booking_reminder_2h'  => 'mail_template_booking_reminder_2h',
         'contact_received'=> 'mail_template_contact_received',
         'corporate_lead'  => 'mail_template_corporate_lead',
     ];
@@ -116,6 +118,50 @@ function mail_template_booking_confirm(array $v): array
 </p>
 HTML;
     return [mail_layout('Your SoundHeal seat is held.', $body), "Booking {$ref} confirmed: {$title} — {$when}"];
+}
+
+function mail_template_booking_reminder_24h(array $v): array
+{
+    $name  = e($v['name'] ?? 'friend');
+    $title = e($v['event_title'] ?? 'your session');
+    $when  = e($v['starts_at'] ?? '');
+    $loc   = e($v['location'] ?? 'Location TBA');
+    $ref   = e($v['booking_ref'] ?? '');
+    $url   = e($v['app_url']);
+    $body = <<<HTML
+<p style="font-family:Georgia,'Cormorant Garamond',serif;font-size:22px;color:#e7d2a3;">Tomorrow, {$name}.</p>
+<p>A gentle reminder — your seat is held for:</p>
+<p><strong style="color:#e7d2a3;">{$title}</strong><br>{$when}<br><span style="color:rgba(246,239,229,0.65);">{$loc}</span></p>
+<p style="color:rgba(246,239,229,0.6);font-size:13px;">Booking reference: {$ref}</p>
+<p>Wear something comfortable. Arrive a few minutes early so we can settle you in without hurry.</p>
+<p style="margin:24px 0;">
+  <a href="{$url}/member/my_bookings.php" style="display:inline-block;background:#c9a46a;color:#0a1027;padding:14px 28px;border-radius:999px;text-decoration:none;font-family:Inter,Arial,sans-serif;font-weight:500;">Show ticket</a>
+</p>
+<p style="color:rgba(246,239,229,0.65);">We look forward to holding space for you.</p>
+HTML;
+    $text = "Reminder — tomorrow: {$title} at {$when}, {$loc}. Booking {$ref}.";
+    return [mail_layout("A gentle reminder — your session is tomorrow.", $body), $text];
+}
+
+function mail_template_booking_reminder_2h(array $v): array
+{
+    $title = e($v['event_title'] ?? 'your session');
+    $when  = e($v['starts_at'] ?? '');
+    $loc   = e($v['location'] ?? 'Location TBA');
+    $ref   = e($v['booking_ref'] ?? '');
+    $url   = e($v['app_url']);
+    $body = <<<HTML
+<p style="font-family:Georgia,'Cormorant Garamond',serif;font-size:22px;color:#e7d2a3;">See you soon.</p>
+<p>Your session starts in about two hours.</p>
+<p><strong style="color:#e7d2a3;">{$title}</strong><br>{$when}<br><span style="color:rgba(246,239,229,0.65);">{$loc}</span></p>
+<p style="color:rgba(246,239,229,0.6);font-size:13px;">Booking reference: {$ref}</p>
+<p>Take a slow breath. Head out with time to spare.</p>
+<p style="margin:24px 0;">
+  <a href="{$url}/member/my_bookings.php" style="display:inline-block;background:#c9a46a;color:#0a1027;padding:14px 28px;border-radius:999px;text-decoration:none;font-family:Inter,Arial,sans-serif;font-weight:500;">Open ticket</a>
+</p>
+HTML;
+    $text = "Your session starts in about 2 hours: {$title} at {$when}, {$loc}. Booking {$ref}.";
+    return [mail_layout("See you soon — your session is in about 2 hours.", $body), $text];
 }
 
 function mail_template_contact_received(array $v): array
