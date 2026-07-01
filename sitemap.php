@@ -17,6 +17,7 @@ $pages = [
     '/public/membership.php'  => ['weekly',  '0.8'],
     '/public/about.php'       => ['monthly', '0.6'],
     '/public/contact.php'     => ['monthly', '0.5'],
+    '/public/corporate.php'   => ['monthly', '0.6'],
     '/public/share_experience.php' => ['monthly', '0.4'],
     '/public/terms.php'       => ['yearly',  '0.3'],
     '/public/privacy.php'     => ['yearly',  '0.3'],

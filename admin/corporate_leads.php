@@ -15,7 +15,12 @@ if (is_post()) {
     redirect('/admin/corporate_leads.php');
 }
 
-$rows = db()->query("SELECT * FROM corporate_inquiries ORDER BY created_at DESC LIMIT 200")->fetchAll();
+$rows = db()->query(
+    "SELECT ci.*, cp.name AS package_name
+       FROM corporate_inquiries ci
+       LEFT JOIN corporate_packages cp ON cp.id = ci.package_id
+      ORDER BY ci.created_at DESC LIMIT 200"
+)->fetchAll();
 require __DIR__ . '/../includes/admin_layout.php';
 ?>
 <h1 class="font-serif text-3xl text-beige-100">Corporate inquiries</h1>
@@ -28,6 +33,11 @@ require __DIR__ . '/../includes/admin_layout.php';
           <p class="font-serif text-xl text-beige-100"><?= e($r['company_name']) ?></p>
           <p class="text-sm text-beige-100/60"><?= e($r['contact_name']) ?> · <?= e($r['contact_email']) ?> <?php if ($r['contact_phone']): ?>· <?= e($r['contact_phone']) ?><?php endif; ?></p>
           <p class="text-xs text-beige-100/40 mt-1"><?= e(format_datetime($r['created_at'])) ?> · Team size: <?= e($r['team_size'] ?? '—') ?></p>
+          <?php if (!empty($r['package_name'])): ?>
+            <p class="mt-2 inline-block text-[10px] uppercase tracking-widest px-3 py-1 rounded-full border border-gold-500/25 bg-gold-500/5 text-gold-400">
+              Interested in: <?= e($r['package_name']) ?>
+            </p>
+          <?php endif; ?>
         </div>
         <form method="post" class="flex items-center gap-2">
           <?= csrf_field() ?>
