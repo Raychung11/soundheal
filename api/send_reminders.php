@@ -142,15 +142,18 @@ foreach ($postStmt->fetchAll() as $r) {
             AND (audience IS NULL OR audience = 'public')
             AND parent_event_id IS NULL
             AND id <> :self
-            AND (recurrence = 'daily' OR starts_at >= NOW())
+            AND (recurrence IN ('daily','weekly','monthly') OR starts_at >= NOW())
           ORDER BY (experience_id = :xid) DESC, starts_at ASC
           LIMIT 2"
     );
     $upStmt->execute([':self' => (int) $r['event_id'], ':xid' => (int) ($r['experience_id'] ?? 0)]);
     $upcoming = array_map(function ($u) use ($appBase) {
-        $when = ($u['recurrence'] ?? '') === 'daily'
-            ? 'Daily at ' . date('g:i A', strtotime((string) $u['starts_at']))
-            : format_datetime($u['starts_at'], 'D, d M · g:i A');
+        $recur = (string) ($u['recurrence'] ?? '');
+        if (function_exists('describe_event_schedule') && in_array($recur, ['daily','weekly','monthly'], true)) {
+            $when = describe_event_schedule($u);
+        } else {
+            $when = format_datetime($u['starts_at'], 'D, d M · g:i A');
+        }
         return [
             'title' => (string) $u['title'],
             'when'  => $when,
