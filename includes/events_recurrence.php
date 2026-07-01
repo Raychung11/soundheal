@@ -37,7 +37,8 @@ if (!function_exists('expand_event_occurrences')) {
         foreach ($rows as $e) {
             $recurrence = (string) ($e['recurrence'] ?? 'none');
 
-            if ($recurrence !== 'daily') {
+            if ($recurrence !== 'daily' && $recurrence !== 'weekly') {
+                // One-off — pass through if in the future.
                 if (strtotime((string) $e['starts_at']) >= $now) {
                     $e['_template_id']     = 0;
                     $e['_occurrence_date'] = '';
@@ -55,6 +56,16 @@ if (!function_exists('expand_event_occurrences')) {
                 ? strtotime($e['recurrence_until'] . ' 23:59:59')
                 : null;
 
+            // For weekly, parse the CSV of allowed day-of-week numbers
+            // (0=Sun..6=Sat). Empty / unparseable = no occurrences.
+            $allowedDays = null;
+            if ($recurrence === 'weekly') {
+                $allowedDays = array_values(array_filter(array_map('intval',
+                    explode(',', (string) ($e['recurrence_days'] ?? '')))
+                    , fn($n) => $n >= 0 && $n <= 6));
+                if (!$allowedDays) continue;
+            }
+
             for ($i = 0; $i < $days; $i++) {
                 $occDay   = $startDay + $i * 86400;
                 $occDate  = date('Y-m-d', $occDay);
@@ -63,6 +74,7 @@ if (!function_exists('expand_event_occurrences')) {
 
                 if ($occTs <= $now) continue;
                 if ($untilTs !== null && $occTs > $untilTs) continue;
+                if ($recurrence === 'weekly' && !in_array((int) date('w', $occTs), $allowedDays, true)) continue;
 
                 $childStmt->execute([':pid' => $e['id'], ':d' => $occDate]);
                 $child = $childStmt->fetch();
@@ -82,6 +94,36 @@ if (!function_exists('expand_event_occurrences')) {
     }
 
     /**
+     * Human sentence for an event's schedule — used on the public
+     * event page + experience cards when the event is a recurring
+     * template rather than a specific occurrence.
+     *
+     *   describe_event_schedule($event) → "Daily at 7:00 PM"
+     *                                    "Every Tue & Thu at 7:00 PM"
+     *                                    formatted starts_at for one-offs
+     */
+    function describe_event_schedule(array $e): string
+    {
+        $rec  = (string) ($e['recurrence'] ?? 'none');
+        $time = date('g:i A', strtotime((string) $e['starts_at']));
+        if ($rec === 'daily')  return 'Daily at ' . $time;
+        if ($rec === 'weekly') {
+            $labels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+            $days   = array_values(array_filter(array_map('intval',
+                explode(',', (string) ($e['recurrence_days'] ?? '')))
+                , fn($n) => $n >= 0 && $n <= 6));
+            if (!$days) return 'Weekly · time TBA';
+            sort($days);
+            $names = array_map(fn($n) => $labels[$n], $days);
+            $joined = count($names) === 1 ? $names[0]
+                : (count($names) === 2 ? implode(' & ', $names)
+                : implode(', ', array_slice($names, 0, -1)) . ' & ' . end($names));
+            return 'Every ' . $joined . ' at ' . $time;
+        }
+        return format_datetime($e['starts_at'], 'l, d M Y · g:i A');
+    }
+
+    /**
      * Materialise a concrete child event row for a recurring
      * template on a specific date. Idempotent — returns the
      * existing child if one already exists.
@@ -93,7 +135,20 @@ if (!function_exists('expand_event_occurrences')) {
         $tplStmt = db()->prepare("SELECT * FROM events WHERE id = :id LIMIT 1");
         $tplStmt->execute([':id' => $templateId]);
         $tpl = $tplStmt->fetch();
-        if (!$tpl || ($tpl['recurrence'] ?? 'none') !== 'daily') return null;
+        if (!$tpl) return null;
+        $rec = (string) ($tpl['recurrence'] ?? 'none');
+        if ($rec !== 'daily' && $rec !== 'weekly') return null;
+
+        // For weekly templates, only accept a date that falls on one of
+        // the allowed day-of-week numbers — otherwise the booking would
+        // create a session outside the advertised schedule.
+        if ($rec === 'weekly') {
+            $allowed = array_values(array_filter(array_map('intval',
+                explode(',', (string) ($tpl['recurrence_days'] ?? '')))
+                , fn($n) => $n >= 0 && $n <= 6));
+            $dow = (int) date('w', strtotime($date . ' 00:00:00'));
+            if (!$allowed || !in_array($dow, $allowed, true)) return null;
+        }
 
         $childStmt = db()->prepare(
             "SELECT * FROM events

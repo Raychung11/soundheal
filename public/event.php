@@ -43,7 +43,7 @@ if (!$event) {
 
 // If this is a recurring template AND we were given a date, present the
 // occurrence for that date (starts_at/ends_at shifted to the chosen day).
-$isRecurring = ($event['recurrence'] ?? 'none') === 'daily';
+$isRecurring = in_array($event['recurrence'] ?? 'none', ['daily','weekly'], true);
 $dateValid   = $isRecurring && $date !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date);
 if ($dateValid) {
     $tStart = date('H:i:s', strtotime((string) $event['starts_at']));
@@ -139,7 +139,11 @@ require __DIR__ . '/../includes/header.php';
   <?php endif; ?>
 
   <p class="mt-8 text-[11px] uppercase tracking-[0.4em] text-gold-400/80">
-    <?= e(format_datetime($event['starts_at'], 'l, d M Y · g:i A')) ?>
+    <?php if ($isRecurring && !$dateValid): ?>
+      <?= e(describe_event_schedule($event)) ?>
+    <?php else: ?>
+      <?= e(format_datetime($event['starts_at'], 'l, d M Y · g:i A')) ?>
+    <?php endif; ?>
   </p>
   <h1 class="mt-4 font-serif text-4xl sm:text-5xl text-beige-100 leading-tight"><?= e($event['title']) ?></h1>
   <?php if (!empty($event['subtitle'])): ?>

@@ -14,13 +14,13 @@ $experiences = db()->query(
 // it (one-off in the future, OR a daily-recurring template). Drives the
 // "Next session" line + the Reserve button target.
 $nextStmt = db()->prepare(
-    "SELECT id, title, starts_at, recurrence, capacity, ends_at
+    "SELECT id, title, starts_at, recurrence, recurrence_days, capacity, ends_at
        FROM events
       WHERE status = 'published'
         AND (audience IS NULL OR audience = 'public')
         AND parent_event_id IS NULL
         AND experience_id = :xid
-        AND (recurrence = 'daily' OR starts_at >= NOW())
+        AND (recurrence IN ('daily','weekly') OR starts_at >= NOW())
       ORDER BY starts_at ASC LIMIT 1"
 );
 foreach ($experiences as $idx => $exp) {
@@ -76,11 +76,9 @@ require __DIR__ . '/../includes/header.php';
               $reserveUrl = '/public/events.php?experience=' . urlencode((string) $exp['slug']);
               $nextLine = '';
               if ($nxt) {
-                  if (($nxt['recurrence'] ?? 'none') === 'daily') {
-                      $nextLine = 'Daily at ' . date('g:i A', strtotime((string) $nxt['starts_at']));
-                  } else {
-                      $nextLine = format_datetime($nxt['starts_at'], 'D, d M Y · g:i A');
-                  }
+                  $nextLine = in_array($nxt['recurrence'] ?? 'none', ['daily','weekly'], true)
+                      ? describe_event_schedule($nxt)
+                      : format_datetime($nxt['starts_at'], 'D, d M Y · g:i A');
               }
             ?>
 
