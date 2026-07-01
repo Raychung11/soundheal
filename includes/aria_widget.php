@@ -23,8 +23,12 @@ $ariaGreeting = (string) setting('aria_widget_greeting',
     'Hi — I\'m ' . $ariaName . '. Ask me about sessions, pricing, or anything else.');
 $csrfToken    = function_exists('csrf_token') ? csrf_token() : '';
 ?>
+<!-- Sits above the mobile bottom-tab nav (64px) + any page-level
+     sticky action bar (~68px). On desktop drops back to a normal
+     bottom-right offset. Icon-only on mobile so it doesn't crowd
+     other buttons; the "Chat with <name>" label reappears at md+. -->
 <div x-data="ariaWidget()" x-cloak
-     class="fixed bottom-[5.25rem] right-4 md:bottom-5 md:right-5 z-50 flex flex-col items-end pointer-events-none">
+     class="aria-widget-shell fixed right-4 md:right-5 z-50 flex flex-col items-end pointer-events-none">
 
   <!-- Chat panel -->
   <div x-show="open" x-transition.opacity
@@ -60,17 +64,31 @@ $csrfToken    = function_exists('csrf_token') ? csrf_token() : '';
     </form>
   </div>
 
-  <!-- Floating launcher button -->
+  <!-- Floating launcher — icon-only pill on mobile so it doesn't collide
+       with page-level sticky CTAs (e.g. booking's Continue-to-pay bar);
+       expands to "Chat with <name>" at md+. -->
   <button @click="toggle"
           x-show="!open"
           x-transition.opacity
-          class="pointer-events-auto inline-flex items-center gap-2.5 pl-2 pr-5 py-2 rounded-full bg-gold-500 text-navy-950 shadow-[0_15px_40px_-15px_rgba(202,164,99,0.55)] hover:bg-gold-400 transition">
-    <span class="h-8 w-8 rounded-full bg-navy-950 text-gold-400 flex items-center justify-center font-serif"><?= e(mb_substr($ariaName, 0, 1)) ?></span>
-    <span class="text-sm font-medium">Chat with <?= e($ariaName) ?></span>
+          aria-label="Chat with <?= e($ariaName) ?>"
+          class="pointer-events-auto inline-flex items-center rounded-full bg-gold-500 text-navy-950 shadow-[0_15px_40px_-15px_rgba(202,164,99,0.55)] hover:bg-gold-400 transition
+                 p-1 md:gap-2.5 md:pl-2 md:pr-5 md:py-2">
+    <span class="h-9 w-9 md:h-8 md:w-8 rounded-full bg-navy-950 text-gold-400 flex items-center justify-center font-serif"><?= e(mb_substr($ariaName, 0, 1)) ?></span>
+    <span class="hidden md:inline text-sm font-medium">Chat with <?= e($ariaName) ?></span>
   </button>
 </div>
 
 <style>
+  /* Mobile position: sit above the bottom-tab nav (64px) plus any
+     page-level sticky action bar (~68px) plus the iOS safe area, so
+     the widget never overlaps a Reserve / Continue-to-pay button. */
+  .aria-widget-shell { bottom: calc(9.5rem + env(safe-area-inset-bottom)); }
+  @media (min-width: 768px) {
+    /* Desktop has no sticky action bar / bottom-tab, so drop back to a
+       normal offset. */
+    .aria-widget-shell { bottom: 1.25rem; }
+  }
+
   /* Make links inside Aria's bubbles obvious and accessible without overriding her tone. */
   .aria-msg a { color: #d4af37; text-decoration: underline; text-underline-offset: 3px; word-break: break-word; }
   .aria-msg a:hover { color: #e7c860; }
