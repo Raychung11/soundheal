@@ -29,6 +29,7 @@ $adminNav = [
     ['Referral program',   '/admin/referral_settings.php'],
     ['Corporate leads',    '/admin/corporate_leads.php'],
     ['Reports',            '/admin/reports.php'],
+    ['Session P&L',        '/admin/session_pnl.php'],
 ];
 $pageTitle = ($pageTitle ?? 'Admin') . ' · Admin';
 $skipTracking = true;
