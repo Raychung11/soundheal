@@ -97,8 +97,8 @@ foreach ($events as $e) {
     $available = ((int) $e['capacity'] - (int) $e['seats_taken']) > 0;
     $isOcc = !empty($e['_template_id']);
     $ldUrl = $isOcc
-        ? $ldBase . '/public/events.php?event=' . (int) $e['_template_id'] . '&date=' . urlencode((string) $e['_occurrence_date'])
-        : $ldBase . '/public/events.php?event=' . (int) $e['id'];
+        ? $ldBase . '/public/event.php?id=' . (int) $e['_template_id'] . '&date=' . urlencode((string) $e['_occurrence_date'])
+        : $ldBase . '/public/event.php?id=' . (int) $e['id'];
     $eventsLd[] = array_filter([
         '@context'            => 'https://schema.org',
         '@type'               => 'Event',
@@ -304,7 +304,10 @@ require __DIR__ . '/../includes/header.php';
         $reserveUrl = $isRecurringOcc
             ? '/member/book_event.php?event_id=' . (int) $event['_template_id'] . '&date=' . urlencode((string) $event['_occurrence_date'])
             : '/member/book_event.php?event_id=' . (int) $event['id'];
-        $shareUrl = $ldBase . '/public/events.php?event=' . $shareEventParam . $shareDateParam . '#' . $cardKey;
+        // Share points at the dedicated public event page — one focused
+        // landing with the poster, packages and Reserve CTA — instead of
+        // dropping the visitor back into the calendar.
+        $shareUrl = $ldBase . '/public/event.php?id=' . $shareEventParam . $shareDateParam;
         $shareUrlEnc = rawurlencode($shareUrl);
         $shareTextEnc = rawurlencode($event['title'] . ' · ' . brand_name());
         $startTs = strtotime((string) $event['starts_at']);
