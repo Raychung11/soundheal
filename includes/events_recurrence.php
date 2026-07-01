@@ -83,7 +83,7 @@ if (!function_exists('expand_event_occurrences')) {
         foreach ($rows as $e) {
             $recurrence = (string) ($e['recurrence'] ?? 'none');
 
-            if (!in_array($recurrence, ['daily','weekly','monthly'], true)) {
+            if (!in_array($recurrence, ['daily','weekly','monthly','custom'], true)) {
                 // One-off — pass through if in the future.
                 if (strtotime((string) $e['starts_at']) >= $now) {
                     $e['_template_id']     = 0;
@@ -118,6 +118,16 @@ if (!function_exists('expand_event_occurrences')) {
                     $ts = $startDay + $i * 86400;
                     if (in_array((int) date('w', $ts), $allowedDays, true)) {
                         $candidates[] = date('Y-m-d', $ts);
+                    }
+                }
+            } elseif ($recurrence === 'custom') {
+                // Explicit list of YYYY-MM-DD dates. Each stands as its
+                // own occurrence — no pattern derivation.
+                $rawDates = array_filter(array_map('trim',
+                    preg_split('/[\s,;]+/', (string) ($e['custom_dates'] ?? ''))));
+                foreach ($rawDates as $d) {
+                    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) {
+                        $candidates[] = $d;
                     }
                 }
             } else { // monthly
@@ -194,6 +204,17 @@ if (!function_exists('expand_event_occurrences')) {
             $ordName = $ord === 'L' ? 'Last' : [null,'First','Second','Third','Fourth','Fifth'][$ord];
             return $ordName . ' ' . $labels[$dow] . ' of every month at ' . $time;
         }
+        if ($rec === 'custom') {
+            $dates = array_values(array_filter(array_map('trim',
+                preg_split('/[\s,;]+/', (string) ($e['custom_dates'] ?? '')))));
+            $future = array_filter($dates, fn($d) => preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) && strtotime($d . ' 23:59:59') >= time());
+            sort($future);
+            if (!$future) return 'Selected dates · time TBA';
+            $shown = array_slice($future, 0, 3);
+            $labels = array_map(fn($d) => date('j M', strtotime($d)), $shown);
+            $suffix = count($future) > 3 ? ' + ' . (count($future) - 3) . ' more' : '';
+            return implode(', ', $labels) . $suffix . ' at ' . $time;
+        }
         return format_datetime($e['starts_at'], 'l, d M Y · g:i A');
     }
 
@@ -211,7 +232,7 @@ if (!function_exists('expand_event_occurrences')) {
         $tpl = $tplStmt->fetch();
         if (!$tpl) return null;
         $rec = (string) ($tpl['recurrence'] ?? 'none');
-        if (!in_array($rec, ['daily','weekly','monthly'], true)) return null;
+        if (!in_array($rec, ['daily','weekly','monthly','custom'], true)) return null;
 
         // Reject any excepted date up-front — the admin explicitly
         // skipped it, so no booking should materialise on that day.
@@ -235,6 +256,12 @@ if (!function_exists('expand_event_occurrences')) {
             $m = (int) date('n', strtotime($date));
             $expected = nth_weekday_of_month($y, $m, $ordinal, $dow);
             if ($expected !== $date) return null;
+        }
+        // Custom: date must be in the explicit list.
+        if ($rec === 'custom') {
+            $customDates = array_filter(array_map('trim',
+                preg_split('/[\s,;]+/', (string) ($tpl['custom_dates'] ?? ''))));
+            if (!in_array($date, $customDates, true)) return null;
         }
 
         $childStmt = db()->prepare(
@@ -272,6 +299,8 @@ if (!function_exists('expand_event_occurrences')) {
         //   - intake_type (pet workshops lost the pet intake form).
         $tplPkgBEnabled = array_key_exists('package_b_enabled', $tpl)
             ? (int) $tpl['package_b_enabled'] : 1;
+        // Custom recurrence is a template-only concept — the child is
+        // a concrete one-off, so custom_dates isn't propagated to it.
 
         db()->prepare(
             "INSERT INTO events

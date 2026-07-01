@@ -30,7 +30,7 @@ if (!$event) {
 
 // If admin opened the sheet for a recurring template directly, tell
 // them so — the actual bookings live on child instances.
-$isRecurringTemplate = in_array($event['recurrence'] ?? 'none', ['daily','weekly','monthly'], true) && empty($event['parent_event_id']);
+$isRecurringTemplate = in_array($event['recurrence'] ?? 'none', ['daily','weekly','monthly','custom'], true) && empty($event['parent_event_id']);
 
 $bookingsStmt = db()->prepare(
     "SELECT b.id, b.booking_ref, b.status, b.quantity, b.package,

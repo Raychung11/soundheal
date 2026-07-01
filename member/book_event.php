@@ -20,7 +20,7 @@ if (!$event) {
 // earlier versions only special-cased 'daily' and silently booked weekly /
 // monthly bookings against the template row, which ignored the date the
 // user picked and piled every occurrence's bookings onto one seat count.
-if (in_array($event['recurrence'] ?? 'none', ['daily','weekly','monthly'], true)) {
+if (in_array($event['recurrence'] ?? 'none', ['daily','weekly','monthly','custom'], true)) {
     if ($bookDate === '' || !function_exists('find_or_create_recurring_instance')) {
         flash('booking', 'Please choose a date for this session.', 'error');
         redirect('/public/events.php');

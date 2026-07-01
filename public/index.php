@@ -46,7 +46,7 @@ $upcomingRaw = db()->query(
       WHERE e.status = 'published'
         AND (e.audience IS NULL OR e.audience = 'public')
         AND e.parent_event_id IS NULL
-        AND (e.recurrence IN ('daily','weekly','monthly') OR e.starts_at >= NOW())
+        AND (e.recurrence IN ('daily','weekly','monthly','custom') OR e.starts_at >= NOW())
       ORDER BY e.starts_at ASC"
 )->fetchAll();
 $upcoming = array_slice(expand_event_occurrences($upcomingRaw, 14), 0, 3);

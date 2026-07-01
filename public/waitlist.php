@@ -35,7 +35,7 @@ if (!$event) {
     exit;
 }
 
-$isRecurring = in_array($event['recurrence'] ?? 'none', ['daily','weekly','monthly'], true);
+$isRecurring = in_array($event['recurrence'] ?? 'none', ['daily','weekly','monthly','custom'], true);
 $dateValid   = $isRecurring && $date !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date);
 $occDate     = $dateValid ? $date : null;
 

@@ -174,7 +174,7 @@ require __DIR__ . '/../includes/admin_layout.php';
         $company  = round($gross * $companyPct / 100, 2);
         $attRate  = (int) $s['seats_confirmed'] > 0
             ? round(((int) $s['seats_attended'] / (int) $s['seats_confirmed']) * 100) : 0;
-        $isRecurringTpl = in_array($s['recurrence'] ?? 'none', ['daily','weekly','monthly'], true) && empty($s['parent_event_id']);
+        $isRecurringTpl = in_array($s['recurrence'] ?? 'none', ['daily','weekly','monthly','custom'], true) && empty($s['parent_event_id']);
       ?>
         <tr>
           <td class="px-4 py-3">

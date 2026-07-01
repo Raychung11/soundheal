@@ -23,7 +23,7 @@ $nextStmt = db()->prepare(
         AND (audience IS NULL OR audience = 'public')
         AND parent_event_id IS NULL
         AND experience_id = :xid
-        AND (recurrence IN ('daily','weekly','monthly') OR starts_at >= NOW())
+        AND (recurrence IN ('daily','weekly','monthly','custom') OR starts_at >= NOW())
       ORDER BY starts_at ASC"
 );
 foreach ($experiences as $idx => $exp) {

@@ -7,7 +7,7 @@ $event = ['id' => 0, 'slug' => '', 'title' => '', 'subtitle' => '', 'description
           'cover_image' => '', 'location' => '', 'starts_at' => '', 'ends_at' => '',
           'capacity' => 30, 'price_public' => 0, 'price_member' => 0,
           'facilitator' => '', 'category' => '', 'status' => 'draft',
-          'recurrence' => 'none', 'recurrence_until' => '', 'recurrence_days' => '',
+          'recurrence' => 'none', 'recurrence_until' => '', 'recurrence_days' => '', 'custom_dates' => '',
           'package_a_label' => '', 'package_a_perks' => '',
           'package_b_label' => '', 'package_b_perks' => '',
           'package_b_enabled' => 1,
@@ -46,7 +46,7 @@ if (is_post()) {
         'facilitator'  => trim((string)input('facilitator', '')),
         'category'     => trim((string)input('category', '')),
         'status'       => in_array(input('status'), ['draft','published','archived','cancelled'], true) ? input('status') : 'draft',
-        'recurrence'      => in_array(input('recurrence'), ['none','daily','weekly','monthly'], true) ? input('recurrence') : 'none',
+        'recurrence'      => in_array(input('recurrence'), ['none','daily','weekly','monthly','custom'], true) ? input('recurrence') : 'none',
         'recurrence_until' => trim((string) input('recurrence_until', '')) ?: null,
         'recurrence_days' => (function () {
             $mode = (string) input('recurrence', 'none');
@@ -65,6 +65,25 @@ if (is_post()) {
                 return $ord . $dow;
             }
             return null;
+        })(),
+        // Parse the comma-separated date list the Alpine chip picker
+        // POSTs. Kept only for recurrence='custom' — other modes ignore
+        // it. Whitespace/duplicate/malformed entries are dropped so a
+        // stray paste from a spreadsheet doesn't poison the row.
+        'custom_dates' => (function () {
+            if ((string) input('recurrence', 'none') !== 'custom') return null;
+            $raw = (string) input('custom_dates', '');
+            $dates = [];
+            foreach (preg_split('/[\s,;]+/', $raw) ?: [] as $d) {
+                $d = trim($d);
+                if ($d === '') continue;
+                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) && strtotime($d) !== false) {
+                    $dates[$d] = true;
+                }
+            }
+            $sorted = array_keys($dates);
+            sort($sorted);
+            return $sorted ? implode(',', $sorted) : null;
         })(),
         'package_a_label' => trim((string) input('package_a_label', '')),
         'package_a_perks' => trim((string) input('package_a_perks', '')),
@@ -105,7 +124,7 @@ if (is_post()) {
                 "UPDATE events SET title=:t, subtitle=:st, description=:d, cover_image=:ci,
                  location=:l, starts_at=:s, ends_at=:e, capacity=:c, price_public=:pp,
                  price_member=:pm, facilitator=:f, category=:cat, status=:status,
-                 recurrence=:rec, recurrence_until=:ru, recurrence_days=:rd,
+                 recurrence=:rec, recurrence_until=:ru, recurrence_days=:rd, custom_dates=:cd,
                  package_a_label=:pal, package_a_perks=:pap,
                  package_b_label=:pbl, package_b_perks=:pbp,
                  package_b_enabled=:pbe,
@@ -122,6 +141,7 @@ if (is_post()) {
                 ':f' => $event['facilitator'], ':cat' => $event['category'], ':status' => $event['status'],
                 ':rec' => $event['recurrence'], ':ru' => $event['recurrence_until'],
                 ':rd'  => $event['recurrence_days'] ?: null,
+                ':cd'  => $event['custom_dates'] ?: null,
                 ':pal' => $event['package_a_label'] ?: null,
                 ':pap' => $event['package_a_perks'] ?: null,
                 ':pbl' => $event['package_b_label'] ?: null,
@@ -179,13 +199,13 @@ if (is_post()) {
             $stmt = db()->prepare(
                 "INSERT INTO events (slug, title, subtitle, description, cover_image, location, starts_at, ends_at,
                                      capacity, price_public, price_member, facilitator, category, status,
-                                     recurrence, recurrence_until, recurrence_days,
+                                     recurrence, recurrence_until, recurrence_days, custom_dates,
                                      package_a_label, package_a_perks, package_b_label, package_b_perks,
                                      package_b_enabled,
                                      experience_id, referral_reward_amount,
                                      audience, credit_eligible, created_by)
                  VALUES (:slug, :t, :st, :d, :ci, :l, :s, :e, :c, :pp, :pm, :f, :cat, :status,
-                         :rec, :ru, :rd, :pal, :pap, :pbl, :pbp, :pbe, :xid, :rra, :aud, :cel, :uid)"
+                         :rec, :ru, :rd, :cd, :pal, :pap, :pbl, :pbp, :pbe, :xid, :rra, :aud, :cel, :uid)"
             );
             $stmt->execute([
                 ':slug' => $slug, ':t' => $event['title'], ':st' => $event['subtitle'],
@@ -195,6 +215,7 @@ if (is_post()) {
                 ':f' => $event['facilitator'], ':cat' => $event['category'], ':status' => $event['status'],
                 ':rec' => $event['recurrence'], ':ru' => $event['recurrence_until'],
                 ':rd'  => $event['recurrence_days'] ?: null,
+                ':cd'  => $event['custom_dates'] ?: null,
                 ':pal' => $event['package_a_label'] ?: null,
                 ':pap' => $event['package_a_perks'] ?: null,
                 ':pbl' => $event['package_b_label'] ?: null,
@@ -389,6 +410,7 @@ require __DIR__ . '/../includes/admin_layout.php';
           <option value="daily">Every day at the "Starts at" time</option>
           <option value="weekly">Every week on selected days</option>
           <option value="monthly">Monthly on the Nth weekday</option>
+          <option value="custom">Custom dates (pick each one manually)</option>
         </select>
         <span class="text-[11px] text-beige-100/40 mt-1 block">Recurring templates auto-show as bookable cards on the calendar (next 60 days) — a concrete event materialises per date when someone reserves.</span>
       </label>
@@ -435,7 +457,57 @@ require __DIR__ . '/../includes/admin_layout.php';
         <span class="text-[11px] text-beige-100/40 mt-2 block">e.g. "First Sunday" or "Last Friday" — the session generates once each month on that day at the "Starts at" time.</span>
       </div>
 
-      <div x-show="rec !== 'none'" x-cloak class="mt-4">
+      <!-- Custom dates picker — visible only when the recurrence mode is
+           "custom". Each date the admin picks becomes a chip; removing
+           a chip drops the date. On save, the list is stringified into
+           events.custom_dates as a comma-separated CSV. -->
+      <div x-show="rec === 'custom'" x-cloak class="mt-4 rounded-2xl border border-white/10 bg-navy-950/40 p-4"
+           x-data="{
+             picker: '',
+             dates: (<?= htmlspecialchars(json_encode(array_values(array_filter(array_map('trim',
+                       preg_split('/[\s,;]+/', (string) ($event['custom_dates'] ?? '')))
+                     , fn($d) => (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)))), ENT_QUOTES, 'UTF-8') ?>),
+             add() {
+               if (!/^\d{4}-\d{2}-\d{2}$/.test(this.picker)) return;
+               if (this.dates.includes(this.picker)) { this.picker = ''; return; }
+               this.dates.push(this.picker);
+               this.dates.sort();
+               this.picker = '';
+             },
+             remove(d) { this.dates = this.dates.filter(x => x !== d); },
+             fmt(d) {
+               const t = new Date(d + 'T00:00:00');
+               return t.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+             }
+           }">
+        <p class="text-[11px] uppercase tracking-widest text-beige-100/55">Custom dates</p>
+        <p class="text-[11px] text-beige-100/40 mt-1">Pick each date the session runs on. The list is stored as the exact set of occurrences — no pattern derivation.</p>
+
+        <div class="mt-3 flex flex-wrap gap-2 items-center">
+          <input type="date" x-model="picker"
+                 class="rounded-2xl bg-navy-900 border border-white/5 px-4 py-2.5 text-sm">
+          <button type="button" @click="add()"
+                  class="px-4 py-2 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition text-sm">
+            + Add date
+          </button>
+        </div>
+
+        <!-- Chip list of picked dates. The hidden input carries the
+             CSV so the standard form POST works — no JS on the server side. -->
+        <div class="mt-3 flex flex-wrap gap-2">
+          <template x-for="d in dates" :key="d">
+            <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gold-500/40 bg-gold-500/10 text-gold-400 text-xs">
+              <span x-text="fmt(d)"></span>
+              <button type="button" @click="remove(d)" class="text-gold-400/70 hover:text-gold-300" aria-label="Remove">×</button>
+            </span>
+          </template>
+          <span x-show="!dates.length" class="text-[11px] text-beige-100/40 italic">No dates yet — pick one above.</span>
+        </div>
+
+        <input type="hidden" name="custom_dates" :value="dates.join(',')">
+      </div>
+
+      <div x-show="rec !== 'none' && rec !== 'custom'" x-cloak class="mt-4">
         <label class="block">
           <span class="text-xs uppercase tracking-widest text-beige-100/60">Skip these dates <span class="text-beige-100/30">(one YYYY-MM-DD per line)</span></span>
           <textarea name="recurrence_exceptions" rows="3"

@@ -167,7 +167,7 @@ if ($templateId !== $id) {
 
 // All children of this template.
 $children = [];
-if (in_array($template['recurrence'] ?? 'none', ['daily','weekly','monthly'], true)) {
+if (in_array($template['recurrence'] ?? 'none', ['daily','weekly','monthly','custom'], true)) {
     $cStmt = db()->prepare(
         "SELECT * FROM events WHERE parent_event_id = :pid ORDER BY starts_at ASC"
     );
@@ -361,7 +361,7 @@ function fmt_val($v): string {
       </div>
     <?php endforeach; ?>
   </div>
-<?php elseif (in_array($template['recurrence'] ?? 'none', ['daily','weekly','monthly'], true)): ?>
+<?php elseif (in_array($template['recurrence'] ?? 'none', ['daily','weekly','monthly','custom'], true)): ?>
   <p class="mt-8 text-beige-100/60">No child instances materialised yet — nobody has booked a specific date on this template.</p>
 <?php endif; ?>
 
