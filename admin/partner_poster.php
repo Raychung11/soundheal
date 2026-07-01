@@ -23,7 +23,11 @@ $shareUrl   = partner_share_url($partner);
 $qrImageUrl = partner_qr_image_url($partner, 640);
 $promoCode  = trim((string) ($partner['first_visit_promo_code'] ?? ''));
 $brand      = brand_name();
-$appHost    = parse_url((string) config('app.url'), PHP_URL_HOST) ?: 'jaemiesoundbath.com';
+// Human-readable form of the same URL the QR encodes, so someone who
+// can't scan can still type it and land on the real endpoint. Strips
+// the leading scheme (host + path) since the "https://" is understood
+// on a printed poster.
+$shareUrlDisplay = (string) preg_replace('~^https?://~', '', $shareUrl);
 ?><!doctype html>
 <html lang="en">
 <head>
@@ -152,7 +156,7 @@ $appHost    = parse_url((string) config('app.url'), PHP_URL_HOST) ?: 'jaemiesoun
       <?php endif; ?>
 
       <div class="foot">
-        <span>Or type <?= e($appHost) ?>/p/<?= e((string) $partner['slug']) ?></span>
+        <span>Or type <?= e($shareUrlDisplay) ?></span>
         <span class="partner">With <?= e($partner['name']) ?></span>
       </div>
     </article>

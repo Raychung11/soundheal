@@ -138,6 +138,7 @@ if (is_post()) {
     }
     if (!$errors) {
     db()->beginTransaction();
+    $didCommit = false;
     try {
         $cap = db()->prepare(
             "SELECT capacity,
@@ -250,54 +251,80 @@ if (is_post()) {
         }
 
         db()->commit();
+        $didCommit = true;
         audit_log('booking.create', 'event_bookings', $bookingId, ['ref' => $bookingRef, 'total' => $total]);
+
+        // Post-commit side effects. Each hook is isolated in its own
+        // try/catch so a failure here can't cascade into rollBack() of
+        // an already-persisted booking (which would raise "no active
+        // transaction" and 500 the user while their seat is silently
+        // held). The booking is safe once the commit above returns;
+        // hook failures are logged and reconciled later.
 
         // If the visitor arrived via a ?ref=<code> link (cookie set by
         // capture_referral_cookie() in bootstrap), attribute the booking
         // and record a pending referral reward. Self-referrals are
         // guarded inside record_event_referral().
-        if (function_exists('get_referral_cookie') && function_exists('record_event_referral')) {
-            $refCode = get_referral_cookie();
-            if ($refCode) {
-                $referrerId = function_exists('referrer_id_for_code') ? referrer_id_for_code($refCode) : null;
-                if ($referrerId) {
-                    record_event_referral($bookingId, (int) $referrerId);
+        try {
+            if (function_exists('get_referral_cookie') && function_exists('record_event_referral')) {
+                $refCode = get_referral_cookie();
+                if ($refCode) {
+                    $referrerId = function_exists('referrer_id_for_code') ? referrer_id_for_code($refCode) : null;
+                    if ($referrerId) {
+                        record_event_referral($bookingId, (int) $referrerId);
+                    }
                 }
             }
+        } catch (Throwable $hookErr) {
+            error_log('[booking] member-referral hook failed for booking ' . $bookingId . ': ' . $hookErr->getMessage());
         }
 
         // Partner (cafe / business) attribution — separate ledger from the
         // member referral above, so a booking can have at most one partner
         // and at most one member referrer. Cookie set by /public/p.php.
-        if (function_exists('attribute_partner_booking')) {
-            attribute_partner_booking($bookingId);
+        try {
+            if (function_exists('attribute_partner_booking')) {
+                attribute_partner_booking($bookingId);
+            }
+        } catch (Throwable $hookErr) {
+            error_log('[booking] partner-attribution hook failed for booking ' . $bookingId . ': ' . $hookErr->getMessage());
         }
 
         // Skip the invoice when the booking is fully paid with a credit —
         // the pack purchase already produced its own invoice/receipt.
-        if (!$useCredit) {
-            issue_invoice(
-                (int) $user['id'],
-                'booking',
-                $bookingId,
-                build_booking_line_items([
-                    'event_title'  => $event['title'] . ' · ' . $packageLabel . ' package',
-                    'event_id'     => $eventId,
-                    'starts_at'    => $event['starts_at'],
-                    'quantity'     => $qty,
-                    'unit_price'   => $unitPrice,
-                    'total_amount' => $total,
-                ])
-            );
+        try {
+            if (!$useCredit) {
+                issue_invoice(
+                    (int) $user['id'],
+                    'booking',
+                    $bookingId,
+                    build_booking_line_items([
+                        'event_title'  => $event['title'] . ' · ' . $packageLabel . ' package',
+                        'event_id'     => $eventId,
+                        'starts_at'    => $event['starts_at'],
+                        'quantity'     => $qty,
+                        'unit_price'   => $unitPrice,
+                        'total_amount' => $total,
+                    ])
+                );
+            }
+        } catch (Throwable $hookErr) {
+            error_log('[booking] invoice-issue failed for booking ' . $bookingId . ': ' . $hookErr->getMessage());
         }
 
         if ($effectiveUnit <= 0 || $useCredit) {
-            send_mail($user['email'], $user['full_name'], 'Your seat is held', 'booking_confirm', [
-                'event_title' => $event['title'],
-                'starts_at'   => format_datetime($event['starts_at']),
-                'location'    => $event['location'] ?? 'Location TBA',
-                'booking_ref' => $bookingRef,
-            ]);
+            // Best-effort confirmation email; a mail failure must not
+            // block the redirect since the seat is already held.
+            try {
+                send_mail($user['email'], $user['full_name'], 'Your seat is held', 'booking_confirm', [
+                    'event_title' => $event['title'],
+                    'starts_at'   => format_datetime($event['starts_at']),
+                    'location'    => $event['location'] ?? 'Location TBA',
+                    'booking_ref' => $bookingRef,
+                ]);
+            } catch (Throwable $mailErr) {
+                error_log('[booking] confirmation mail failed for booking ' . $bookingId . ': ' . $mailErr->getMessage());
+            }
             $msg = $useCredit
                 ? 'Seat held — 1 credit redeemed. We can\'t wait to welcome you.'
                 : 'Your seat is held. We can\'t wait to welcome you.';
@@ -308,8 +335,19 @@ if (is_post()) {
         // Otherwise hand off to payment.
         redirect('/member/checkout.php?booking=' . $bookingId);
     } catch (Throwable $e) {
-        db()->rollBack();
-        $errors[] = $e->getMessage();
+        // Only roll back if the commit never happened — post-commit
+        // hook failures leave the booking persisted and must NOT try
+        // to rollBack() a completed transaction (which would raise
+        // "no active transaction" and mask the real error).
+        if (!$didCommit) {
+            db()->rollBack();
+            $errors[] = $e->getMessage();
+        } else {
+            error_log('[booking] uncaught post-commit error for booking ' . $bookingId . ': ' . $e->getMessage());
+            // Booking is safe — send the user to the same success flow
+            // they would have seen. Payment / credit branch already
+            // handled above; falling out here means we already redirected.
+        }
     }
     } // end if (!$errors)
 }
