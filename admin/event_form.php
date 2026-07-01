@@ -10,7 +10,8 @@ $event = ['id' => 0, 'slug' => '', 'title' => '', 'subtitle' => '', 'description
           'recurrence' => 'none', 'recurrence_until' => '',
           'package_a_label' => '', 'package_a_perks' => '',
           'package_b_label' => '', 'package_b_perks' => '',
-          'experience_id' => null];
+          'experience_id' => null,
+          'referral_reward_amount' => ''];
 
 $experienceOptions = db()->query(
     "SELECT id, title FROM experiences WHERE status = 'active' ORDER BY sort_order ASC, title ASC"
@@ -49,6 +50,7 @@ if (is_post()) {
         'package_b_label' => trim((string) input('package_b_label', '')),
         'package_b_perks' => trim((string) input('package_b_perks', '')),
         'experience_id'   => ($v = (int) input('experience_id', 0)) > 0 ? $v : null,
+        'referral_reward_amount' => (($ra = trim((string) input('referral_reward_amount', ''))) !== '' && (float) $ra > 0) ? (float) $ra : null,
     ]);
     if ($event['title'] === '' || !$event['starts_at'] || !$event['ends_at']) {
         $errors[] = 'Title, start and end time are required.';
@@ -82,7 +84,8 @@ if (is_post()) {
                  recurrence=:rec, recurrence_until=:ru,
                  package_a_label=:pal, package_a_perks=:pap,
                  package_b_label=:pbl, package_b_perks=:pbp,
-                 experience_id=:xid
+                 experience_id=:xid,
+                 referral_reward_amount=:rra
                  WHERE id=:id"
             );
             $stmt->execute([
@@ -97,6 +100,7 @@ if (is_post()) {
                 ':pbl' => $event['package_b_label'] ?: null,
                 ':pbp' => $event['package_b_perks'] ?: null,
                 ':xid' => $event['experience_id'],
+                ':rra' => $event['referral_reward_amount'],
                 ':id' => $id,
             ]);
             audit_log('event.update', 'events', $id);
@@ -106,9 +110,9 @@ if (is_post()) {
                                      capacity, price_public, price_member, facilitator, category, status,
                                      recurrence, recurrence_until,
                                      package_a_label, package_a_perks, package_b_label, package_b_perks,
-                                     experience_id, created_by)
+                                     experience_id, referral_reward_amount, created_by)
                  VALUES (:slug, :t, :st, :d, :ci, :l, :s, :e, :c, :pp, :pm, :f, :cat, :status,
-                         :rec, :ru, :pal, :pap, :pbl, :pbp, :xid, :uid)"
+                         :rec, :ru, :pal, :pap, :pbl, :pbp, :xid, :rra, :uid)"
             );
             $stmt->execute([
                 ':slug' => $slug, ':t' => $event['title'], ':st' => $event['subtitle'],
@@ -122,6 +126,7 @@ if (is_post()) {
                 ':pbl' => $event['package_b_label'] ?: null,
                 ':pbp' => $event['package_b_perks'] ?: null,
                 ':xid' => $event['experience_id'],
+                ':rra' => $event['referral_reward_amount'],
                 ':uid' => current_user_id(),
             ]);
             $id = (int) db()->lastInsertId();
@@ -189,6 +194,14 @@ require __DIR__ . '/../includes/admin_layout.php';
         <?php endforeach; ?>
       </select>
       <span class="text-[11px] text-beige-100/40 mt-1 block">Links this event to an Experiences-page card so its "Reserve" button opens this session.</span>
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Referral reward · MYR <span class="text-beige-100/30">(optional)</span></span>
+      <input name="referral_reward_amount" type="number" step="0.01" min="0"
+             placeholder="Leave blank for default"
+             value="<?= e((string) ($event['referral_reward_amount'] ?? '')) ?>"
+             class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+      <span class="text-[11px] text-beige-100/40 mt-1 block">Cash to the referrer when a friend attends this session. Blank uses the site default (<?= e(format_money((float) setting('referral_event_reward_default', 50.00))) ?>).</span>
     </label>
     <label class="block">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Public price (MYR)</span>

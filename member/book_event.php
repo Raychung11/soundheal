@@ -169,6 +169,20 @@ if (is_post()) {
         db()->commit();
         audit_log('booking.create', 'event_bookings', $bookingId, ['ref' => $bookingRef, 'total' => $total]);
 
+        // If the visitor arrived via a ?ref=<code> link (cookie set by
+        // capture_referral_cookie() in bootstrap), attribute the booking
+        // and record a pending referral reward. Self-referrals are
+        // guarded inside record_event_referral().
+        if (function_exists('get_referral_cookie') && function_exists('record_event_referral')) {
+            $refCode = get_referral_cookie();
+            if ($refCode) {
+                $referrerId = function_exists('referrer_id_for_code') ? referrer_id_for_code($refCode) : null;
+                if ($referrerId) {
+                    record_event_referral($bookingId, (int) $referrerId);
+                }
+            }
+        }
+
         // Skip the invoice when the booking is fully paid with a credit —
         // the pack purchase already produced its own invoice/receipt.
         if (!$useCredit) {

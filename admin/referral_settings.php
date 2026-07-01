@@ -4,10 +4,11 @@ require_admin();
 $pageTitle = 'Referral program';
 
 $keys = [
-    'referral_program_eyebrow'     => 'string',
-    'referral_program_headline'    => 'string',
-    'referral_program_subheadline' => 'text',
-    'referral_signup_trial_days'   => 'int',
+    'referral_program_eyebrow'       => 'string',
+    'referral_program_headline'      => 'string',
+    'referral_program_subheadline'   => 'text',
+    'referral_signup_trial_days'     => 'int',
+    'referral_event_reward_default'  => 'string',
 ];
 
 if (is_post()) {
@@ -17,6 +18,9 @@ if (is_post()) {
             $v = is_string($_POST[$k]) ? trim($_POST[$k]) : $_POST[$k];
             if ($k === 'referral_signup_trial_days') {
                 $v = max(0, min(60, (int) $v));
+            }
+            if ($k === 'referral_event_reward_default') {
+                $v = number_format(max(0.0, (float) $v), 2, '.', '');
             }
             set_setting($k, $v, $type);
         }
@@ -92,14 +96,25 @@ require __DIR__ . '/../includes/admin_layout.php';
 
   <hr class="border-white/5">
 
-  <h2 class="font-serif text-2xl text-gold-400">Reward</h2>
-  <label class="block max-w-xs">
-    <span class="text-xs uppercase tracking-widest text-beige-100/60">Trial days awarded per sign-up</span>
-    <input name="referral_signup_trial_days" type="number" min="0" max="60"
-           value="<?= (int) setting('referral_signup_trial_days', 7) ?>"
-           class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3">
-    <span class="text-[11px] text-beige-100/40 mt-1 block">Both the referrer and the new user receive this many extra days of trial access. Set 0 to keep tracking referrals without giving a reward. Capped at 60.</span>
-  </label>
+  <h2 class="font-serif text-2xl text-gold-400">Rewards</h2>
+
+  <div class="grid sm:grid-cols-2 gap-5">
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Trial days awarded per sign-up</span>
+      <input name="referral_signup_trial_days" type="number" min="0" max="60"
+             value="<?= (int) setting('referral_signup_trial_days', 7) ?>"
+             class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3">
+      <span class="text-[11px] text-beige-100/40 mt-1 block">Both the referrer and the new user receive this many extra days of trial access on signup. Set 0 to disable. Capped at 60.</span>
+    </label>
+
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Default event reward · MYR</span>
+      <input name="referral_event_reward_default" type="number" step="0.01" min="0"
+             value="<?= e((string) setting('referral_event_reward_default', '50.00')) ?>"
+             class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3">
+      <span class="text-[11px] text-beige-100/40 mt-1 block">Cash owed to the referrer once a friend attends a session booked through their link. Override per event on the Events form. Set 0 to disable cash rewards. See <a href="<?= url('/admin/referral_rewards.php') ?>" class="text-gold-400 hover:text-gold-300 underline-offset-4 hover:underline">Referral rewards</a> for the ledger.</span>
+    </label>
+  </div>
 
   <div class="flex gap-3 pt-2">
     <button class="px-6 py-3 rounded-full bg-gold-500 text-navy-950 hover:bg-gold-400 transition">Save changes</button>

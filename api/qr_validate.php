@@ -99,6 +99,9 @@ if ($action === 'checkin') {
         if ((int) $remaining->fetchColumn() === 0) {
             db()->prepare("UPDATE event_bookings SET status = 'attended' WHERE id = :id")
                 ->execute([':id' => $ticket['booking_id']]);
+            if (function_exists('earn_referral_reward')) {
+                earn_referral_reward((int) $ticket['booking_id']);
+            }
         }
         db()->commit();
         audit_log('checkin.qr', 'tickets', (int) $ticket['id']);

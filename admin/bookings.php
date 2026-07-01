@@ -61,6 +61,9 @@ if (is_post()) {
     } elseif ($action === 'mark_attended') {
         db()->prepare("UPDATE event_bookings SET status='attended' WHERE id = :id")->execute([':id' => $bookingId]);
         audit_log('booking.mark_attended', 'event_bookings', $bookingId);
+        if (function_exists('earn_referral_reward')) {
+            earn_referral_reward($bookingId);
+        }
     } elseif ($action === 'cancel') {
         $bk = db()->prepare("SELECT user_id, paid_with_credit FROM event_bookings WHERE id = :id LIMIT 1");
         $bk->execute([':id' => $bookingId]);
@@ -92,6 +95,11 @@ if (is_post()) {
                 foreach ($rp->fetchAll() as $payRow) {
                     reverse_revenue_split((int) $payRow['id'], 'Booking #' . $bookingId . ' refunded');
                 }
+            }
+            // Reverse the referral reward too so the referrer isn't paid
+            // for a session that got refunded.
+            if (function_exists('reverse_referral_reward')) {
+                reverse_referral_reward($bookingId, 'Booking #' . $bookingId . ' refunded');
             }
             db()->commit();
             audit_log('booking.refund', 'event_bookings', $bookingId);
