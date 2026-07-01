@@ -257,6 +257,13 @@ if (is_post()) {
             }
         }
 
+        // Partner (cafe / business) attribution — separate ledger from the
+        // member referral above, so a booking can have at most one partner
+        // and at most one member referrer. Cookie set by /public/p.php.
+        if (function_exists('attribute_partner_booking')) {
+            attribute_partner_booking($bookingId);
+        }
+
         // Skip the invoice when the booking is fully paid with a credit —
         // the pack purchase already produced its own invoice/receipt.
         if (!$useCredit) {

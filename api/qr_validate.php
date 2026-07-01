@@ -102,6 +102,9 @@ if ($action === 'checkin') {
             if (function_exists('earn_referral_reward')) {
                 earn_referral_reward((int) $ticket['booking_id']);
             }
+            if (function_exists('earn_partner_referral')) {
+                earn_partner_referral((int) $ticket['booking_id']);
+            }
         }
         db()->commit();
         audit_log('checkin.qr', 'tickets', (int) $ticket['id']);

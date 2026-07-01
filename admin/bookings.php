@@ -64,6 +64,9 @@ if (is_post()) {
         if (function_exists('earn_referral_reward')) {
             earn_referral_reward($bookingId);
         }
+        if (function_exists('earn_partner_referral')) {
+            earn_partner_referral($bookingId);
+        }
     } elseif ($action === 'cancel') {
         $bk = db()->prepare("SELECT user_id, paid_with_credit FROM event_bookings WHERE id = :id LIMIT 1");
         $bk->execute([':id' => $bookingId]);
@@ -103,6 +106,9 @@ if (is_post()) {
             // for a session that got refunded.
             if (function_exists('reverse_referral_reward')) {
                 reverse_referral_reward($bookingId, 'Booking #' . $bookingId . ' refunded');
+            }
+            if (function_exists('reverse_partner_referral')) {
+                reverse_partner_referral($bookingId, 'Booking #' . $bookingId . ' refunded');
             }
             db()->commit();
             audit_log('booking.refund', 'event_bookings', $bookingId);

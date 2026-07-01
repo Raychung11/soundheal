@@ -35,6 +35,7 @@ $adminNav = [
         ['Promo codes',        '/admin/promo_codes.php'],
         ['Gift vouchers',      '/admin/gift_vouchers.php'],
         ['Referral program',   '/admin/referral_settings.php'],
+        ['Partners (QR)',      '/admin/partners.php'],
         ['Corporate packages', '/admin/corporate_packages.php'],
         ['Corporate leads',    '/admin/corporate_leads.php'],
     ],
