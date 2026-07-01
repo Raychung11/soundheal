@@ -10,6 +10,7 @@ $event = ['id' => 0, 'slug' => '', 'title' => '', 'subtitle' => '', 'description
           'recurrence' => 'none', 'recurrence_until' => '', 'recurrence_days' => '',
           'package_a_label' => '', 'package_a_perks' => '',
           'package_b_label' => '', 'package_b_perks' => '',
+          'package_b_enabled' => 1,
           'experience_id' => null,
           'referral_reward_amount' => '',
           'audience' => 'public',
@@ -69,6 +70,7 @@ if (is_post()) {
         'package_a_perks' => trim((string) input('package_a_perks', '')),
         'package_b_label' => trim((string) input('package_b_label', '')),
         'package_b_perks' => trim((string) input('package_b_perks', '')),
+        'package_b_enabled' => !empty($_POST['package_b_enabled']) ? 1 : 0,
         'experience_id'   => ($v = (int) input('experience_id', 0)) > 0 ? $v : null,
         'referral_reward_amount' => (($ra = trim((string) input('referral_reward_amount', ''))) !== '' && (float) $ra > 0) ? (float) $ra : null,
         'audience'        => in_array(input('audience'), ['public','private'], true) ? input('audience') : 'public',
@@ -106,6 +108,7 @@ if (is_post()) {
                  recurrence=:rec, recurrence_until=:ru, recurrence_days=:rd,
                  package_a_label=:pal, package_a_perks=:pap,
                  package_b_label=:pbl, package_b_perks=:pbp,
+                 package_b_enabled=:pbe,
                  experience_id=:xid,
                  referral_reward_amount=:rra,
                  audience=:aud, credit_eligible=:cel
@@ -123,6 +126,7 @@ if (is_post()) {
                 ':pap' => $event['package_a_perks'] ?: null,
                 ':pbl' => $event['package_b_label'] ?: null,
                 ':pbp' => $event['package_b_perks'] ?: null,
+                ':pbe' => (int) $event['package_b_enabled'],
                 ':xid' => $event['experience_id'],
                 ':rra' => $event['referral_reward_amount'],
                 ':aud' => $event['audience'],
@@ -136,10 +140,11 @@ if (is_post()) {
                                      capacity, price_public, price_member, facilitator, category, status,
                                      recurrence, recurrence_until, recurrence_days,
                                      package_a_label, package_a_perks, package_b_label, package_b_perks,
+                                     package_b_enabled,
                                      experience_id, referral_reward_amount,
                                      audience, credit_eligible, created_by)
                  VALUES (:slug, :t, :st, :d, :ci, :l, :s, :e, :c, :pp, :pm, :f, :cat, :status,
-                         :rec, :ru, :rd, :pal, :pap, :pbl, :pbp, :xid, :rra, :aud, :cel, :uid)"
+                         :rec, :ru, :rd, :pal, :pap, :pbl, :pbp, :pbe, :xid, :rra, :aud, :cel, :uid)"
             );
             $stmt->execute([
                 ':slug' => $slug, ':t' => $event['title'], ':st' => $event['subtitle'],
@@ -153,6 +158,7 @@ if (is_post()) {
                 ':pap' => $event['package_a_perks'] ?: null,
                 ':pbl' => $event['package_b_label'] ?: null,
                 ':pbp' => $event['package_b_perks'] ?: null,
+                ':pbe' => (int) $event['package_b_enabled'],
                 ':xid' => $event['experience_id'],
                 ':rra' => $event['referral_reward_amount'],
                 ':aud' => $event['audience'],
@@ -412,6 +418,20 @@ require __DIR__ . '/../includes/admin_layout.php';
 
       <div class="space-y-3">
         <p class="text-[10px] uppercase tracking-widest text-beige-100/55">Package B · price <?= e(format_money((float) ($event['price_member'] ?? 0))) ?></p>
+
+        <!-- Toggle. When off, the booking page hides this card entirely
+             and Comfort takes the full width. Default on for existing
+             events so they don't change silently. -->
+        <label class="flex items-start gap-3 rounded-2xl border border-gold-500/20 bg-gold-500/5 px-4 py-3 cursor-pointer">
+          <input type="checkbox" name="package_b_enabled" value="1"
+                 <?= (int) ($event['package_b_enabled'] ?? 1) === 1 ? 'checked' : '' ?>
+                 class="mt-1 accent-gold-500">
+          <span>
+            <span class="text-sm text-beige-100">Offer this package on the booking page</span>
+            <span class="block text-[11px] text-beige-100/50 mt-1">Turn off for events that only ship one tier — e.g. a single-price workshop or a private corporate session. Comfort will fill the whole card row.</span>
+          </span>
+        </label>
+
         <label class="block">
           <span class="text-xs uppercase tracking-widest text-beige-100/60">Label</span>
           <input name="package_b_label" placeholder="Bring-Your-Own-Zen" value="<?= e((string) ($event['package_b_label'] ?? '')) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">

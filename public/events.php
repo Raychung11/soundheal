@@ -167,7 +167,12 @@ require __DIR__ . '/../includes/header.php';
             : '/member/book_event.php?event_id=' . (int) $fe['id'];
         $feRemain   = max(0, (int) $fe['capacity'] - (int) $fe['seats_taken']);
         $feSold     = $feRemain <= 0;
-        $feFromPrice = min((float) $fe['price_member'], (float) $fe['price_public']);
+        // When BYO is turned off for this event, "From" should be the
+        // Comfort price directly rather than the min of both tiers.
+        $feBEnabled  = !array_key_exists('package_b_enabled', $fe) || (int) $fe['package_b_enabled'] === 1;
+        $feFromPrice = $feBEnabled
+            ? min((float) $fe['price_member'], (float) $fe['price_public'])
+            : (float) $fe['price_public'];
       ?>
         <article class="group relative rounded-3xl overflow-hidden border border-white/5 bg-navy-900/40 hover:border-gold-500/30 transition flex flex-col">
           <div class="relative aspect-[4/3] bg-gradient-to-br from-navy-800 to-navy-950 overflow-hidden">
@@ -379,14 +384,21 @@ require __DIR__ . '/../includes/header.php';
                       With <span class="text-beige-100/75"><?= e($event['facilitator']) ?></span>
                     </p>
                   <?php endif; ?>
+                  <?php
+                    // Package B toggle — omit the BYO price entirely
+                    // when the event doesn't offer that tier.
+                    $rowBEnabled = !array_key_exists('package_b_enabled', $event) || (int) $event['package_b_enabled'] === 1;
+                  ?>
                   <p class="text-xs mt-1.5 lg:mt-2">
                     <?php if ($soldOut): ?>
                       <span class="text-beige-100/45">Fully held</span>
                     <?php else: ?>
                       <span class="text-gold-400"><?= $remaining ?> seat<?= $remaining === 1 ? '' : 's' ?> left</span>
                     <?php endif; ?>
-                    <span class="text-beige-100/35"> · </span>
-                    <span class="text-beige-100/70"><?= e($rowBName) ?> <?= e(format_money((float)$event['price_member'])) ?></span>
+                    <?php if ($rowBEnabled): ?>
+                      <span class="text-beige-100/35"> · </span>
+                      <span class="text-beige-100/70"><?= e($rowBName) ?> <?= e(format_money((float)$event['price_member'])) ?></span>
+                    <?php endif; ?>
                     <span class="text-beige-100/35"> · </span>
                     <span class="text-beige-100/70"><?= e($rowAName) ?> <?= e(format_money((float)$event['price_public'])) ?></span>
                   </p>

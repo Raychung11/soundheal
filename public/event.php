@@ -84,6 +84,9 @@ if (!$aPerks) $aPerks = $defaultAPerks;
 $bPerks = array_values(array_filter(array_map('trim',
     preg_split('/\r?\n/', (string) ($event['package_b_perks'] ?? '')))));
 if (!$bPerks) $bPerks = $defaultBPerks;
+// Package B toggle — hide the BYO summary card when the admin has
+// turned it off. Defaults to 1 for pre-migration rows.
+$bEnabled = !array_key_exists('package_b_enabled', $event) || (int) $event['package_b_enabled'] === 1;
 
 // Reserve link — /member/book_event.php gates itself with require_login,
 // which stores REQUEST_URI in $_SESSION['_intended'] and bounces to
@@ -172,9 +175,10 @@ require __DIR__ . '/../includes/header.php';
     </div>
   <?php endif; ?>
 
-  <!-- Packages -->
-  <h2 class="mt-14 font-serif text-2xl text-beige-100">Choose your package</h2>
-  <div class="mt-5 grid sm:grid-cols-2 gap-4">
+  <!-- Packages — either two side-by-side cards or a single wider card
+       when the admin has turned off Package B for this event. -->
+  <h2 class="mt-14 font-serif text-2xl text-beige-100"><?= $bEnabled ? 'Choose your package' : 'Your package' ?></h2>
+  <div class="mt-5 grid <?= $bEnabled ? 'sm:grid-cols-2' : 'sm:grid-cols-1 max-w-2xl' ?> gap-4">
     <div class="rounded-2xl border border-white/10 bg-navy-900/40 p-6">
       <div class="flex items-start justify-between gap-3">
         <p class="font-serif text-xl text-beige-100"><?= e($aLabel) ?></p>
@@ -186,6 +190,7 @@ require __DIR__ . '/../includes/header.php';
         <?php endforeach; ?>
       </ul>
     </div>
+    <?php if ($bEnabled): ?>
     <div class="rounded-2xl border border-white/10 bg-navy-900/40 p-6">
       <div class="flex items-start justify-between gap-3">
         <p class="font-serif text-xl text-beige-100"><?= e($bLabel) ?></p>
@@ -197,6 +202,7 @@ require __DIR__ . '/../includes/header.php';
         <?php endforeach; ?>
       </ul>
     </div>
+    <?php endif; ?>
   </div>
 
   <!-- CTA + share -->

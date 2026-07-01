@@ -44,6 +44,10 @@ $defaultByoPerks     = ['Full sound healing experience', 'Bring your own mat and
 
 $comfortName  = trim((string) ($event['package_a_label'] ?? '')) ?: 'Comfort';
 $byoName      = trim((string) ($event['package_b_label'] ?? '')) ?: 'Bring-Your-Own-Zen';
+// Package B toggle — some events (single-tier workshops, private
+// corporate sessions) only offer Comfort. Defaults to 1 for
+// pre-migration rows so nothing changes silently.
+$byoEnabled   = !array_key_exists('package_b_enabled', $event) || (int) $event['package_b_enabled'] === 1;
 $comfortPerks = array_values(array_filter(array_map('trim',
     preg_split('/\r?\n/', (string) ($event['package_a_perks'] ?? '')))));
 if (!$comfortPerks) $comfortPerks = $defaultComfortPerks;
@@ -71,6 +75,11 @@ if (is_post()) {
     csrf_verify();
     $package = (string) input('package', 'comfort');
     if (!in_array($package, ['comfort', 'byo'], true)) {
+        $package = 'comfort';
+    }
+    // If the admin has turned off Package B for this event, force
+    // comfort regardless of what the client sends.
+    if (!$byoEnabled) {
         $package = 'comfort';
     }
     // Server-side guard mirroring the UI: credits can only pay for
@@ -355,7 +364,10 @@ require __DIR__ . '/../includes/header.php';
       </div>
     </label>
 
-    <!-- Package B (price_member) -->
+    <!-- Package B (price_member) — hidden entirely when the admin has
+         turned it off for this event. Server-side POST guard forces
+         'comfort' too so the radio can't be crafted from devtools. -->
+    <?php if ($byoEnabled): ?>
     <label class="block cursor-pointer">
       <input type="radio" name="package" value="byo" x-model="pkg" class="sr-only">
       <div :class="pkg === 'byo' ? 'border-gold-500/50 bg-gold-500/10 ring-1 ring-gold-500/30' : 'border-white/10 bg-navy-900/40 hover:border-gold-500/30'"
@@ -371,6 +383,7 @@ require __DIR__ . '/../includes/header.php';
         </ul>
       </div>
     </label>
+    <?php endif; // $byoEnabled ?>
 
     <?php
       // credit_eligible defaults to 1 for pre-migration rows.
