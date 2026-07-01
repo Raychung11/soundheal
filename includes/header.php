@@ -83,7 +83,32 @@ if (empty($skipTracking)) {
       }
     </script>
     <link rel="stylesheet" href="<?= asset('css/app.css') ?>">
-    <style>[x-cloak]{display:none!important}</style>
+    <style>
+      [x-cloak]{display:none!important}
+      /* Dark theme + native date/time inputs — tell the browser we're
+         a dark UI so the built-in calendar / clock popups render in
+         dark, and invert the little calendar/clock glyph so it's
+         visible against the navy field background. */
+      input[type="date"],
+      input[type="time"],
+      input[type="datetime-local"],
+      input[type="month"],
+      input[type="week"] { color-scheme: dark; }
+      input[type="date"]::-webkit-calendar-picker-indicator,
+      input[type="time"]::-webkit-calendar-picker-indicator,
+      input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+      input[type="month"]::-webkit-calendar-picker-indicator,
+      input[type="week"]::-webkit-calendar-picker-indicator {
+        filter: invert(1) brightness(1.4);
+        cursor: pointer;
+        opacity: 0.85;
+      }
+      input[type="date"]::-webkit-calendar-picker-indicator:hover,
+      input[type="time"]::-webkit-calendar-picker-indicator:hover,
+      input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
+      input[type="month"]::-webkit-calendar-picker-indicator:hover,
+      input[type="week"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+    </style>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
 <body class="bg-navy-950 text-beige-100 font-sans antialiased min-h-screen flex flex-col">
