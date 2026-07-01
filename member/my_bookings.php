@@ -34,6 +34,9 @@ if (is_post()) {
             } else {
                 flash('booking', 'Your booking has been cancelled. If you had paid, refund will follow within 7 days.', 'success');
             }
+            if (function_exists('notify_next_waitlist_for_booking')) {
+                notify_next_waitlist_for_booking($bookingId);
+            }
         }
         redirect('/member/my_bookings.php');
     }

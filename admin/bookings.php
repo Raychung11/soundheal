@@ -77,6 +77,9 @@ if (is_post()) {
             if ($bk && !empty($bk['paid_with_credit']) && function_exists('refund_credit_for_booking')) {
                 refund_credit_for_booking((int) $bk['user_id'], $bookingId);
             }
+            if (function_exists('notify_next_waitlist_for_booking')) {
+                notify_next_waitlist_for_booking($bookingId);
+            }
         } catch (Throwable $e) { db()->rollBack(); }
     } elseif ($action === 'refund') {
         require_admin();
@@ -103,6 +106,9 @@ if (is_post()) {
             }
             db()->commit();
             audit_log('booking.refund', 'event_bookings', $bookingId);
+            if (function_exists('notify_next_waitlist_for_booking')) {
+                notify_next_waitlist_for_booking($bookingId);
+            }
             if ($bk && !empty($bk['paid_with_credit']) && function_exists('refund_credit_for_booking')) {
                 refund_credit_for_booking((int) $bk['user_id'], $bookingId);
             }

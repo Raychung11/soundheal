@@ -198,8 +198,13 @@ require __DIR__ . '/../includes/header.php';
                 <p class="text-[10px] uppercase tracking-widest text-beige-100/50">From</p>
                 <p class="font-serif text-xl text-gold-400"><?= e(format_money($feFromPrice)) ?></p>
               </div>
-              <?php if ($feSold): ?>
-                <button class="px-4 py-2 rounded-full bg-navy-800 text-beige-100/40 cursor-not-allowed text-sm" disabled>Held</button>
+              <?php if ($feSold):
+                $feWait = $feIsOcc
+                    ? '/public/waitlist.php?event=' . (int) $fe['_template_id'] . '&date=' . urlencode((string) $fe['_occurrence_date'])
+                    : '/public/waitlist.php?event=' . (int) $fe['id'];
+              ?>
+                <a href="<?= url($feWait) ?>"
+                   class="px-4 py-2 rounded-full border border-gold-500/40 text-gold-400 hover:bg-gold-500/10 transition text-sm whitespace-nowrap">Notify me</a>
               <?php else: ?>
                 <a href="<?= url($feReserve) ?>"
                    class="px-4 py-2 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition text-sm whitespace-nowrap">Reserve →</a>
@@ -368,8 +373,11 @@ require __DIR__ . '/../includes/header.php';
                           class="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-beige-100">Copy link</button>
                 </div>
               </div>
-              <?php if ($soldOut): ?>
-                <button class="px-3 sm:px-5 py-2 rounded-full bg-navy-800 text-beige-100/40 cursor-not-allowed text-sm whitespace-nowrap" disabled>Held</button>
+              <?php if ($soldOut):
+                $waitUrl = '/public/waitlist.php?event=' . $shareEventParam . $shareDateParam;
+              ?>
+                <a href="<?= url($waitUrl) ?>"
+                   class="px-3 sm:px-5 py-2 rounded-full border border-gold-500/40 text-gold-400 hover:bg-gold-500/10 transition text-sm whitespace-nowrap">Notify me</a>
               <?php else: ?>
                 <a href="<?= url($reserveUrl) ?>"
                    class="px-3 sm:px-5 py-2 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition text-sm whitespace-nowrap">

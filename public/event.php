@@ -197,8 +197,17 @@ require __DIR__ . '/../includes/header.php';
 
   <!-- CTA + share -->
   <div class="mt-10 border-t border-white/5 pt-8 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
-    <?php if ($soldOut): ?>
-      <button class="w-full sm:w-auto px-8 py-4 rounded-full bg-navy-800 text-beige-100/40 cursor-not-allowed text-sm" disabled>Fully held</button>
+    <?php if ($soldOut):
+      $waitUrl = '/public/waitlist.php?id=' . (int) $eventId
+               . ($isRecurring && $dateValid ? '&date=' . urlencode($date) : '');
+      // Note: waitlist.php uses ?event=, keep params consistent.
+      $waitUrl = '/public/waitlist.php?event=' . (int) $eventId
+               . ($isRecurring && $dateValid ? '&date=' . urlencode($date) : '');
+    ?>
+      <a href="<?= url($waitUrl) ?>"
+         class="w-full sm:w-auto text-center px-8 py-4 rounded-full border border-gold-500/50 text-gold-400 font-medium hover:bg-gold-500/10 transition">
+        Notify me if a seat opens →
+      </a>
     <?php else: ?>
       <a href="<?= url($reserveUrl) ?>"
          class="w-full sm:w-auto text-center px-8 py-4 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition shadow-[0_10px_35px_-15px_rgba(201,164,106,0.6)]">

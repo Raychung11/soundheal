@@ -13,6 +13,7 @@ function render_mail_template(string $name, array $vars): array
         'booking_confirm'     => 'mail_template_booking_confirm',
         'booking_reminder_24h' => 'mail_template_booking_reminder_24h',
         'booking_reminder_2h'  => 'mail_template_booking_reminder_2h',
+        'waitlist_seat_open'   => 'mail_template_waitlist_seat_open',
         'contact_received'=> 'mail_template_contact_received',
         'corporate_lead'  => 'mail_template_corporate_lead',
     ];
@@ -162,6 +163,24 @@ function mail_template_booking_reminder_2h(array $v): array
 HTML;
     $text = "Your session starts in about 2 hours: {$title} at {$when}, {$loc}. Booking {$ref}.";
     return [mail_layout("See you soon — your session is in about 2 hours.", $body), $text];
+}
+
+function mail_template_waitlist_seat_open(array $v): array
+{
+    $name       = e($v['name'] ?? 'friend');
+    $title      = e($v['event_title'] ?? 'this session');
+    $when       = e($v['starts_at'] ?? '');
+    $reserveUrl = e($v['reserve_url'] ?? '#');
+    $body = <<<HTML
+<p style="font-family:Georgia,'Cormorant Garamond',serif;font-size:22px;color:#e7d2a3;">A seat just opened, {$name}.</p>
+<p>You joined the waitlist for <strong style="color:#e7d2a3;">{$title}</strong> on {$when}. A spot is now available — first to book takes it.</p>
+<p style="margin:24px 0;">
+  <a href="{$reserveUrl}" style="display:inline-block;background:#c9a46a;color:#0a1027;padding:14px 28px;border-radius:999px;text-decoration:none;font-family:Inter,Arial,sans-serif;font-weight:500;">Reserve now</a>
+</p>
+<p style="color:rgba(246,239,229,0.65);">If someone else books first, we'll invite the next person on the list — no hurry, no pressure.</p>
+HTML;
+    $text = "A seat opened for {$title} on {$when}. Reserve: {$reserveUrl}";
+    return [mail_layout('A seat just opened for your waitlisted session.', $body), $text];
 }
 
 function mail_template_contact_received(array $v): array
