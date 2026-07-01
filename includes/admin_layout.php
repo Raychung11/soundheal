@@ -18,6 +18,7 @@ $adminNav = [
     ['Revenue split',      '/admin/revenue_splits.php'],
     ['Referral rewards',   '/admin/referral_rewards.php'],
     ['Promo codes',        '/admin/promo_codes.php'],
+    ['Gift vouchers',      '/admin/gift_vouchers.php'],
     ['Invoices',           '/admin/invoices.php'],
     ['Payment settings',   '/admin/payment_settings.php'],
     ['Mail settings',      '/admin/mail_settings.php'],

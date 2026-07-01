@@ -151,18 +151,32 @@ if (is_post()) {
         $effectiveUnit = $useCredit ? 0.0 : $unitPrice;
         $subtotal = $effectiveUnit * $qty;
 
-        // Promo code — validated on the current subtotal. Rejected for
-        // credit-paid bookings (nothing to discount).
-        $promoInput      = trim((string) input('promo_code', ''));
+        // Promo / gift code — validated on the current subtotal. Not
+        // available on credit-paid bookings. Gift-voucher codes take
+        // precedence (they're personal / already paid for); promo
+        // codes are the fallback.
+        $codeInput       = trim((string) input('promo_code', ''));
         $promoCodeStored = null;
+        $giftVoucherId   = null;
         $discountAmount  = 0.0;
-        if ($promoInput !== '' && !$useCredit) {
-            $vp = validate_promo_code($promoInput, $subtotal);
-            if (!$vp['ok']) {
-                throw new RuntimeException($vp['error']);
+        if ($codeInput !== '' && !$useCredit) {
+            $vg = validate_gift_voucher($codeInput, $subtotal);
+            if ($vg['ok']) {
+                $discountAmount = (float) $vg['discount'];
+                $giftVoucherId  = (int) $vg['voucher']['id'];
+            } else {
+                $vp = validate_promo_code($codeInput, $subtotal);
+                if ($vp['ok']) {
+                    $discountAmount  = (float) $vp['discount'];
+                    $promoCodeStored = strtoupper($codeInput);
+                } else {
+                    // Show the voucher-specific error if the code
+                    // looks like a voucher (SH- prefix); otherwise
+                    // the promo error is more helpful.
+                    $err = str_starts_with(strtoupper($codeInput), 'SH-') ? $vg['error'] : $vp['error'];
+                    throw new RuntimeException($err);
+                }
             }
-            $discountAmount  = (float) $vp['discount'];
-            $promoCodeStored = strtoupper($promoInput);
         }
         $total = max(0.0, round($subtotal - $discountAmount, 2));
 
@@ -185,11 +199,14 @@ if (is_post()) {
         ]);
         $bookingId = (int) db()->lastInsertId();
 
-        // Consume the promo code atomically. record_promo_use returns
-        // false if a concurrent booking hit the cap between validate
-        // and use — reject the whole booking so the total the user
-        // paid always reflects the code they actually used.
-        if ($promoCodeStored !== null) {
+        // Consume the code atomically. Both paths guard against a
+        // race (voucher redeemed by a parallel booking, or promo
+        // hitting its cap) and roll the whole booking back cleanly.
+        if ($giftVoucherId !== null) {
+            if (!redeem_gift_voucher($giftVoucherId, $bookingId, $discountAmount)) {
+                throw new RuntimeException('That gift voucher was just used elsewhere. Please try again.');
+            }
+        } elseif ($promoCodeStored !== null) {
             if (!record_promo_use($bookingId, $promoCodeStored, $discountAmount)) {
                 throw new RuntimeException('That promo code was just claimed by someone else. Please try again.');
             }
@@ -474,7 +491,7 @@ require __DIR__ . '/../includes/header.php';
 
     <details class="rounded-2xl border border-white/5 bg-navy-900/40 p-4" <?= $promoPrefill !== '' ? 'open' : '' ?> x-show="!useCredit" x-cloak>
       <summary class="cursor-pointer text-sm text-beige-100/75 hover:text-gold-400 transition">
-        Have a promo code?
+        Have a promo or gift code?
       </summary>
       <div class="mt-3 flex flex-col sm:flex-row gap-2">
         <input name="promo_code" placeholder="Enter code"

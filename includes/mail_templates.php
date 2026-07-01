@@ -15,6 +15,7 @@ function render_mail_template(string $name, array $vars): array
         'booking_reminder_2h'  => 'mail_template_booking_reminder_2h',
         'waitlist_seat_open'   => 'mail_template_waitlist_seat_open',
         'booking_thank_you'    => 'mail_template_booking_thank_you',
+        'gift_voucher_issued'  => 'mail_template_gift_voucher_issued',
         'contact_received'=> 'mail_template_contact_received',
         'corporate_lead'  => 'mail_template_corporate_lead',
     ];
@@ -164,6 +165,40 @@ function mail_template_booking_reminder_2h(array $v): array
 HTML;
     $text = "Your session starts in about 2 hours: {$title} at {$when}, {$loc}. Booking {$ref}.";
     return [mail_layout("See you soon — your session is in about 2 hours.", $body), $text];
+}
+
+function mail_template_gift_voucher_issued(array $v): array
+{
+    $name       = e($v['recipient_name'] ?? 'friend');
+    $amount     = e($v['amount_display'] ?? '');
+    $code       = e($v['code'] ?? '');
+    $message    = trim((string) ($v['message'] ?? ''));
+    $expires    = trim((string) ($v['expires_display'] ?? ''));
+    $reserveUrl = e($v['events_url'] ?? '#');
+
+    $messageHtml = $message !== ''
+        ? '<blockquote style="margin:20px 0;padding:14px 18px;border-left:2px solid #c9a46a;color:rgba(246,239,229,0.75);font-style:italic;">' . nl2br(e($message)) . '</blockquote>'
+        : '';
+    $expiresHtml = $expires !== ''
+        ? '<p style="color:rgba(246,239,229,0.55);font-size:13px;">Valid until ' . $expires . '.</p>'
+        : '';
+
+    $body = <<<HTML
+<p style="font-family:Georgia,'Cormorant Garamond',serif;font-size:22px;color:#e7d2a3;">A gift for you, {$name}.</p>
+<p>Someone thought of you — a <strong style="color:#e7d2a3;">{$amount}</strong> gift toward a quiet session.</p>
+{$messageHtml}
+<p style="margin:24px 0;padding:20px;border:1px dashed rgba(201,164,106,0.4);border-radius:14px;text-align:center;">
+  <span style="display:block;font-size:11px;letter-spacing:0.3em;text-transform:uppercase;color:rgba(246,239,229,0.55);">Your code</span>
+  <span style="display:block;margin-top:8px;font-family:monospace;font-size:22px;letter-spacing:0.15em;color:#c9a46a;">{$code}</span>
+</p>
+{$expiresHtml}
+<p style="margin:24px 0;">
+  <a href="{$reserveUrl}" style="display:inline-block;background:#c9a46a;color:#0a1027;padding:14px 28px;border-radius:999px;text-decoration:none;font-family:Inter,Arial,sans-serif;font-weight:500;">Choose a session</a>
+</p>
+<p style="color:rgba(246,239,229,0.65);">Held with care.</p>
+HTML;
+    $text = "You've received a {$amount} gift toward a session. Code: {$code}. Choose a session at {$reserveUrl}";
+    return [mail_layout('A gift toward a quiet session.', $body), $text];
 }
 
 function mail_template_booking_thank_you(array $v): array

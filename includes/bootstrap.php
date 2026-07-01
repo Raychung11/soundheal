@@ -48,6 +48,7 @@ require_once __DIR__ . '/referrals.php';
 require_once __DIR__ . '/referral_rewards.php';
 require_once __DIR__ . '/waitlist.php';
 require_once __DIR__ . '/promo_codes.php';
+require_once __DIR__ . '/gift_vouchers.php';
 require_once __DIR__ . '/payments.php';
 require_once __DIR__ . '/invoices.php';
 require_once __DIR__ . '/class_packs.php';
