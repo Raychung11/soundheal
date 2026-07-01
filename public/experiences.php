@@ -10,22 +10,35 @@ $experiences = db()->query(
       ORDER BY sort_order ASC, title ASC"
 )->fetchAll();
 
-// For each experience, look up the soonest bookable session linked to
-// it (one-off in the future, OR a daily-recurring template). Drives the
-// "Next session" line + the Reserve button target.
+// For each experience, look up every published session linked to it —
+// both one-off future events and recurring templates — expand recurring
+// templates 60 days out, sort by concrete date, and pick the SOONEST
+// actual occurrence. Earlier versions returned the template row itself
+// and then rendered describe_event_schedule() ("Every Tue at 8:00 PM"),
+// which never showed a specific date, so users kept asking "when is the
+// next one?". Now the card shows a real date they can act on.
 $nextStmt = db()->prepare(
-    "SELECT id, title, starts_at, recurrence, recurrence_days, capacity, ends_at
-       FROM events
+    "SELECT * FROM events
       WHERE status = 'published'
         AND (audience IS NULL OR audience = 'public')
         AND parent_event_id IS NULL
         AND experience_id = :xid
         AND (recurrence IN ('daily','weekly','monthly') OR starts_at >= NOW())
-      ORDER BY starts_at ASC LIMIT 1"
+      ORDER BY starts_at ASC"
 );
 foreach ($experiences as $idx => $exp) {
     $nextStmt->execute([':xid' => (int) $exp['id']]);
-    $experiences[$idx]['next_event'] = $nextStmt->fetch() ?: null;
+    $rows = $nextStmt->fetchAll();
+    if (!$rows) {
+        $experiences[$idx]['next_event'] = null;
+        continue;
+    }
+    $expanded = function_exists('expand_event_occurrences')
+        ? expand_event_occurrences($rows, 60)
+        : $rows;
+    // expand_event_occurrences returns future-only occurrences in
+    // chronological order; the first one is the soonest.
+    $experiences[$idx]['next_event'] = $expanded[0] ?? null;
 }
 
 require __DIR__ . '/../includes/header.php';
@@ -74,12 +87,10 @@ require __DIR__ . '/../includes/header.php';
             <?php
               $nxt = $exp['next_event'] ?? null;
               $reserveUrl = '/public/events.php?experience=' . urlencode((string) $exp['slug']);
-              $nextLine = '';
-              if ($nxt) {
-                  $nextLine = in_array($nxt['recurrence'] ?? 'none', ['daily','weekly','monthly'], true)
-                      ? describe_event_schedule($nxt)
-                      : format_datetime($nxt['starts_at'], 'D, d M Y · g:i A');
-              }
+              // Always show a concrete date now — expand_event_occurrences
+              // has already resolved a recurring template into its next
+              // real occurrence, so starts_at is the actual date-time.
+              $nextLine = $nxt ? format_datetime($nxt['starts_at'], 'D, d M Y · g:i A') : '';
             ?>
 
             <div class="mt-8 pt-5 border-t border-white/5 flex items-center justify-between gap-3">

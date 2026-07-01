@@ -134,6 +134,47 @@ if (is_post()) {
                 ':id' => $id,
             ]);
             audit_log('event.update', 'events', $id);
+
+            // Cascade config-level changes down to unbooked child
+            // instances of this template. Without this, turning off
+            // Package B (or editing packages / audience / credits) on
+            // the template wouldn't take effect on already-materialised
+            // occurrences — the booking page books against the child
+            // row, not the template. Children with any live booking
+            // are left alone so we don't retroactively change what a
+            // member already paid for.
+            db()->prepare(
+                "UPDATE events c
+                    LEFT JOIN event_bookings b
+                      ON b.event_id = c.id
+                     AND b.status IN ('pending','paid','attended')
+                    SET c.title = :t, c.subtitle = :st, c.description = :d,
+                        c.cover_image = :ci, c.location = :l,
+                        c.capacity = :c, c.price_public = :pp, c.price_member = :pm,
+                        c.facilitator = :f, c.category = :cat, c.status = :status,
+                        c.experience_id = :xid, c.audience = :aud, c.credit_eligible = :cel,
+                        c.referral_reward_amount = :rra,
+                        c.package_a_label = :pal, c.package_a_perks = :pap,
+                        c.package_b_label = :pbl, c.package_b_perks = :pbp,
+                        c.package_b_enabled = :pbe
+                  WHERE c.parent_event_id = :id
+                    AND b.id IS NULL"
+            )->execute([
+                ':t' => $event['title'], ':st' => $event['subtitle'], ':d' => $event['description'],
+                ':ci' => $event['cover_image'], ':l' => $event['location'],
+                ':c' => $event['capacity'], ':pp' => $event['price_public'], ':pm' => $event['price_member'],
+                ':f' => $event['facilitator'], ':cat' => $event['category'], ':status' => $event['status'],
+                ':xid' => $event['experience_id'],
+                ':aud' => $event['audience'],
+                ':cel' => (int) $event['credit_eligible'],
+                ':rra' => $event['referral_reward_amount'],
+                ':pal' => $event['package_a_label'] ?: null,
+                ':pap' => $event['package_a_perks'] ?: null,
+                ':pbl' => $event['package_b_label'] ?: null,
+                ':pbp' => $event['package_b_perks'] ?: null,
+                ':pbe' => (int) $event['package_b_enabled'],
+                ':id' => $id,
+            ]);
         } else {
             $stmt = db()->prepare(
                 "INSERT INTO events (slug, title, subtitle, description, cover_image, location, starts_at, ends_at,

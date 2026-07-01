@@ -255,15 +255,41 @@ if (!function_exists('expand_event_occurrences')) {
 
         $childSlug = (string) $tpl['slug'] . '-' . $date;
 
+        // Child instances need to inherit every per-event configuration
+        // from the template — earlier versions of this helper only copied
+        // the core fields, which silently dropped:
+        //   - experience_id (breaks the "Reserve" link back from an
+        //     experience card),
+        //   - package_a/b_label / _perks (custom workshop tiers reverted
+        //     to Comfort/BYO defaults),
+        //   - package_b_enabled (admin turns off BYO on the template but
+        //     the child still offers it),
+        //   - audience (private templates leaked their children as
+        //     public),
+        //   - credit_eligible (paid-only templates let members redeem
+        //     credits on child bookings),
+        //   - referral_reward_amount (per-event override lost),
+        //   - intake_type (pet workshops lost the pet intake form).
+        $tplPkgBEnabled = array_key_exists('package_b_enabled', $tpl)
+            ? (int) $tpl['package_b_enabled'] : 1;
+
         db()->prepare(
             "INSERT INTO events
                 (slug, parent_event_id, title, subtitle, description, cover_image,
                  location, starts_at, ends_at, capacity, price_public, price_member,
-                 facilitator, category, status, recurrence, recurrence_until, created_by)
+                 facilitator, category, status, recurrence, recurrence_until, created_by,
+                 experience_id, audience, credit_eligible, referral_reward_amount,
+                 package_a_label, package_a_perks,
+                 package_b_label, package_b_perks, package_b_enabled,
+                 intake_type)
              VALUES
                 (:slug, :pid, :title, :subtitle, :description, :cover,
                  :location, :starts_at, :ends_at, :capacity, :pp, :pm,
-                 :facilitator, :category, :status, 'none', NULL, :cb)"
+                 :facilitator, :category, :status, 'none', NULL, :cb,
+                 :xid, :aud, :cel, :rra,
+                 :pal, :pap,
+                 :pbl, :pbp, :pbe,
+                 :itype)"
         )->execute([
             ':slug'        => $childSlug,
             ':pid'         => $templateId,
@@ -281,6 +307,16 @@ if (!function_exists('expand_event_occurrences')) {
             ':category'    => $tpl['category'],
             ':status'      => $tpl['status'],
             ':cb'          => $tpl['created_by'],
+            ':xid'         => $tpl['experience_id'] ?? null,
+            ':aud'         => $tpl['audience'] ?? 'public',
+            ':cel'         => (int) ($tpl['credit_eligible'] ?? 1),
+            ':rra'         => $tpl['referral_reward_amount'] ?? null,
+            ':pal'         => $tpl['package_a_label'] ?? null,
+            ':pap'         => $tpl['package_a_perks'] ?? null,
+            ':pbl'         => $tpl['package_b_label'] ?? null,
+            ':pbp'         => $tpl['package_b_perks'] ?? null,
+            ':pbe'         => $tplPkgBEnabled,
+            ':itype'       => $tpl['intake_type'] ?? 'none',
         ]);
 
         $childStmt->execute([':pid' => $templateId, ':d' => $date]);
