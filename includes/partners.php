@@ -12,7 +12,7 @@ declare(strict_types=1);
  *                                  booking + cache partner_id on the booking.
  *   earn_partner_referral()      — flip 'pending' → 'earned' on attendance.
  *   reverse_partner_referral()   — flip on refund.
- *   settle_partner_payout()      — batch unpaid earned rows for one partner.
+ *   settle_partner_referral_payout() — batch unpaid earned rows for one partner.
  *   partner_summary()            — dashboard totals (all or one partner).
  *
  * All accounting mirrors event_referral_rewards so both live under the
@@ -198,7 +198,13 @@ function partner_summary(?int $partnerId = null): array
     ];
 }
 
-function settle_partner_payout(int $partnerId, string $reference, ?int $byUserId): array
+/**
+ * Distinct name from revenue.php's settle_partner_payout() (which
+ * batches IT-partner revenue-split rows into the partner_payouts
+ * table). This one writes to partner_referral_payouts and is scoped
+ * to cafe/business referrers.
+ */
+function settle_partner_referral_payout(int $partnerId, string $reference, ?int $byUserId): array
 {
     if ($partnerId <= 0) {
         return ['ok' => false, 'message' => 'Missing partner.'];
@@ -221,7 +227,7 @@ function settle_partner_payout(int $partnerId, string $reference, ?int $byUserId
     db()->beginTransaction();
     try {
         db()->prepare(
-            "INSERT INTO partner_payouts (partner_id, amount, currency, reward_count, reference, paid_by)
+            "INSERT INTO partner_referral_payouts (partner_id, amount, currency, reward_count, reference, paid_by)
              VALUES (:p, :a, 'MYR', :c, :ref, :u)"
         )->execute([
             ':p'   => $partnerId,

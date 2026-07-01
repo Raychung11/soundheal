@@ -7,11 +7,14 @@
 --   with a commission on the same accounting rails as
 --   event_referral_rewards.
 --
---   partners             — one row per business.
---   partner_referrals    — ledger of attributed bookings, mirrors
---                          event_referral_rewards structure so the
---                          admin flow is familiar.
---   partner_payouts      — batches unpaid earned rows into paid runs.
+--   partners                  — one row per business.
+--   partner_referrals         — ledger of attributed bookings, mirrors
+--                               event_referral_rewards structure so the
+--                               admin flow is familiar.
+--   partner_referral_payouts  — batches unpaid earned rows into paid runs.
+--                               (NB: separate from the pre-existing
+--                                partner_payouts table used by the IT
+--                                revenue-split feature in migration 028.)
 --   event_bookings.partner_id — quick foreign-key lookup for refunds.
 --
 --   Idempotent: ALTERs use information_schema guards,
@@ -69,7 +72,7 @@ CREATE TABLE IF NOT EXISTS partner_referrals (
     CONSTRAINT fk_partner_ref_partner FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS partner_payouts (
+CREATE TABLE IF NOT EXISTS partner_referral_payouts (
     id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     partner_id      INT UNSIGNED NOT NULL,
     amount          DECIMAL(12,2) NOT NULL,
@@ -78,8 +81,8 @@ CREATE TABLE IF NOT EXISTS partner_payouts (
     reference       VARCHAR(160) DEFAULT NULL,
     paid_by         INT UNSIGNED DEFAULT NULL,
     paid_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_partner_payouts_partner (partner_id, paid_at),
-    CONSTRAINT fk_partner_payouts_partner FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE CASCADE
+    INDEX idx_partner_ref_payouts_partner (partner_id, paid_at),
+    CONSTRAINT fk_partner_ref_payouts_partner FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- event_bookings.partner_id — cache of the attributed partner so refund

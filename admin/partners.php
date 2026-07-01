@@ -100,9 +100,9 @@ if (is_post()) {
     } elseif ($action === 'settle_payout') {
         $partnerId = (int) input('partner_id', 0);
         $reference = trim((string) input('reference', ''));
-        $res = settle_partner_payout($partnerId, $reference, current_user_id());
+        $res = settle_partner_referral_payout($partnerId, $reference, current_user_id());
         if ($res['ok']) {
-            audit_log('partner.payout', 'partner_payouts', (int) $res['payout_id'], [
+            audit_log('partner.payout', 'partner_referral_payouts', (int) $res['payout_id'], [
                 'partner_id' => $partnerId,
                 'amount'     => $res['amount'],
                 'count'      => $res['count'],
@@ -157,7 +157,7 @@ $recentRewards = db()->query(
 
 $payouts = db()->query(
     "SELECT po.*, p.name AS partner_name, admin.full_name AS by_name
-       FROM partner_payouts po
+       FROM partner_referral_payouts po
        JOIN partners p ON p.id = po.partner_id
        LEFT JOIN users admin ON admin.id = po.paid_by
       ORDER BY po.id DESC LIMIT 20"
