@@ -66,6 +66,52 @@ if (is_post()) {
             flash('gallery', $uploadedCount === 1 ? 'Photo added.' : $uploadedCount . ' photos added.', 'success');
             redirect('/admin/gallery.php');
         }
+    } elseif ($action === 'add_video') {
+        $videoUrl  = trim((string) input('video_url', ''));
+        $caption   = trim((string) input('caption', ''));
+        $category  = trim((string) input('category', ''));
+        $eventId   = (int) input('event_id', 0) ?: null;
+        $sortOrder = (int) input('sort_order', 100);
+
+        // Reject anything we can't turn into a playable embed. Reusing
+        // the resolver keeps this in sync with what the public
+        // lightbox will actually render.
+        if ($videoUrl === '' || gallery_video_embed_url($videoUrl) === '') {
+            $errors[] = 'Please paste a YouTube or Vimeo URL. Other platforms aren\'t supported yet.';
+        }
+
+        // Optional custom thumbnail — required for Vimeo (no free
+        // thumbnail API); optional for YouTube (falls back to
+        // i.ytimg.com/vi/<id>/hqdefault.jpg).
+        $thumbPath = null;
+        if (empty($errors)) {
+            try {
+                $thumbPath = handle_upload('gallery_file', 'gallery');
+            } catch (RuntimeException $e) {
+                $errors[] = $e->getMessage();
+            }
+            if (!$errors && !$thumbPath && vimeo_id($videoUrl) !== '' && youtube_id($videoUrl) === '') {
+                $errors[] = 'Vimeo videos need a thumbnail image — please upload one.';
+            }
+        }
+
+        if (!$errors) {
+            db()->prepare(
+                "INSERT INTO gallery_photos (image, video_url, caption, category, event_id, sort_order, created_by)
+                 VALUES (:i, :v, :c, :cat, :e, :s, :u)"
+            )->execute([
+                ':i'   => $thumbPath,
+                ':v'   => $videoUrl,
+                ':c'   => $caption ?: null,
+                ':cat' => $category ?: null,
+                ':e'   => $eventId,
+                ':s'   => $sortOrder,
+                ':u'   => current_user_id(),
+            ]);
+            audit_log('gallery.add_video', 'gallery_photos', (int) db()->lastInsertId());
+            flash('gallery', 'Video added.', 'success');
+            redirect('/admin/gallery.php');
+        }
     } elseif ($action === 'save') {
         $id        = (int) input('id', 0);
         $caption   = trim((string) input('caption', ''));
@@ -73,20 +119,26 @@ if (is_post()) {
         $eventId   = (int) input('event_id', 0) ?: null;
         $sortOrder = (int) input('sort_order', 100);
         $status    = in_array(input('status'), ['visible','hidden'], true) ? input('status') : 'visible';
-        if ($id > 0) {
+        $videoUrl  = trim((string) input('video_url', ''));
+        // Empty string means "clear the video" — treat as NULL.
+        if ($videoUrl !== '' && gallery_video_embed_url($videoUrl) === '') {
+            $errors[] = 'Video URL must be a YouTube or Vimeo link.';
+        }
+        if ($id > 0 && !$errors) {
             db()->prepare(
                 "UPDATE gallery_photos SET caption = :c, category = :cat, event_id = :e,
-                    sort_order = :s, status = :st WHERE id = :id"
+                    sort_order = :s, status = :st, video_url = :v WHERE id = :id"
             )->execute([
                 ':c'   => $caption ?: null,
                 ':cat' => $category ?: null,
                 ':e'   => $eventId,
                 ':s'   => $sortOrder,
                 ':st'  => $status,
+                ':v'   => $videoUrl ?: null,
                 ':id'  => $id,
             ]);
             audit_log('gallery.update', 'gallery_photos', $id);
-            flash('gallery', 'Photo updated.', 'success');
+            flash('gallery', 'Item updated.', 'success');
         }
         redirect('/admin/gallery.php');
     } elseif ($action === 'toggle') {
@@ -193,6 +245,57 @@ require __DIR__ . '/../includes/admin_layout.php';
   </button>
 </form>
 
+<!-- Add video (YouTube / Vimeo) as a first-class gallery item.
+     Kept as a separate form so admins pick photos OR videos per
+     submit — no ambiguous "both are set" state. -->
+<form method="post" enctype="multipart/form-data" class="mt-6 border border-white/5 rounded-3xl p-6 bg-navy-900/40 space-y-5">
+  <?= csrf_field() ?>
+  <input type="hidden" name="action" value="add_video">
+  <h2 class="font-serif text-2xl text-gold-400">Add a video</h2>
+  <p class="text-[11px] text-beige-100/45">Paste a YouTube or Vimeo URL — the tile shows a play overlay on the gallery and the lightbox plays the embed. YouTube auto-fills the thumbnail; Vimeo needs one uploaded below.</p>
+
+  <label class="block">
+    <span class="text-xs uppercase tracking-widest text-beige-100/60">Video URL</span>
+    <input name="video_url" required maxlength="500" placeholder="https://www.youtube.com/watch?v=… or https://vimeo.com/…"
+           class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3 font-mono text-sm">
+  </label>
+
+  <label class="block">
+    <span class="text-xs uppercase tracking-widest text-beige-100/60">Custom thumbnail <span class="text-beige-100/30">(optional for YouTube · required for Vimeo)</span></span>
+    <input type="file" name="gallery_file" accept="image/jpeg,image/png,image/webp"
+           class="mt-2 w-full text-sm text-beige-100/70 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-gold-500/20 file:text-gold-400 hover:file:bg-gold-500/30">
+  </label>
+
+  <div class="grid sm:grid-cols-3 gap-4">
+    <label class="block sm:col-span-2">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Caption</span>
+      <input name="caption" maxlength="255" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Category</span>
+      <input name="category" list="gallery-category-list" maxlength="80"
+             class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+    </label>
+    <label class="block sm:col-span-2">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">From event <span class="text-beige-100/30">(optional)</span></span>
+      <select name="event_id" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+        <option value="">— not linked —</option>
+        <?php foreach ($eventOptions as $eo): ?>
+          <option value="<?= (int) $eo['id'] ?>"><?= e($eo['title']) ?> · <?= e(format_datetime($eo['starts_at'], 'd M Y')) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Sort order</span>
+      <input name="sort_order" type="number" value="100" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+    </label>
+  </div>
+
+  <button class="px-6 py-3 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition">
+    Add video
+  </button>
+</form>
+
 <!-- Photo grid. Compact tiles with per-photo controls. Clicking Edit
      opens an inline form; keeps the page single-URL. -->
 <div class="mt-10">
@@ -201,12 +304,27 @@ require __DIR__ . '/../includes/admin_layout.php';
     <p class="mt-4 text-beige-100/60 italic">No photos yet. Upload the first ones above.</p>
   <?php else: ?>
     <div class="mt-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-      <?php foreach ($photos as $p): ?>
+      <?php foreach ($photos as $p):
+        $thumb = gallery_thumbnail_url($p);
+        $isVideo = !empty($p['video_url']);
+      ?>
         <article class="rounded-2xl border border-white/5 bg-navy-900/40 overflow-hidden <?= $p['status'] === 'hidden' ? 'opacity-60' : '' ?>"
                  x-data="{ editing: false }">
           <div class="relative aspect-square bg-navy-950">
-            <img src="<?= e(url($p['image'])) ?>" alt="<?= e((string) ($p['caption'] ?? '')) ?>"
-                 loading="lazy" class="absolute inset-0 w-full h-full object-cover">
+            <?php if ($thumb !== ''): ?>
+              <img src="<?= e($thumb) ?>" alt="<?= e((string) ($p['caption'] ?? '')) ?>"
+                   loading="lazy" class="absolute inset-0 w-full h-full object-cover">
+            <?php else: ?>
+              <span class="absolute inset-0 flex items-center justify-center font-serif text-4xl text-gold-400/30">◯</span>
+            <?php endif; ?>
+            <?php if ($isVideo): ?>
+              <span class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span class="h-12 w-12 rounded-full bg-navy-950/70 border border-gold-500/50 flex items-center justify-center backdrop-blur">
+                  <svg class="h-5 w-5 text-gold-400 translate-x-0.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                </span>
+              </span>
+              <span class="absolute top-2 right-2 text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full bg-navy-950/80 text-gold-400 border border-gold-500/40">Video</span>
+            <?php endif; ?>
             <?php if ($p['status'] === 'hidden'): ?>
               <span class="absolute top-2 left-2 text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full bg-navy-950/80 text-beige-100/60 border border-white/10">Hidden</span>
             <?php endif; ?>
@@ -251,6 +369,11 @@ require __DIR__ . '/../includes/admin_layout.php';
                 <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Category</span>
                 <input name="category" list="gallery-category-list" maxlength="80" value="<?= e((string) ($p['category'] ?? '')) ?>"
                        class="mt-1 w-full rounded-xl bg-navy-900 border border-white/5 px-3 py-2">
+              </label>
+              <label class="block">
+                <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Video URL <span class="text-beige-100/30">(YouTube / Vimeo — leave blank for photo-only)</span></span>
+                <input name="video_url" maxlength="500" value="<?= e((string) ($p['video_url'] ?? '')) ?>"
+                       class="mt-1 w-full rounded-xl bg-navy-900 border border-white/5 px-3 py-2 font-mono text-[11px]">
               </label>
               <label class="block">
                 <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Event</span>

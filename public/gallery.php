@@ -3,7 +3,7 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 $pageTitle = 'Gallery';
 
 $photos = db()->query(
-    "SELECT g.id, g.image, g.caption, g.category, g.event_id, g.created_at,
+    "SELECT g.id, g.image, g.video_url, g.caption, g.category, g.event_id, g.created_at,
             e.title AS event_title, e.slug AS event_slug
        FROM gallery_photos g
        LEFT JOIN events e ON e.id = g.event_id
@@ -20,12 +20,15 @@ sort($categories);
 // Alpine-ready photo list. We hand the client only the fields it
 // needs for the grid + lightbox so nothing sensitive leaks.
 $photosLite = array_map(function ($p) {
+    $videoUrl = (string) ($p['video_url'] ?? '');
     return [
-        'id'       => (int) $p['id'],
-        'src'      => (string) (str_starts_with((string) $p['image'], '/') ? url($p['image']) : $p['image']),
-        'caption'  => (string) ($p['caption']  ?? ''),
-        'category' => (string) ($p['category'] ?? ''),
-        'event'    => $p['event_title'] ? (string) $p['event_title'] : '',
+        'id'        => (int) $p['id'],
+        'src'       => gallery_thumbnail_url($p),
+        'caption'   => (string) ($p['caption']  ?? ''),
+        'category'  => (string) ($p['category'] ?? ''),
+        'event'     => $p['event_title'] ? (string) $p['event_title'] : '',
+        'is_video'  => $videoUrl !== '',
+        'embed_url' => $videoUrl !== '' ? gallery_video_embed_url($videoUrl) : '',
     ];
 }, $photos);
 
@@ -68,7 +71,22 @@ require __DIR__ . '/../includes/header.php';
                 class="block w-full break-inside-avoid group rounded-2xl overflow-hidden border border-white/5 bg-navy-900/40 hover:border-gold-500/40 transition">
           <div class="relative">
             <img :src="p.src" :alt="p.caption" loading="lazy"
-                 class="w-full h-auto object-cover transition duration-500 group-hover:scale-[1.02]">
+                 class="w-full h-auto object-cover transition duration-500 group-hover:scale-[1.02]"
+                 x-show="p.src" onerror="this.style.display='none'">
+            <!-- Placeholder for video items with no cover (Vimeo w/o a thumbnail). -->
+            <div x-show="!p.src" class="aspect-video bg-navy-950 flex items-center justify-center">
+              <span class="font-serif text-4xl text-gold-400/30">◯</span>
+            </div>
+            <!-- Play overlay for video items. Larger and more prominent
+                 than the admin badge because this is the primary call
+                 to action on a video tile. -->
+            <template x-if="p.is_video">
+              <span class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span class="h-14 w-14 sm:h-16 sm:w-16 rounded-full bg-navy-950/70 border border-gold-500/50 flex items-center justify-center backdrop-blur transition group-hover:bg-navy-950/85 group-hover:scale-110">
+                  <svg class="h-6 w-6 text-gold-400 translate-x-0.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                </span>
+              </span>
+            </template>
             <div class="absolute inset-0 bg-gradient-to-t from-navy-950/85 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition"></div>
             <div class="absolute bottom-3 left-3 right-3 opacity-0 group-hover:opacity-100 transition">
               <p x-show="p.caption" x-text="p.caption" class="text-xs text-beige-100 drop-shadow"></p>
@@ -105,8 +123,20 @@ require __DIR__ . '/../includes/header.php';
                 class="hidden sm:flex absolute left-4 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full border border-white/10 text-beige-100/70 hover:border-gold-500/40 hover:text-gold-400 items-center justify-center transition">
           <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m15 6-6 6 6 6"/></svg>
         </button>
-        <img :src="current?.src" :alt="current?.caption"
-             class="max-h-[80vh] max-w-full rounded-2xl border border-white/5 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.7)]">
+        <!-- Photo: zoomed image. Video: platform iframe embed with a
+             16:9 aspect and autoplay in the URL. -->
+        <template x-if="current && !current.is_video">
+          <img :src="current.src" :alt="current.caption"
+               class="max-h-[80vh] max-w-full rounded-2xl border border-white/5 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.7)]">
+        </template>
+        <template x-if="current && current.is_video">
+          <div class="w-full max-w-5xl aspect-video rounded-2xl overflow-hidden border border-white/5 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.7)]">
+            <iframe :src="current.embed_url" title="Video"
+                    allow="autoplay; encrypted-media; picture-in-picture"
+                    allowfullscreen loading="lazy"
+                    class="w-full h-full"></iframe>
+          </div>
+        </template>
         <button type="button" @click="next()" aria-label="Next"
                 class="hidden sm:flex absolute right-4 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full border border-white/10 text-beige-100/70 hover:border-gold-500/40 hover:text-gold-400 items-center justify-center transition">
           <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m9 6 6 6-6 6"/></svg>

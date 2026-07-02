@@ -87,6 +87,57 @@ function youtube_id(string $input): string
     return '';
 }
 
+/**
+ * Vimeo numeric video id from any common URL form (vimeo.com/12345,
+ * player.vimeo.com/video/12345, /manage/videos/12345). Returns '' if
+ * nothing recognisable is present.
+ */
+function vimeo_id(string $input): string
+{
+    $input = trim($input);
+    if ($input === '') return '';
+    if (preg_match('~^\d{6,}$~', $input)) return $input;
+    if (preg_match('~vimeo\.com/(?:video/|manage/videos/)?(\d{6,})~', $input, $m)) return $m[1];
+    return '';
+}
+
+/**
+ * Resolve a gallery item's cover image URL. If the row has an
+ * uploaded image we use it; otherwise, for YouTube URLs we fall
+ * back to the platform-hosted hqdefault thumbnail so admins don't
+ * have to upload a separate cover for every clip.
+ */
+function gallery_thumbnail_url(array $row): string
+{
+    $img = (string) ($row['image'] ?? '');
+    if ($img !== '') {
+        return str_starts_with($img, '/') ? url($img) : $img;
+    }
+    $video = (string) ($row['video_url'] ?? '');
+    if ($video !== '') {
+        $yt = youtube_id($video);
+        if ($yt !== '') return 'https://i.ytimg.com/vi/' . $yt . '/hqdefault.jpg';
+        // Vimeo doesn't expose a free thumbnail URL by ID — needs an
+        // API round-trip we'd rather not bake in. Return empty so the
+        // grid renders a soft placeholder tile instead.
+    }
+    return '';
+}
+
+/**
+ * Embed URL for a gallery video — the src that goes on the <iframe>
+ * inside the lightbox. Empty string when the URL isn't a supported
+ * platform.
+ */
+function gallery_video_embed_url(string $videoUrl): string
+{
+    $yt = youtube_id($videoUrl);
+    if ($yt !== '') return 'https://www.youtube.com/embed/' . $yt . '?rel=0&autoplay=1';
+    $vm = vimeo_id($videoUrl);
+    if ($vm !== '') return 'https://player.vimeo.com/video/' . $vm . '?autoplay=1';
+    return '';
+}
+
 function redirect(string $path, int $code = 302): void
 {
     header('Location: ' . (str_starts_with($path, 'http') ? $path : url($path)), true, $code);
