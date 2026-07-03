@@ -114,40 +114,57 @@ if (!function_exists('record_event_referral')) {
      */
     function settle_referral_payout(int $referrerId, string $reference, ?int $byUserId): array
     {
-        $sumStmt = db()->prepare(
-            "SELECT COALESCE(SUM(amount),0) AS amt, COUNT(*) AS c
-               FROM event_referral_rewards
-              WHERE referrer_id = :r
-                AND status = 'earned'
-                AND payout_status = 'unpaid'"
+        // Cheap read outside the txn just to decide whether to open one
+        // and produce the "nothing owed" UX message. The real amount is
+        // computed after the claiming UPDATE below so a concurrent
+        // check-in can't inflate a payout we've already promised to
+        // pay a fixed amount for.
+        $preview = db()->prepare(
+            "SELECT COUNT(*) FROM event_referral_rewards
+              WHERE referrer_id = :r AND status = 'earned' AND payout_status = 'unpaid'"
         );
-        $sumStmt->execute([':r' => $referrerId]);
-        $s = $sumStmt->fetch();
-        $amount = (float) ($s['amt'] ?? 0);
-        $count  = (int)   ($s['c']   ?? 0);
-        if ($count === 0 || $amount <= 0) {
+        $preview->execute([':r' => $referrerId]);
+        if ((int) $preview->fetchColumn() === 0) {
             return ['ok' => false, 'message' => 'There is nothing owed to this referrer yet.'];
         }
 
         db()->beginTransaction();
         try {
+            // 1. Reserve a payout row up-front with placeholder totals so
+            //    we have an id to stamp on the rewards.
             db()->prepare(
                 "INSERT INTO referral_payouts (referrer_id, amount, currency, reward_count, reference, paid_by)
-                 VALUES (:r, :a, 'MYR', :c, :ref, :u)"
+                 VALUES (:r, 0, 'MYR', 0, :ref, :u)"
             )->execute([
                 ':r'   => $referrerId,
-                ':a'   => $amount,
-                ':c'   => $count,
                 ':ref' => $reference !== '' ? substr($reference, 0, 160) : null,
                 ':u'   => $byUserId,
             ]);
             $payoutId = (int) db()->lastInsertId();
 
+            // 2. Claim every currently-eligible reward atomically. Rows
+            //    that flip to 'earned' AFTER this UPDATE will land in
+            //    the next payout, not this one.
             db()->prepare(
                 "UPDATE event_referral_rewards
                     SET payout_status = 'paid', payout_id = :p
                   WHERE referrer_id = :r AND status = 'earned' AND payout_status = 'unpaid'"
             )->execute([':p' => $payoutId, ':r' => $referrerId]);
+
+            // 3. Compute the real totals from the rows we actually
+            //    claimed, then write them onto the payout row.
+            $sumStmt = db()->prepare(
+                "SELECT COALESCE(SUM(amount),0) AS amt, COUNT(*) AS c
+                   FROM event_referral_rewards WHERE payout_id = :p"
+            );
+            $sumStmt->execute([':p' => $payoutId]);
+            $s = $sumStmt->fetch();
+            $amount = (float) ($s['amt'] ?? 0);
+            $count  = (int)   ($s['c']   ?? 0);
+
+            db()->prepare(
+                "UPDATE referral_payouts SET amount = :a, reward_count = :c WHERE id = :id"
+            )->execute([':a' => $amount, ':c' => $count, ':id' => $payoutId]);
 
             db()->commit();
             return ['ok' => true, 'amount' => $amount, 'count' => $count, 'payout_id' => $payoutId];

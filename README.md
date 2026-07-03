@@ -83,12 +83,16 @@ uploads/ qr/ logs/
 
 ## Cron jobs (Hostinger → cPanel → Cron)
 
-Suggested cadence:
+One live cron job:
+
 ```
-*/30 * * * *  /usr/bin/php /home/USER/public_html/cron/membership_renewal.php
-0    9 * * *  /usr/bin/php /home/USER/public_html/cron/session_reminders.php
+*/30 * * * *  /usr/bin/curl -fsS "https://<host>/api/send_reminders.php?token=<TOKEN>" >/dev/null
 ```
-*(Cron scripts not yet wired — slot them under a future `/cron` folder.)*
+
+Full setup — token config, cPanel walkthrough, CLI alternative, and the
+pattern for adding new jobs — lives in [`docs/CRON.md`](docs/CRON.md).
+Anything time-triggered on the site is documented there; everything
+else runs inline from a user action.
 
 ## Tone
 

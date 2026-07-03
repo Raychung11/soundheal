@@ -209,40 +209,57 @@ function settle_partner_referral_payout(int $partnerId, string $reference, ?int 
     if ($partnerId <= 0) {
         return ['ok' => false, 'message' => 'Missing partner.'];
     }
-    $sumStmt = db()->prepare(
-        "SELECT COALESCE(SUM(amount),0) AS amt, COUNT(*) AS c
-           FROM partner_referrals
-          WHERE partner_id = :p
-            AND status = 'earned'
-            AND payout_status = 'unpaid'"
+
+    // Cheap read outside the txn just to decide whether to open one.
+    // Real amount is computed after the claiming UPDATE below so a
+    // concurrent check-in can't fatten a payout we've already promised
+    // to pay a fixed amount for.
+    $preview = db()->prepare(
+        "SELECT COUNT(*) FROM partner_referrals
+          WHERE partner_id = :p AND status = 'earned' AND payout_status = 'unpaid'"
     );
-    $sumStmt->execute([':p' => $partnerId]);
-    $s = $sumStmt->fetch();
-    $amount = (float) ($s['amt'] ?? 0);
-    $count  = (int)   ($s['c']   ?? 0);
-    if ($count === 0 || $amount <= 0) {
+    $preview->execute([':p' => $partnerId]);
+    if ((int) $preview->fetchColumn() === 0) {
         return ['ok' => false, 'message' => 'There is nothing owed to this partner yet.'];
     }
 
     db()->beginTransaction();
     try {
+        // 1. Reserve a payout row up-front with placeholder totals so
+        //    we have an id to stamp on the referrals.
         db()->prepare(
             "INSERT INTO partner_referral_payouts (partner_id, amount, currency, reward_count, reference, paid_by)
-             VALUES (:p, :a, 'MYR', :c, :ref, :u)"
+             VALUES (:p, 0, 'MYR', 0, :ref, :u)"
         )->execute([
             ':p'   => $partnerId,
-            ':a'   => $amount,
-            ':c'   => $count,
             ':ref' => $reference !== '' ? substr($reference, 0, 160) : null,
             ':u'   => $byUserId,
         ]);
         $payoutId = (int) db()->lastInsertId();
 
+        // 2. Claim every currently-eligible referral atomically. Rows
+        //    that flip to 'earned' AFTER this UPDATE will land in the
+        //    next payout, not this one.
         db()->prepare(
             "UPDATE partner_referrals
                 SET payout_status = 'paid', payout_id = :po
               WHERE partner_id = :p AND status = 'earned' AND payout_status = 'unpaid'"
         )->execute([':po' => $payoutId, ':p' => $partnerId]);
+
+        // 3. Compute the real totals from the rows we actually claimed
+        //    and write them onto the payout row.
+        $sumStmt = db()->prepare(
+            "SELECT COALESCE(SUM(amount),0) AS amt, COUNT(*) AS c
+               FROM partner_referrals WHERE payout_id = :po"
+        );
+        $sumStmt->execute([':po' => $payoutId]);
+        $s = $sumStmt->fetch();
+        $amount = (float) ($s['amt'] ?? 0);
+        $count  = (int)   ($s['c']   ?? 0);
+
+        db()->prepare(
+            "UPDATE partner_referral_payouts SET amount = :a, reward_count = :c WHERE id = :id"
+        )->execute([':a' => $amount, ':c' => $count, ':id' => $payoutId]);
 
         db()->commit();
         return ['ok' => true, 'amount' => $amount, 'count' => $count, 'payout_id' => $payoutId];
