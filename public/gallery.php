@@ -19,7 +19,8 @@ sort($categories);
 
 // Alpine-ready photo list. We hand the client only the fields it
 // needs for the grid + lightbox so nothing sensitive leaks.
-$photosLite = array_map(function ($p) {
+$appBase = rtrim((string) config('app.url'), '/');
+$photosLite = array_map(function ($p) use ($appBase) {
     $videoUrl = (string) ($p['video_url'] ?? '');
     return [
         'id'        => (int) $p['id'],
@@ -29,8 +30,43 @@ $photosLite = array_map(function ($p) {
         'event'     => $p['event_title'] ? (string) $p['event_title'] : '',
         'is_video'  => $videoUrl !== '',
         'embed_url' => $videoUrl !== '' ? gallery_video_embed_url($videoUrl) : '',
+        // Canonical share URL for this specific item — social crawlers
+        // that hit it will see the per-item OG tags below.
+        'share_url' => $appBase . '/public/gallery.php?item=' . (int) $p['id'],
     ];
 }, $photos);
+
+// Per-item share metadata. When ?item=<id> is present in the URL we
+// override the page-level Open Graph tags so WhatsApp / Facebook
+// share previews show THAT photo's thumbnail + caption instead of the
+// generic gallery hero. Falls back to the first visible item as the
+// featured cover for the gallery landing page.
+$shareItemId  = (int) input('item', 0);
+$shareItemIdx = -1;
+if ($shareItemId > 0) {
+    foreach ($photos as $idx => $p) {
+        if ((int) $p['id'] === $shareItemId) { $shareItemIdx = $idx; break; }
+    }
+}
+if ($shareItemIdx >= 0) {
+    $sp = $photos[$shareItemIdx];
+    $spTitle = trim((string) ($sp['caption'] ?? ''));
+    if ($spTitle === '' && !empty($sp['event_title'])) {
+        $spTitle = (string) $sp['event_title'];
+    }
+    if ($spTitle === '' && !empty($sp['category'])) {
+        $spTitle = (string) $sp['category'];
+    }
+    if ($spTitle !== '') $pageTitle = $spTitle;
+    $descParts = array_filter([$sp['event_title'] ?? '', $sp['category'] ?? '']);
+    if ($descParts) $pageDescription = implode(' · ', $descParts) . ' — a moment from our gallery.';
+    $pageImage = gallery_thumbnail_url($sp);
+    $pageType  = 'article';
+} elseif ($photos) {
+    // Landing view — first visible photo becomes the share preview.
+    $pageImage = gallery_thumbnail_url($photos[0]);
+    $pageDescription = 'A quiet look at the sound baths, workshops and gatherings we\'ve held together at ' . brand_name() . '.';
+}
 
 require __DIR__ . '/../includes/header.php';
 ?>
@@ -45,7 +81,7 @@ require __DIR__ . '/../includes/header.php';
 </section>
 
 <section class="max-w-7xl mx-auto px-4 sm:px-6 pb-24"
-         x-data="galleryPage(<?= htmlspecialchars(json_encode($photosLite, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8') ?>)">
+         x-data="galleryPage(<?= htmlspecialchars(json_encode($photosLite, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8') ?>, <?= (int) $shareItemId ?>)">
 
   <?php if ($photos): ?>
     <!-- Category filter chips. 'All' resets. -->
@@ -150,6 +186,26 @@ require __DIR__ . '/../includes/header.php';
           <template x-if="current?.category && current?.event"><span class="text-beige-100/40"> · </span></template>
           <span x-show="current?.event" x-text="current?.event"></span>
         </p>
+
+        <!-- Share this specific item. Each option builds a URL that
+             points back at /public/gallery.php?item=<id> so WhatsApp /
+             Facebook crawlers land on the same page and pick up the
+             per-item OG tags. Photo previews on WhatsApp will show the
+             thumbnail; video previews will show the YouTube-derived
+             cover. -->
+        <div class="mt-5 flex items-center justify-center gap-2 text-xs" x-show="current">
+          <a x-show="current"
+             :href="current ? ('https://wa.me/?text=' + encodeURIComponent((current.caption || 'A moment from our gallery') + ' — ' + current.share_url)) : '#'"
+             target="_blank" rel="noopener"
+             class="px-3 py-1.5 rounded-full border border-white/10 text-beige-100/75 hover:border-gold-500/40 hover:text-gold-400 transition">WhatsApp</a>
+          <a x-show="current"
+             :href="current ? ('https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(current.share_url)) : '#'"
+             target="_blank" rel="noopener"
+             class="px-3 py-1.5 rounded-full border border-white/10 text-beige-100/75 hover:border-gold-500/40 hover:text-gold-400 transition">Facebook</a>
+          <button type="button" @click="copyLink()"
+                  class="px-3 py-1.5 rounded-full border border-white/10 text-beige-100/75 hover:border-gold-500/40 hover:text-gold-400 transition"
+                  x-text="copyState || 'Copy link'"></button>
+        </div>
       </div>
     </div>
   <?php else: ?>
@@ -161,20 +217,45 @@ require __DIR__ . '/../includes/header.php';
 </section>
 
 <script>
-function galleryPage(all) {
+function galleryPage(all, deepLinkId) {
   return {
     all: all || [],
     activeCat: '',
     lightbox: null,
+    copyState: '',
+    init() {
+      // Deep-link ?item=<id> — auto-open the matching photo in the
+      // lightbox so someone arriving via a shared WhatsApp / Facebook
+      // link lands directly on the moment that was shared instead of
+      // the top of the grid.
+      if (!deepLinkId) return;
+      const idx = (this.all || []).findIndex(p => Number(p.id) === Number(deepLinkId));
+      if (idx >= 0) {
+        this.$nextTick(() => this.openAt(idx));
+      }
+    },
     get visible() {
       if (!this.activeCat) return this.all;
       return this.all.filter(p => p.category === this.activeCat);
     },
     get current() { return this.lightbox === null ? null : this.visible[this.lightbox] || null; },
     openAt(i)  { this.lightbox = i; document.body.style.overflow = 'hidden'; },
-    close()    { this.lightbox = null; document.body.style.overflow = ''; },
-    prev()     { if (this.lightbox === null) return; this.lightbox = (this.lightbox - 1 + this.visible.length) % this.visible.length; },
-    next()     { if (this.lightbox === null) return; this.lightbox = (this.lightbox + 1) % this.visible.length; },
+    close()    { this.lightbox = null; document.body.style.overflow = ''; this.copyState = ''; },
+    prev()     { if (this.lightbox === null) return; this.lightbox = (this.lightbox - 1 + this.visible.length) % this.visible.length; this.copyState = ''; },
+    next()     { if (this.lightbox === null) return; this.lightbox = (this.lightbox + 1) % this.visible.length; this.copyState = ''; },
+    async copyLink() {
+      if (!this.current) return;
+      const url = this.current.share_url;
+      try { await navigator.clipboard.writeText(url); }
+      catch (_) {
+        const t = document.createElement('textarea');
+        t.value = url; document.body.appendChild(t); t.select();
+        try { document.execCommand('copy'); } catch (_) {}
+        t.remove();
+      }
+      this.copyState = 'Copied ✓';
+      setTimeout(() => { this.copyState = ''; }, 1600);
+    },
   };
 }
 </script>
