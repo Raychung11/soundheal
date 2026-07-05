@@ -440,7 +440,10 @@ if (!function_exists('expand_event_occurrences')) {
             ':itype'       => $tpl['intake_type'] ?? 'none',
         ]);
 
-        $childStmt->execute([':pid' => $templateId, ':d' => $date]);
+        // Re-fetch the row we just inserted. Binds must match the
+        // prepared statement above — :sa (the exact starts_at we
+        // wrote) not the old :d (date-only) that predated multi-slot.
+        $childStmt->execute([':pid' => $templateId, ':sa' => $newStarts]);
         return $childStmt->fetch() ?: null;
     }
 }
