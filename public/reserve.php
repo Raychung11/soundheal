@@ -33,13 +33,33 @@ if (in_array($event['recurrence'] ?? 'none', ['daily','weekly','monthly','custom
         flash('booking', 'Please choose a date for this session.', 'error');
         redirect('/public/events.php');
     }
-    $child = find_or_create_recurring_instance((int) $event['id'], $bookDate, $bookSlot ?: null);
-    if (!$child) {
-        flash('booking', 'That date or time is no longer available.', 'error');
-        redirect('/public/events.php');
+
+    // Multi-slot event with no ?slot in the URL: don't silently pick
+    // the first time — render a "Choose your time" step so the visitor
+    // can decide which slot to book. Only the primary time is picked
+    // implicitly on single-slot events (existing behaviour).
+    $slotTimes = function_exists('event_slot_times') ? event_slot_times($event) : [];
+    $isMultiSlot = count($slotTimes) > 1;
+    if ($isMultiSlot && $bookSlot === '') {
+        // Show the picker below by leaving $event as the template row
+        // and skipping the resolver until the visitor picks. Everything
+        // that references $event's date-specific fields (starts_at,
+        // seats_taken) needs to be defensive for this render — the
+        // guard flag is checked before the booking form renders.
+        $needSlotPick = true;
+    } else {
+        $child = find_or_create_recurring_instance((int) $event['id'], $bookDate, $bookSlot ?: null);
+        if (!$child) {
+            flash('booking', 'That date or time is no longer available.', 'error');
+            redirect('/public/events.php');
+        }
+        $event   = $child;
+        $eventId = (int) $child['id'];
+        $needSlotPick = false;
     }
-    $event = $child;
-    $eventId = (int) $child['id'];
+} else {
+    $needSlotPick = false;
+    $slotTimes    = [];
 }
 
 // Package pricing — two amenity tiers anyone can pick at booking. The
@@ -426,11 +446,47 @@ require __DIR__ . '/../includes/header.php';
 <section class="max-w-2xl mx-auto px-6 py-16">
   <p class="text-gold-400/80 tracking-[0.3em] uppercase text-xs">Reserve</p>
   <h1 class="font-serif text-4xl text-beige-100 mt-4"><?= e($event['title']) ?></h1>
-  <p class="mt-2 text-beige-100/60"><?= e(format_datetime($event['starts_at'], 'l, d M Y · g:i A')) ?> · <?= e($event['location'] ?? 'Location TBA') ?></p>
+  <p class="mt-2 text-beige-100/60">
+    <?php if ($needSlotPick): ?>
+      <?= e(format_datetime($bookDate . ' 00:00:00', 'l, d M Y')) ?> · <?= e($event['location'] ?? 'Location TBA') ?>
+    <?php else: ?>
+      <?= e(format_datetime($event['starts_at'], 'l, d M Y · g:i A')) ?> · <?= e($event['location'] ?? 'Location TBA') ?>
+    <?php endif; ?>
+  </p>
 
   <?php foreach ($errors as $err): ?>
     <p class="mt-4 text-red-300/80"><?= e($err) ?></p>
   <?php endforeach; ?>
+
+  <?php if ($needSlotPick):
+    // Build the "current URL + slot=HH:MM" links so the visitor can
+    // pick which session on this date to book. Preserve every other
+    // query param (event_id, date, and any partner / ref cookies
+    // downstream code depends on).
+    $baseParams = $_GET;
+    unset($baseParams['slot']);
+  ?>
+    <div class="mt-8 rounded-2xl border border-gold-500/25 bg-gold-500/5 p-6">
+      <p class="text-[10px] uppercase tracking-[0.3em] text-gold-400/85">Choose your time</p>
+      <p class="text-sm text-beige-100/70 mt-2">This session runs more than once on this date. Pick the time that suits you — you'll fill in the rest on the next step.</p>
+      <div class="mt-5 grid sm:grid-cols-2 gap-3">
+        <?php foreach ($slotTimes as $st):
+          $hhmm = substr($st, 0, 5);
+          $params = array_merge($baseParams, ['slot' => $hhmm]);
+          $href = '/public/reserve.php?' . http_build_query($params);
+          $label = date('g:i A', strtotime($bookDate . ' ' . $st));
+        ?>
+          <a href="<?= url($href) ?>"
+             class="block rounded-2xl border border-white/10 bg-navy-900/40 px-5 py-4 text-center hover:border-gold-500/50 hover:bg-gold-500/10 transition">
+            <p class="font-serif text-2xl text-gold-400"><?= e($label) ?></p>
+            <p class="text-[11px] text-beige-100/50 mt-1 uppercase tracking-widest">Reserve →</p>
+          </a>
+        <?php endforeach; ?>
+      </div>
+    </div>
+  </section>
+  </div>
+  <?php require __DIR__ . '/../includes/footer.php'; exit; endif; ?>
 
   <form id="bookForm" method="post" class="mt-10 space-y-5">
     <?= csrf_field() ?>
