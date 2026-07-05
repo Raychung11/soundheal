@@ -324,6 +324,33 @@ if (is_post()) {
             }
         }
 
+        // Persist the dynamic package list. The Alpine repeater POSTs
+        // packages[i][id|label|price|perks|humans|pets|status]; the
+        // helper deletes rows not in the incoming set, updates existing
+        // ones, and inserts new ones. Legacy events.package_a/b_*
+        // columns get auto-synced from the first two active packages
+        // so pages still reading the old columns render correctly.
+        if (array_key_exists('packages', $_POST) && is_array($_POST['packages'])) {
+            $incoming = [];
+            foreach ((array) $_POST['packages'] as $row) {
+                if (!is_array($row)) continue;
+                $incoming[] = [
+                    'id'     => (int) ($row['id']     ?? 0),
+                    'label'  => (string) ($row['label']  ?? ''),
+                    'price'  => (float) ($row['price']  ?? 0),
+                    'perks'  => (string) ($row['perks']  ?? ''),
+                    'humans' => (int) ($row['humans'] ?? 1),
+                    'pets'   => (int) ($row['pets']   ?? 0),
+                    'status' => (string) ($row['status'] ?? 'active'),
+                ];
+            }
+            try {
+                event_packages_save((int) $id, $incoming);
+            } catch (Throwable $e) {
+                $errors[] = 'Could not save packages: ' . $e->getMessage();
+            }
+        }
+
         flash('event', 'Saved.', 'success');
         redirect('/admin/events.php');
     }
@@ -376,8 +403,7 @@ require __DIR__ . '/../includes/admin_layout.php';
   <p class="mt-3 text-red-300/80"><?= e($err) ?></p>
 <?php endforeach; ?>
 
-<form method="post" enctype="multipart/form-data" class="mt-8 space-y-5 max-w-3xl"
-      x-data="{ pkgB: <?= (int) ($event['package_b_enabled'] ?? 1) === 1 ? 'true' : 'false' ?> }">
+<form method="post" enctype="multipart/form-data" class="mt-8 space-y-5 max-w-3xl">
   <?= csrf_field() ?>
   <label class="block">
     <span class="text-xs uppercase tracking-widest text-beige-100/60">Title</span>
@@ -482,25 +508,11 @@ require __DIR__ . '/../includes/admin_layout.php';
              class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
       <span class="text-[11px] text-beige-100/40 mt-1 block">Cash to the referrer when a friend attends this session. Blank uses the site default (<?= e(format_money((float) setting('referral_event_reward_default', 50.00))) ?>).</span>
     </label>
-    <label class="block">
-      <span class="text-xs uppercase tracking-widest text-beige-100/60">Primary price · Comfort (MYR)</span>
-      <input name="price_public" type="number" step="0.01" value="<?= e((string)$event['price_public']) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
-      <span class="text-[11px] text-beige-100/40 mt-1 block">Charged for the Comfort (Package A) tier. Every event has this price.</span>
-    </label>
-    <!-- Second-tier price shown only when Package B is enabled below.
-         Hidden fully so admins running a single-price event aren't
-         puzzled by a stray "Member price" field. -->
-    <label class="block" x-show="pkgB" x-cloak>
-      <span class="text-xs uppercase tracking-widest text-beige-100/60">Second-tier price · BYO (MYR)</span>
-      <input name="price_member" type="number" step="0.01" value="<?= e((string)$event['price_member']) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
-      <span class="text-[11px] text-beige-100/40 mt-1 block">Only used when the Bring-Your-Own-Zen tier is offered — toggled in the Booking packages section below.</span>
-    </label>
-    <div class="block" x-show="!pkgB" x-cloak>
-      <span class="text-xs uppercase tracking-widest text-beige-100/60">Second-tier price</span>
-      <p class="mt-2 rounded-2xl border border-dashed border-white/10 bg-navy-950/40 px-4 py-3 text-sm text-beige-100/50">
-        Not offered for this event. Turn on the second tier in "Booking packages" below to set a price.
-      </p>
-    </div>
+    <!-- Prices moved into the Booking packages repeater below. The
+         legacy events.price_public / price_member columns are kept in
+         sync automatically from the first two active packages on save. -->
+    <input type="hidden" name="price_public" value="<?= e((string)$event['price_public']) ?>">
+    <input type="hidden" name="price_member" value="<?= e((string)$event['price_member']) ?>">
     <label class="block sm:col-span-2">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Cover image</span>
       <?php if (!empty($event['cover_image'])): ?>
@@ -655,115 +667,125 @@ require __DIR__ . '/../includes/admin_layout.php';
     </label>
   </div>
 
-  <section class="border-t border-white/5 pt-6 space-y-5">
-    <div>
-      <h2 class="font-serif text-xl text-gold-400">Booking packages</h2>
-      <p class="text-[11px] text-beige-100/45 mt-1">Optional — override the default "Comfort" / "Bring-Your-Own-Zen" labels and perks for this event (e.g. special workshops with their own tiers). Leave blank to use the site defaults.</p>
+  <?php
+    // Load current packages (or a starter pair for a brand-new event
+    // so the admin has something to edit rather than an empty screen).
+    $currentPackages = $id > 0 ? event_packages_load($id) : [];
+    if (!$currentPackages) {
+        $currentPackages = [
+            ['id' => 0, 'label' => 'Comfort', 'price' => (float) ($event['price_public'] ?? 0),
+             'perks' => (string) ($event['package_a_perks'] ?? ''),
+             'humans' => (int) ($event['package_a_humans'] ?? 1),
+             'pets'   => (int) ($event['package_a_pets']   ?? 0),
+             'status' => 'active'],
+        ];
+    }
+  ?>
+  <section class="border-t border-white/5 pt-6 space-y-5"
+           x-data='{ packages: <?= htmlspecialchars(json_encode(array_map(fn($p) => [
+             "id"     => (int) ($p["id"] ?? 0),
+             "label"  => (string) $p["label"],
+             "price"  => (float) $p["price"],
+             "perks"  => (string) ($p["perks"] ?? ""),
+             "humans" => (int) $p["humans"],
+             "pets"   => (int) $p["pets"],
+             "status" => (string) ($p["status"] ?? "active"),
+           ], $currentPackages), JSON_UNESCAPED_UNICODE), ENT_QUOTES, "UTF-8") ?>,
+             add() {
+               this.packages.push({ id: 0, label: "", price: 0, perks: "", humans: 1, pets: 0, status: "active" });
+             },
+             remove(i) {
+               if (!confirm("Remove this package?")) return;
+               this.packages.splice(i, 1);
+             },
+             move(i, dir) {
+               const j = i + dir;
+               if (j < 0 || j >= this.packages.length) return;
+               [this.packages[i], this.packages[j]] = [this.packages[j], this.packages[i]];
+             }
+           }'>
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div>
+        <h2 class="font-serif text-xl text-gold-400">Booking packages</h2>
+        <p class="text-[11px] text-beige-100/45 mt-1">Every bookable tier for this event. Label + price + perks + how many humans and pets the tier expects at booking. Add as many as you need — Adult, Adult + Pet, Two Adults, Couples, whatever fits the workshop.</p>
+      </div>
+      <button type="button" @click="add()" class="px-4 py-2 rounded-full bg-gold-500 text-navy-950 hover:bg-gold-400 transition text-sm">+ Add package</button>
     </div>
 
-    <div class="grid sm:grid-cols-2 gap-5">
-      <div class="space-y-3">
-        <p class="text-[10px] uppercase tracking-widest text-beige-100/55">Package A · price <?= e(format_money((float) ($event['price_public'] ?? 0))) ?></p>
-        <label class="block">
-          <span class="text-xs uppercase tracking-widest text-beige-100/60">Label</span>
-          <input name="package_a_label" placeholder="Comfort" value="<?= e((string) ($event['package_a_label'] ?? '')) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
-        </label>
-        <label class="block">
-          <span class="text-xs uppercase tracking-widest text-beige-100/60">Perks (one per line)</span>
-          <textarea name="package_a_perks" rows="5" placeholder="Welcome drink&#10;Yoga mat provided&#10;Cozy blanket provided&#10;Full sound healing experience" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3"><?= e((string) ($event['package_a_perks'] ?? '')) ?></textarea>
-        </label>
-      </div>
+    <div class="space-y-4">
+      <template x-for="(pkg, i) in packages" :key="i">
+        <div class="rounded-2xl border border-white/10 bg-navy-950/40 p-5 space-y-4">
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-[11px] uppercase tracking-widest text-gold-400/85">
+              Package <span x-text="i + 1"></span>
+              <span x-show="pkg.status === 'disabled'" class="ml-2 text-beige-100/40 normal-case">(disabled — hidden from booking page)</span>
+            </p>
+            <div class="flex items-center gap-2 text-xs">
+              <button type="button" @click="move(i, -1)" :disabled="i === 0" class="px-2 py-1 rounded-full border border-white/10 text-beige-100/60 hover:text-gold-400 disabled:opacity-30 disabled:cursor-not-allowed">↑</button>
+              <button type="button" @click="move(i, 1)" :disabled="i === packages.length - 1" class="px-2 py-1 rounded-full border border-white/10 text-beige-100/60 hover:text-gold-400 disabled:opacity-30 disabled:cursor-not-allowed">↓</button>
+              <button type="button" @click="pkg.status = pkg.status === 'active' ? 'disabled' : 'active'"
+                      class="px-3 py-1 rounded-full border border-white/10 text-beige-100/60 hover:text-gold-400">
+                <span x-text="pkg.status === 'active' ? 'Disable' : 'Enable'"></span>
+              </button>
+              <button type="button" @click="remove(i)" class="px-3 py-1 rounded-full border border-red-500/30 text-red-300/80 hover:bg-red-500/10">Remove</button>
+            </div>
+          </div>
 
-      <div class="space-y-3">
-        <p class="text-[10px] uppercase tracking-widest text-beige-100/55">Package B · price <?= e(format_money((float) ($event['price_member'] ?? 0))) ?></p>
+          <input type="hidden" :name="`packages[${i}][id]`"     :value="pkg.id">
+          <input type="hidden" :name="`packages[${i}][status]`" :value="pkg.status">
 
-        <!-- Toggle bound to shared Alpine state so the "Second-tier price"
-             field above and the label/perks inputs below react together.
-             Default on for existing events so they don't change silently. -->
-        <label class="flex items-start gap-3 rounded-2xl border border-gold-500/20 bg-gold-500/5 px-4 py-3 cursor-pointer">
-          <input type="checkbox" name="package_b_enabled" value="1"
-                 x-model="pkgB"
-                 class="mt-1 accent-gold-500">
-          <span>
-            <span class="text-sm text-beige-100">Offer this package on the booking page</span>
-            <span class="block text-[11px] text-beige-100/50 mt-1">Turn off for events that only ship one tier — e.g. a single-price workshop or a private corporate session. Comfort will fill the whole card row and the second-tier price above will be hidden.</span>
-          </span>
-        </label>
-
-        <div x-show="pkgB" x-cloak class="space-y-3">
-          <label class="block">
-            <span class="text-xs uppercase tracking-widest text-beige-100/60">Label</span>
-            <input name="package_b_label" placeholder="Bring-Your-Own-Zen" value="<?= e((string) ($event['package_b_label'] ?? '')) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
-          </label>
-          <label class="block">
-            <span class="text-xs uppercase tracking-widest text-beige-100/60">Perks (one per line)</span>
-            <textarea name="package_b_perks" rows="5" placeholder="Full sound healing experience&#10;Bring your own mat and blanket" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3"><?= e((string) ($event['package_b_perks'] ?? '')) ?></textarea>
-          </label>
+          <div class="grid sm:grid-cols-3 gap-3">
+            <label class="block sm:col-span-2">
+              <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Label</span>
+              <input :name="`packages[${i}][label]`" x-model="pkg.label" placeholder="e.g. Adult · Comfort"
+                     class="mt-1 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-2.5">
+            </label>
+            <label class="block">
+              <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Price (MYR)</span>
+              <input :name="`packages[${i}][price]`" x-model.number="pkg.price" type="number" step="0.01" min="0"
+                     class="mt-1 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-2.5">
+            </label>
+            <label class="block sm:col-span-3">
+              <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Perks (one per line)</span>
+              <textarea :name="`packages[${i}][perks]`" x-model="pkg.perks" rows="4"
+                        placeholder="Welcome drink&#10;Yoga mat provided&#10;Full sound healing experience"
+                        class="mt-1 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-2.5 text-sm"></textarea>
+            </label>
+            <label class="block">
+              <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Humans on this tier</span>
+              <input :name="`packages[${i}][humans]`" x-model.number="pkg.humans" type="number" min="0" max="8"
+                     class="mt-1 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-2.5">
+              <span class="text-[11px] text-beige-100/40 mt-1 block">Incl. primary attendee.</span>
+            </label>
+            <label class="block">
+              <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Pets on this tier</span>
+              <input :name="`packages[${i}][pets]`" x-model.number="pkg.pets" type="number" min="0" max="8"
+                     class="mt-1 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-2.5">
+            </label>
+          </div>
         </div>
-      </div>
+      </template>
+      <p x-show="!packages.length" class="text-[11px] text-beige-100/45 italic">No packages defined — click "+ Add package" to create one.</p>
     </div>
   </section>
 
-  <!-- Intake — extra info collected at booking. Pet workshop mode
-       shows a paw-rent / pet details form; the counts below decide
-       how many human blocks and how many pet blocks appear per
-       package tier. -->
-  <section class="border-t border-white/5 pt-6 space-y-5"
-           x-data="{ intake: '<?= e((string) ($event['intake_type'] ?? 'none')) ?>' }">
+  <!-- Intake — extra info collected at booking. When set to "pet",
+       every package's humans + pets counts (edited in the Booking
+       packages section above) decide the shape of the form the
+       customer sees. -->
+  <section class="border-t border-white/5 pt-6 space-y-5">
     <div>
       <h2 class="font-serif text-xl text-gold-400">Intake questions</h2>
-      <p class="text-[11px] text-beige-100/45 mt-1">Extra info collected at booking. Turn on the pet workshop mode when the session includes pets — the numbers below decide the shape of the intake form.</p>
+      <p class="text-[11px] text-beige-100/45 mt-1">Extra info collected at booking. Turn on the pet workshop mode when the session includes pets — the humans + pets numbers on each package (above) then decide how many attendee blocks appear.</p>
     </div>
 
     <label class="block">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Intake type</span>
-      <select name="intake_type" x-model="intake" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
-        <option value="none">None — booking form has no extra questions</option>
-        <option value="pet">Pet workshop — collect pawrent + per-package humans & pets</option>
+      <select name="intake_type" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+        <option value="none" <?= ($event['intake_type'] ?? 'none') === 'none' ? 'selected' : '' ?>>None — booking form has no extra questions</option>
+        <option value="pet"  <?= ($event['intake_type'] ?? 'none') === 'pet'  ? 'selected' : '' ?>>Pet workshop — collect pawrent + per-package humans &amp; pets</option>
       </select>
     </label>
-
-    <div x-show="intake === 'pet'" x-cloak class="rounded-2xl border border-white/10 bg-navy-950/40 p-5 space-y-5">
-      <p class="text-[11px] uppercase tracking-widest text-beige-100/55">People &amp; pets per package tier</p>
-      <p class="text-[11px] text-beige-100/45">Set to 0 if a tier has none. e.g. "2 humans + 1 pet" or "3 humans + 0 pets" for a human-only tier. Primary attendee is counted in Humans.</p>
-
-      <div class="grid sm:grid-cols-2 gap-5">
-        <div class="space-y-3">
-          <p class="text-[10px] uppercase tracking-widest text-beige-100/55">Package A · <?= e(trim((string) ($event['package_a_label'] ?? '')) ?: 'Comfort') ?></p>
-          <div class="grid grid-cols-2 gap-3">
-            <label class="block">
-              <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Humans</span>
-              <input name="package_a_humans" type="number" min="0" max="8"
-                     value="<?= (int) ($event['package_a_humans'] ?? 1) ?>"
-                     class="mt-1 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-2.5">
-            </label>
-            <label class="block">
-              <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Pets</span>
-              <input name="package_a_pets" type="number" min="0" max="8"
-                     value="<?= (int) ($event['package_a_pets'] ?? 2) ?>"
-                     class="mt-1 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-2.5">
-            </label>
-          </div>
-        </div>
-        <div class="space-y-3">
-          <p class="text-[10px] uppercase tracking-widest text-beige-100/55">Package B · <?= e(trim((string) ($event['package_b_label'] ?? '')) ?: 'Bring-Your-Own-Zen') ?></p>
-          <div class="grid grid-cols-2 gap-3">
-            <label class="block">
-              <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Humans</span>
-              <input name="package_b_humans" type="number" min="0" max="8"
-                     value="<?= (int) ($event['package_b_humans'] ?? 1) ?>"
-                     class="mt-1 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-2.5">
-            </label>
-            <label class="block">
-              <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Pets</span>
-              <input name="package_b_pets" type="number" min="0" max="8"
-                     value="<?= (int) ($event['package_b_pets'] ?? 1) ?>"
-                     class="mt-1 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-2.5">
-            </label>
-          </div>
-        </div>
-      </div>
-    </div>
   </section>
 
   <div class="flex gap-3">

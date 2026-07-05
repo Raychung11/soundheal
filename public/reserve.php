@@ -73,18 +73,24 @@ $byoPrice     = (float) $event['price_member'];
 $defaultComfortPerks = ['Welcome drink', 'Yoga mat provided', 'Cozy blanket provided', 'Full sound healing experience'];
 $defaultByoPerks     = ['Full sound healing experience', 'Bring your own mat and blanket'];
 
-$comfortName  = trim((string) ($event['package_a_label'] ?? '')) ?: 'Comfort';
-$byoName      = trim((string) ($event['package_b_label'] ?? '')) ?: 'Bring-Your-Own-Zen';
-// Package B toggle — some events (single-tier workshops, private
-// corporate sessions) only offer Comfort. Defaults to 1 for
-// pre-migration rows so nothing changes silently.
-$byoEnabled   = !array_key_exists('package_b_enabled', $event) || (int) $event['package_b_enabled'] === 1;
-$comfortPerks = array_values(array_filter(array_map('trim',
-    preg_split('/\r?\n/', (string) ($event['package_a_perks'] ?? '')))));
-if (!$comfortPerks) $comfortPerks = $defaultComfortPerks;
-$byoPerks = array_values(array_filter(array_map('trim',
-    preg_split('/\r?\n/', (string) ($event['package_b_perks'] ?? '')))));
-if (!$byoPerks) $byoPerks = $defaultByoPerks;
+// Load the actual bookable packages for this event. After migration
+// 062 every event has at least one row here — the backfill created
+// entries from the legacy package_a/b columns. New events populate
+// via the admin form's dynamic repeater.
+$eventPackages = event_packages_active((int) $event['id']);
+
+// Backwards-compat vars — a few downstream spots (Alpine state
+// initialisation, order-summary bar text) still reference $comfortName
+// / $comfortPrice as a fallback label. Populate from the first
+// package if it exists, else the legacy columns.
+$firstPkg      = $eventPackages[0] ?? null;
+$comfortPrice  = $firstPkg ? (float) $firstPkg['price'] : (float) $event['price_public'];
+$comfortName   = $firstPkg ? (string) $firstPkg['label']
+                           : (trim((string) ($event['package_a_label'] ?? '')) ?: 'Comfort');
+$byoPrice      = isset($eventPackages[1]) ? (float) $eventPackages[1]['price'] : (float) $event['price_member'];
+$byoName       = isset($eventPackages[1]) ? (string) $eventPackages[1]['label']
+                                          : (trim((string) ($event['package_b_label'] ?? '')) ?: 'Bring-Your-Own-Zen');
+$byoEnabled    = isset($eventPackages[1]);
 
 // Credit balance — lets the member pay with a pack credit instead of
 // cash. Guests always have 0 (they can't own a class pack yet).
@@ -145,15 +151,28 @@ if (is_post()) {
         }
     }
 
-    $package = (string) input('package', 'comfort');
-    if (!in_array($package, ['comfort', 'byo'], true)) {
-        $package = 'comfort';
+    // Package selection now resolves against event_packages rows.
+    // The client posts "id-<row_id>"; older callers (pre-062) may
+    // still send "comfort" / "byo" — mapped to the first / second
+    // active package as a safety net.
+    $packageRaw = (string) input('package', '');
+    $chosenPackage = null;
+    if (preg_match('/^id-(\d+)$/', $packageRaw, $m)) {
+        $wantId = (int) $m[1];
+        foreach ($eventPackages as $p) {
+            if ((int) $p['id'] === $wantId) { $chosenPackage = $p; break; }
+        }
+    } elseif ($packageRaw === 'byo' && isset($eventPackages[1])) {
+        $chosenPackage = $eventPackages[1];
+    } elseif (isset($eventPackages[0])) {
+        $chosenPackage = $eventPackages[0];
     }
-    // If the admin has turned off Package B for this event, force
-    // comfort regardless of what the client sends.
-    if (!$byoEnabled) {
-        $package = 'comfort';
+    if (!$chosenPackage) {
+        $errors[] = 'Please pick a package before continuing.';
     }
+    $package = $chosenPackage
+        ? 'id-' . (int) $chosenPackage['id']
+        : 'comfort'; // only used if the flow bails on the error above
     // Server-side guard mirroring the UI: credits can only pay for
     // events the admin has flagged as credit_eligible.
     $eventCreditsAllowed = !array_key_exists('credit_eligible', $event) || (int) $event['credit_eligible'] === 1;
@@ -169,8 +188,10 @@ if (is_post()) {
         $errors[] = 'Please keep the health note under 2000 characters.';
     }
     $qty = $useCredit ? 1 : max(1, min(6, (int) input('quantity', 1)));
-    $unitPrice = $package === 'byo' ? $byoPrice : $comfortPrice;
-    $packageLabel = $package === 'byo' ? $byoName : $comfortName;
+    // Price + label snapshot pull from the resolved package.
+    $unitPrice    = $chosenPackage ? (float) $chosenPackage['price'] : (float) $comfortPrice;
+    $packageLabel = $chosenPackage ? (string) $chosenPackage['label'] : (string) $comfortName;
+    $chosenPackageId = $chosenPackage ? (int) $chosenPackage['id'] : null;
 
     // Per-event intake — pet workshop mode. Composition (how many
     // humans + how many pets to collect) comes from the event row,
@@ -183,12 +204,8 @@ if (is_post()) {
         // attendee is counted in humansNeeded, so humansNeeded=1
         // means "just the pawrent"; humansNeeded=3 means "pawrent +
         // 2 extras".
-        $humansNeeded = $package === 'byo'
-            ? max(0, (int) ($event['package_b_humans'] ?? 1))
-            : max(0, (int) ($event['package_a_humans'] ?? 1));
-        $petsNeeded = $package === 'byo'
-            ? max(0, (int) ($event['package_b_pets'] ?? 1))
-            : max(0, (int) ($event['package_a_pets'] ?? 2));
+        $humansNeeded = $chosenPackage ? max(0, (int) $chosenPackage['humans']) : 1;
+        $petsNeeded   = $chosenPackage ? max(0, (int) $chosenPackage['pets'])   : 0;
 
         $intake = [
             'pawrent' => [
@@ -293,8 +310,8 @@ if (is_post()) {
         $total = max(0.0, round($subtotal - $discountAmount, 2));
 
         $ins = db()->prepare(
-            "INSERT INTO event_bookings (booking_ref, user_id, event_id, quantity, unit_price, total_amount, status, paid_with_credit, package, intake_data, health_disclosure)
-             VALUES (:ref, :u, :e, :q, :up, :tot, :status, :pwc, :pkg, :intake, :health)"
+            "INSERT INTO event_bookings (booking_ref, user_id, event_id, quantity, unit_price, total_amount, status, paid_with_credit, package, package_id, intake_data, health_disclosure)
+             VALUES (:ref, :u, :e, :q, :up, :tot, :status, :pwc, :pkg, :pkgId, :intake, :health)"
         );
         $ins->execute([
             ':ref' => $bookingRef,
@@ -306,6 +323,7 @@ if (is_post()) {
             ':status' => ($useCredit || $effectiveUnit <= 0) ? 'paid' : 'pending',
             ':pwc' => $useCredit ? 1 : 0,
             ':pkg' => $package,
+            ':pkgId' => $chosenPackageId,
             ':intake' => $intakeData,
             ':health' => $healthDisclosure !== '' ? $healthDisclosure : null,
         ]);
@@ -463,16 +481,43 @@ require __DIR__ . '/../includes/header.php';
   // the attribute value.
   $ax = static fn($v) => htmlspecialchars(json_encode($v), ENT_QUOTES, 'UTF-8');
 ?>
-<div x-data="{
+<?php
+  // Alpine sees packages as { id: string, price, label, humans, pets }.
+  // Radio value is the string id ("id-<row_id>") to sidestep legacy
+  // 'comfort' / 'byo' shorthand. Also seeds the legacy 'comfort' /
+  // 'byo' mapping so old code paths (order-summary label, POST
+  // handler) still work while we migrate.
+  $pkgClient = [];
+  foreach ($eventPackages as $pkg) {
+      $pkgClient[] = [
+          'id'     => 'id-' . (int) $pkg['id'],
+          'label'  => (string) $pkg['label'],
+          'price'  => (float)  $pkg['price'],
+          'humans' => (int)    $pkg['humans'],
+          'pets'   => (int)    $pkg['pets'],
+      ];
+  }
+  $initialPkg = $pkgClient[0]['id'] ?? 'comfort';
+?>
+<div x-data='{
     useCredit: false,
     qty: 1,
-    pkg: 'comfort',
-    prices: { comfort: <?= $ax($comfortPrice) ?>, byo: <?= $ax($byoPrice) ?> },
-    labels: { comfort: <?= $ax($comfortName) ?>, byo: <?= $ax($byoName) ?> },
-    label() { return this.labels[this.pkg]; },
-    unit()  { return this.prices[this.pkg]; },
+    pkg: <?= htmlspecialchars(json_encode($initialPkg), ENT_QUOTES) ?>,
+    packages: <?= htmlspecialchars(json_encode($pkgClient), ENT_QUOTES) ?>,
+    // Legacy fallback map so existing code paths keep working.
+    prices: { comfort: <?= (float) $comfortPrice ?>, byo: <?= (float) $byoPrice ?> },
+    labels: { comfort: <?= htmlspecialchars(json_encode($comfortName), ENT_QUOTES) ?>, byo: <?= htmlspecialchars(json_encode($byoName), ENT_QUOTES) ?> },
+    current() {
+      const p = this.packages.find(x => x.id === this.pkg);
+      if (p) return p;
+      return { id: this.pkg, price: this.prices[this.pkg] ?? 0, label: this.labels[this.pkg] ?? "", humans: 1, pets: 0 };
+    },
+    label() { return this.current().label; },
+    unit()  { return this.current().price; },
+    humansFor() { return this.current().humans; },
+    petsFor()   { return this.current().pets; },
     total() { return this.useCredit ? 0 : this.unit() * this.qty; }
-  }">
+  }'>
 <section class="max-w-2xl mx-auto px-6 py-16">
   <p class="text-gold-400/80 tracking-[0.3em] uppercase text-xs">Reserve</p>
   <h1 class="font-serif text-4xl text-beige-100 mt-4"><?= e($event['title']) ?></h1>
@@ -557,45 +602,42 @@ require __DIR__ . '/../includes/header.php';
       </div>
     <?php endif; ?>
 
-    <p class="text-[10px] uppercase tracking-[0.3em] text-gold-400/80">Choose your package</p>
+    <p class="text-[10px] uppercase tracking-[0.3em] text-gold-400/80">
+      Choose your package<?php if (count($eventPackages) <= 1): ?><span class="text-beige-100/40 normal-case tracking-normal"> · one option available</span><?php endif; ?>
+    </p>
 
-    <!-- Package A (price_public) -->
-    <label class="block cursor-pointer">
-      <input type="radio" name="package" value="comfort" x-model="pkg" class="sr-only">
-      <div :class="pkg === 'comfort' ? 'border-gold-500/50 bg-gold-500/10 ring-1 ring-gold-500/30' : 'border-white/10 bg-navy-900/40 hover:border-gold-500/30'"
-           class="rounded-2xl border p-5 transition">
-        <div class="flex items-start justify-between gap-3">
-          <p class="font-serif text-xl text-beige-100"><?= e($comfortName) ?></p>
-          <span class="font-serif text-2xl text-gold-400 whitespace-nowrap"><?= e(format_money($comfortPrice)) ?></span>
+    <!-- One radio card per active event_package row. Value is the
+         string package id ("id-<row_id>"); the POST handler resolves
+         it back to a row and snapshots the price into the booking. -->
+    <?php foreach ($eventPackages as $pkg):
+      $pkgValue = 'id-' . (int) $pkg['id'];
+      $pkgPerks = array_values(array_filter(array_map('trim',
+          preg_split('/\r?\n/', (string) ($pkg['perks'] ?? '')))));
+    ?>
+      <label class="block cursor-pointer">
+        <input type="radio" name="package" value="<?= e($pkgValue) ?>" x-model="pkg" class="sr-only">
+        <div :class="pkg === <?= htmlspecialchars(json_encode($pkgValue), ENT_QUOTES) ?> ? 'border-gold-500/50 bg-gold-500/10 ring-1 ring-gold-500/30' : 'border-white/10 bg-navy-900/40 hover:border-gold-500/30'"
+             class="rounded-2xl border p-5 transition">
+          <div class="flex items-start justify-between gap-3">
+            <p class="font-serif text-xl text-beige-100"><?= e((string) $pkg['label']) ?></p>
+            <span class="font-serif text-2xl text-gold-400 whitespace-nowrap"><?= e(format_money((float) $pkg['price'])) ?></span>
+          </div>
+          <?php if ($pkgPerks): ?>
+            <ul class="mt-3 space-y-1.5 text-sm text-beige-100/70">
+              <?php foreach ($pkgPerks as $perk): ?>
+                <li class="flex gap-2"><span class="text-gold-400">✦</span> <?= e($perk) ?></li>
+              <?php endforeach; ?>
+            </ul>
+          <?php endif; ?>
         </div>
-        <ul class="mt-3 space-y-1.5 text-sm text-beige-100/70">
-          <?php foreach ($comfortPerks as $perk): ?>
-            <li class="flex gap-2"><span class="text-gold-400">✦</span> <?= e($perk) ?></li>
-          <?php endforeach; ?>
-        </ul>
-      </div>
-    </label>
+      </label>
+    <?php endforeach; ?>
 
-    <!-- Package B (price_member) — hidden entirely when the admin has
-         turned it off for this event. Server-side POST guard forces
-         'comfort' too so the radio can't be crafted from devtools. -->
-    <?php if ($byoEnabled): ?>
-    <label class="block cursor-pointer">
-      <input type="radio" name="package" value="byo" x-model="pkg" class="sr-only">
-      <div :class="pkg === 'byo' ? 'border-gold-500/50 bg-gold-500/10 ring-1 ring-gold-500/30' : 'border-white/10 bg-navy-900/40 hover:border-gold-500/30'"
-           class="rounded-2xl border p-5 transition">
-        <div class="flex items-start justify-between gap-3">
-          <p class="font-serif text-xl text-beige-100"><?= e($byoName) ?></p>
-          <span class="font-serif text-2xl text-gold-400 whitespace-nowrap"><?= e(format_money($byoPrice)) ?></span>
-        </div>
-        <ul class="mt-3 space-y-1.5 text-sm text-beige-100/70">
-          <?php foreach ($byoPerks as $perk): ?>
-            <li class="flex gap-2"><span class="text-gold-400">✦</span> <?= e($perk) ?></li>
-          <?php endforeach; ?>
-        </ul>
+    <?php if (!$eventPackages): ?>
+      <div class="rounded-2xl border border-red-500/30 bg-red-500/5 p-5 text-sm text-red-200">
+        This session has no bookable packages configured yet.
       </div>
-    </label>
-    <?php endif; // $byoEnabled ?>
+    <?php endif; ?>
 
     <?php
       // credit_eligible defaults to 1 for pre-migration rows.
@@ -618,12 +660,20 @@ require __DIR__ . '/../includes/header.php';
       // handler. Take the MAX so the form renders all fields the
       // customer might need; Alpine hides the ones outside the
       // currently-selected package.
-      $intakeAHumans = max(0, (int) ($event['package_a_humans'] ?? 1));
-      $intakeAPets   = max(0, (int) ($event['package_a_pets']   ?? 2));
-      $intakeBHumans = max(0, (int) ($event['package_b_humans'] ?? 1));
-      $intakeBPets   = max(0, (int) ($event['package_b_pets']   ?? 1));
-      $maxHumans     = max($intakeAHumans, $intakeBHumans);
-      $maxPets       = max($intakeAPets,   $intakeBPets);
+      // Take the MAX across every package's humans/pets so the form
+      // renders every input the customer could need; Alpine hides the
+      // ones the currently-selected package doesn't ask for. Falls
+      // back to the legacy A/B columns when the event predates the
+      // event_packages backfill.
+      $maxHumans = 0; $maxPets = 0;
+      foreach ($eventPackages as $ep) {
+          $maxHumans = max($maxHumans, (int) $ep['humans']);
+          $maxPets   = max($maxPets,   (int) $ep['pets']);
+      }
+      if (!$eventPackages) {
+          $maxHumans = max(0, (int) ($event['package_a_humans'] ?? 1), (int) ($event['package_b_humans'] ?? 1));
+          $maxPets   = max(0, (int) ($event['package_a_pets']   ?? 2), (int) ($event['package_b_pets']   ?? 1));
+      }
 
       $charOptions = ['playful','friendly','calm','shy','anxious','aggressive'];
       $petFields = function (int $idx) use ($charOptions) {
@@ -679,7 +729,7 @@ require __DIR__ . '/../includes/header.php';
       <?php if ($maxHumans > 0): ?>
         <!-- Primary attendee (counted as human #1). Only shown when the
              currently-selected package includes at least one human. -->
-        <div x-show="(pkg === 'comfort' ? <?= $intakeAHumans ?> : <?= $intakeBHumans ?>) >= 1" x-cloak class="grid sm:grid-cols-2 gap-3">
+        <div x-show="humansFor() >= 1" x-cloak class="grid sm:grid-cols-2 gap-3">
           <label class="block">
             <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Your name</span>
             <input name="intake[pawrent_name]" value="<?= e((string) ($user['full_name'] ?? '')) ?>" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none">
@@ -700,7 +750,7 @@ require __DIR__ . '/../includes/header.php';
              sees the extras disappear live. -->
         <?php for ($h = 2; $h <= $maxHumans; $h++): ?>
           <div class="border-t border-white/5 pt-4 space-y-3"
-               x-show="(pkg === 'comfort' ? <?= $intakeAHumans ?> : <?= $intakeBHumans ?>) >= <?= $h ?>" x-cloak>
+               x-show="humansFor() >= <?= $h ?>" x-cloak>
             <p class="text-[10px] uppercase tracking-[0.3em] text-gold-400/80">Guest <?= $h ?></p>
             <label class="block">
               <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Name</span>
@@ -714,7 +764,7 @@ require __DIR__ . '/../includes/header.php';
            fields their currently-selected package expects. -->
       <?php for ($p = 1; $p <= $maxPets; $p++): ?>
         <div class="border-t border-white/5 pt-4 space-y-3"
-             x-show="(pkg === 'comfort' ? <?= $intakeAPets ?> : <?= $intakeBPets ?>) >= <?= $p ?>" x-cloak>
+             x-show="petsFor() >= <?= $p ?>" x-cloak>
           <p class="text-[10px] uppercase tracking-[0.3em] text-gold-400/80">Pet <?= $p ?></p>
           <?php $petFields($p); ?>
         </div>

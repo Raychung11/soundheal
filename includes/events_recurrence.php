@@ -450,6 +450,15 @@ if (!function_exists('expand_event_occurrences')) {
         // prepared statement above — :sa (the exact starts_at we
         // wrote) not the old :d (date-only) that predated multi-slot.
         $childStmt->execute([':pid' => $templateId, ':sa' => $newStarts]);
-        return $childStmt->fetch() ?: null;
+        $child = $childStmt->fetch() ?: null;
+
+        // Clone the template's event_packages into the child so
+        // bookings against the child see the same tier options and
+        // their intake shape.
+        if ($child && function_exists('event_packages_clone')) {
+            event_packages_clone($templateId, (int) $child['id']);
+        }
+
+        return $child;
     }
 }
