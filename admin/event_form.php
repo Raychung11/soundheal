@@ -121,6 +121,18 @@ if (is_post()) {
         $errors[] = '"Recurs until" must be a valid date (YYYY-MM-DD).';
     }
 
+    // Multi-slot support requires the event to run as a template so
+    // each slot can materialise its own bookable child. When an admin
+    // sets extra same-day slots on a plain one-off event (recurrence
+    // 'none'), transparently promote it to recurrence='custom' with
+    // just the starts_at date — that way the expander emits every
+    // slot and the resolver can materialise a child per slot without
+    // needing a special one-off + multi-slot code path.
+    if ($event['recurrence'] === 'none' && !empty($event['time_slots']) && !empty($event['starts_at'])) {
+        $event['recurrence']   = 'custom';
+        $event['custom_dates'] = date('Y-m-d', strtotime((string) $event['starts_at']));
+    }
+
     // Optional cover image upload — replaces the URL field if a file is sent.
     if (!$errors) {
         try {
@@ -380,7 +392,7 @@ require __DIR__ . '/../includes/admin_layout.php';
            }
          }">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Extra same-day slots <span class="text-beige-100/30">(optional)</span></span>
-      <p class="text-[11px] text-beige-100/40 mt-1">Each date runs at the primary "Starts at" time above plus every extra time listed here. Duration is inherited. Use for a 3pm + 6pm double-header on the same day. Recurring events only — single-day events use the starts_at time.</p>
+      <p class="text-[11px] text-beige-100/40 mt-1">Each date runs at the primary "Starts at" time above plus every extra time listed here. Duration is inherited from starts/ends above. Use for a 3pm + 6pm double-header on the same day — works on both one-off and recurring events.</p>
       <div class="mt-2 flex flex-wrap gap-2 items-center">
         <input type="time" x-model="picker"
                class="rounded-2xl bg-navy-900 border border-white/5 px-4 py-2.5 text-sm">
