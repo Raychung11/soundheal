@@ -95,7 +95,7 @@ $eventsLd = [];
 foreach ($events as $e) {
     $img = !empty($e['cover_image']) ? media_src((string) $e['cover_image']) : '';
     if ($img !== '' && !str_starts_with($img, 'http')) $img = $ldBase . '/' . ltrim($img, '/');
-    $available = ((int) $e['capacity'] - (int) $e['seats_taken']) > 0;
+    $available = ((int) $e['capacity'] - (int) ($e['seats_taken'] ?? 0)) > 0;
     $isOcc = !empty($e['_template_id']);
     $ldSlot = $isOcc && !empty($e['_occurrence_time']) ? '&slot=' . urlencode((string) $e['_occurrence_time']) : '';
     $ldUrl = $isOcc
@@ -167,7 +167,7 @@ require __DIR__ . '/../includes/header.php';
         $feReserve  = $feIsOcc
             ? '/public/reserve.php?event_id=' . (int) $fe['_template_id'] . '&date=' . urlencode((string) $fe['_occurrence_date']) . $feSlot
             : '/public/reserve.php?event_id=' . (int) $fe['id'];
-        $feRemain   = max(0, (int) $fe['capacity'] - (int) $fe['seats_taken']);
+        $feRemain   = max(0, (int) $fe['capacity'] - (int) ($fe['seats_taken'] ?? 0));
         $feSold     = $feRemain <= 0;
         // When BYO is turned off for this event, "From" should be the
         // Comfort price directly rather than the min of both tiers.
@@ -300,7 +300,7 @@ require __DIR__ . '/../includes/header.php';
 
         <div class="mt-6 space-y-3">
           <?php foreach ($events as $event):
-            $remaining = max(0, (int)$event['capacity'] - (int)$event['seats_taken']);
+            $remaining = max(0, (int)$event['capacity'] - (int) ($event['seats_taken'] ?? 0));
             $soldOut = $remaining <= 0;
             $catVal = strtolower(trim((string) ($event['category'] ?? '')));
             $dayVal = substr((string) $event['starts_at'], 0, 10);
