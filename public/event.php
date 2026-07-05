@@ -109,7 +109,7 @@ $bEnabled = !array_key_exists('package_b_enabled', $event) || (int) $event['pack
 // which stores REQUEST_URI in $_SESSION['_intended'] and bounces to
 // login; the URL params survive that round-trip.
 $slotSuffix = ($isRecurring && $dateValid && $slot !== '') ? '&slot=' . urlencode($slot) : '';
-$reserveUrl = '/member/book_event.php?event_id=' . (int) $event['id']
+$reserveUrl = '/public/reserve.php?event_id=' . (int) $event['id']
             . ($isRecurring && $dateValid ? '&date=' . urlencode($date) . $slotSuffix : '');
 
 // Open Graph / Twitter meta so the WhatsApp / Facebook preview uses

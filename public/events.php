@@ -165,8 +165,8 @@ require __DIR__ . '/../includes/header.php';
         $feIsOcc    = !empty($fe['_template_id']);
         $feSlot     = $feIsOcc && !empty($fe['_occurrence_time']) ? '&slot=' . urlencode((string) $fe['_occurrence_time']) : '';
         $feReserve  = $feIsOcc
-            ? '/member/book_event.php?event_id=' . (int) $fe['_template_id'] . '&date=' . urlencode((string) $fe['_occurrence_date']) . $feSlot
-            : '/member/book_event.php?event_id=' . (int) $fe['id'];
+            ? '/public/reserve.php?event_id=' . (int) $fe['_template_id'] . '&date=' . urlencode((string) $fe['_occurrence_date']) . $feSlot
+            : '/public/reserve.php?event_id=' . (int) $fe['id'];
         $feRemain   = max(0, (int) $fe['capacity'] - (int) $fe['seats_taken']);
         $feSold     = $feRemain <= 0;
         // When BYO is turned off for this event, "From" should be the
@@ -318,8 +318,8 @@ require __DIR__ . '/../includes/header.php';
             $shareEventParam = $isRecurringOcc ? (int) $event['_template_id'] : (int) $event['id'];
             $shareDateParam  = $isRecurringOcc ? '&date=' . urlencode((string) $event['_occurrence_date']) . $slotSuffix : '';
             $reserveUrl = $isRecurringOcc
-                ? '/member/book_event.php?event_id=' . (int) $event['_template_id'] . '&date=' . urlencode((string) $event['_occurrence_date']) . $slotSuffix
-                : '/member/book_event.php?event_id=' . (int) $event['id'];
+                ? '/public/reserve.php?event_id=' . (int) $event['_template_id'] . '&date=' . urlencode((string) $event['_occurrence_date']) . $slotSuffix
+                : '/public/reserve.php?event_id=' . (int) $event['id'];
             $shareUrl = $ldBase . '/public/event.php?id=' . $shareEventParam . $shareDateParam;
             $shareUrlEnc = rawurlencode($shareUrl);
             $shareTextEnc = rawurlencode($event['title'] . ' · ' . brand_name());

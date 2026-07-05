@@ -265,7 +265,7 @@ if (!function_exists('aria_tools_schema')) {
             'price_member' => 'RM ' . number_format((float) $row['price_member'], 2),
             'capacity'     => (int) $row['capacity'],
             'seats_left'   => $seatsLeft,
-            'booking_url'  => url('/member/book_event.php?event_id=' . (int) $row['id']),
+            'booking_url'  => url('/public/reserve.php?event_id=' . (int) $row['id']),
         ];
     }
 
@@ -442,7 +442,7 @@ if (!function_exists('aria_tools_schema')) {
             'event_title'  => (string) $event['title'],
             'starts_local' => format_datetime((string) $event['starts_at'], 'D, d M Y · g:i A'),
             'location'     => (string) ($event['location'] ?? ''),
-            'booking_url'  => url('/member/book_event.php?event_id=' . $eventId),
+            'booking_url'  => url('/public/reserve.php?event_id=' . $eventId),
             'note'         => 'The guest must click the URL and confirm on the booking page. Do not claim to have booked it for them.',
         ];
     }

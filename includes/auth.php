@@ -43,6 +43,34 @@ function attempt_login(string $email, string $password): bool
     return true;
 }
 
+/**
+ * Log a user in by id — no password check. Only for internal flows
+ * that have already established trust some other way (e.g. guest
+ * checkout after we created the user from their booking form).
+ */
+function login_user_by_id(int $userId): bool
+{
+    $stmt = db()->prepare(
+        'SELECT u.*, r.name AS role_name
+         FROM users u
+         JOIN roles r ON r.id = u.role_id
+         WHERE u.id = :id AND u.status = "active" LIMIT 1'
+    );
+    $stmt->execute([':id' => $userId]);
+    $user = $stmt->fetch();
+    if (!$user) return false;
+    session_regenerate_id(true);
+    $_SESSION['user'] = [
+        'id'        => (int) $user['id'],
+        'role_id'   => (int) $user['role_id'],
+        'role'      => $user['role_name'],
+        'full_name' => $user['full_name'],
+        'email'     => $user['email'],
+    ];
+    audit_log('login.by_id', 'users', (int) $user['id']);
+    return true;
+}
+
 function logout(): void
 {
     if (current_user_id()) {
@@ -100,6 +128,69 @@ function register_user(string $fullName, string $email, string $password, ?strin
     $id = (int) db()->lastInsertId();
     audit_log($trialDays ? 'register.trial' : 'register', 'users', $id, $trialDays ? ['trial_days' => $trialDays] : []);
     return $id;
+}
+
+/**
+ * Guest-mode booking helper: return an existing user id for the email
+ * or create a lightweight one so a first-time visitor can book without
+ * running the full sign-up flow first. The account is real (they can
+ * "forgot password" to claim it later) but starts with an unusable
+ * random password and no trial.
+ *
+ * Idempotent by email so a returning guest who books again with the
+ * same email lands on the same user row. Name / phone are refreshed
+ * only when they were previously blank so we don't overwrite a value
+ * the user set intentionally.
+ *
+ * Returns ['id' => int, 'created' => bool] so the caller can decide
+ * whether to fire a "your account is set up, tap to sign in" email.
+ */
+function find_or_create_guest_user(string $email, string $fullName, ?string $phone = null): array
+{
+    $email = strtolower(trim($email));
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('Please provide a valid email address.');
+    }
+
+    $stmt = db()->prepare('SELECT id, full_name, phone FROM users WHERE email = :e LIMIT 1');
+    $stmt->execute([':e' => $email]);
+    $row = $stmt->fetch();
+
+    if ($row) {
+        // Only fill in missing fields — never overwrite what a returning
+        // customer already set on their profile.
+        $updates = [];
+        $params  = [':id' => (int) $row['id']];
+        if (($row['full_name'] ?? '') === '' && $fullName !== '') {
+            $updates[] = 'full_name = :n';
+            $params[':n'] = $fullName;
+        }
+        if (($row['phone'] ?? '') === '' && $phone !== null && $phone !== '') {
+            $updates[] = 'phone = :p';
+            $params[':p'] = $phone;
+        }
+        if ($updates) {
+            db()->prepare('UPDATE users SET ' . implode(', ', $updates) . ' WHERE id = :id')
+                ->execute($params);
+        }
+        return ['id' => (int) $row['id'], 'created' => false];
+    }
+
+    // Random, unusable password. Users claim the account via the
+    // existing "forgot password" flow when they want to sign in.
+    $randomPass = bin2hex(random_bytes(24));
+    db()->prepare(
+        'INSERT INTO users (role_id, full_name, email, phone, password_hash, status)
+         VALUES (3, :name, :email, :phone, :hash, "active")'
+    )->execute([
+        ':name'  => $fullName !== '' ? $fullName : 'Guest',
+        ':email' => $email,
+        ':phone' => $phone ?: null,
+        ':hash'  => password_hash($randomPass, PASSWORD_DEFAULT),
+    ]);
+    $id = (int) db()->lastInsertId();
+    audit_log('register.guest', 'users', $id, ['email' => $email]);
+    return ['id' => $id, 'created' => true];
 }
 
 /**

@@ -369,8 +369,8 @@ function fmt_val($v): string {
 <section class="mt-8 border border-white/5 rounded-2xl bg-navy-900/40 p-5">
   <h2 class="font-serif text-xl text-gold-400">Public URLs to check</h2>
   <ul class="mt-3 text-xs text-beige-100/70 space-y-1.5">
-    <li>Booking flow (template): <a href="<?= url('/member/book_event.php?event_id=' . (int) $template['id']) ?>" target="_blank" class="text-gold-400 hover:text-gold-300 font-mono">/member/book_event.php?event_id=<?= (int) $template['id'] ?></a></li>
-    <li>Booking flow (with a specific date): <span class="font-mono text-beige-100/50">/member/book_event.php?event_id=<?= (int) $template['id'] ?>&date=YYYY-MM-DD</span></li>
+    <li>Booking flow (template): <a href="<?= url('/public/reserve.php?event_id=' . (int) $template['id']) ?>" target="_blank" class="text-gold-400 hover:text-gold-300 font-mono">/public/reserve.php?event_id=<?= (int) $template['id'] ?></a></li>
+    <li>Booking flow (with a specific date): <span class="font-mono text-beige-100/50">/public/reserve.php?event_id=<?= (int) $template['id'] ?>&date=YYYY-MM-DD</span></li>
     <li>Public event page: <a href="<?= url('/public/event.php?id=' . (int) $template['id']) ?>" target="_blank" class="text-gold-400 hover:text-gold-300 font-mono">/public/event.php?id=<?= (int) $template['id'] ?></a></li>
     <?php if (!empty($template['experience_id'])):
       $xStmt = db()->prepare("SELECT slug FROM experiences WHERE id = :id");
