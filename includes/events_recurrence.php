@@ -402,6 +402,7 @@ if (!function_exists('expand_event_occurrences')) {
                  experience_id, audience, credit_eligible, referral_reward_amount,
                  package_a_label, package_a_perks,
                  package_b_label, package_b_perks, package_b_enabled,
+                 package_a_humans, package_a_pets, package_b_humans, package_b_pets,
                  intake_type)
              VALUES
                 (:slug, :pid, :title, :subtitle, :description, :cover,
@@ -410,6 +411,7 @@ if (!function_exists('expand_event_occurrences')) {
                  :xid, :aud, :cel, :rra,
                  :pal, :pap,
                  :pbl, :pbp, :pbe,
+                 :pah, :pap2, :pbh, :pbp2,
                  :itype)"
         )->execute([
             ':slug'        => $childSlug,
@@ -437,6 +439,10 @@ if (!function_exists('expand_event_occurrences')) {
             ':pbl'         => $tpl['package_b_label'] ?? null,
             ':pbp'         => $tpl['package_b_perks'] ?? null,
             ':pbe'         => $tplPkgBEnabled,
+            ':pah'         => (int) ($tpl['package_a_humans'] ?? 1),
+            ':pap2'        => (int) ($tpl['package_a_pets']   ?? 2),
+            ':pbh'         => (int) ($tpl['package_b_humans'] ?? 1),
+            ':pbp2'        => (int) ($tpl['package_b_pets']   ?? 1),
             ':itype'       => $tpl['intake_type'] ?? 'none',
         ]);
 

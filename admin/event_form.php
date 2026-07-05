@@ -12,6 +12,9 @@ $event = ['id' => 0, 'slug' => '', 'title' => '', 'subtitle' => '', 'description
           'package_a_label' => '', 'package_a_perks' => '',
           'package_b_label' => '', 'package_b_perks' => '',
           'package_b_enabled' => 1,
+          'package_a_humans' => 1, 'package_a_pets' => 2,
+          'package_b_humans' => 1, 'package_b_pets' => 1,
+          'intake_type' => 'none',
           'experience_id' => null,
           'referral_reward_amount' => '',
           'audience' => 'public',
@@ -109,6 +112,13 @@ if (is_post()) {
         'package_b_label' => trim((string) input('package_b_label', '')),
         'package_b_perks' => trim((string) input('package_b_perks', '')),
         'package_b_enabled' => !empty($_POST['package_b_enabled']) ? 1 : 0,
+        // Intake composition — how many humans + pets per package tier.
+        // Clamped 0..8 so a stray large number can't blow up the form.
+        'package_a_humans' => max(0, min(8, (int) input('package_a_humans', 1))),
+        'package_a_pets'   => max(0, min(8, (int) input('package_a_pets',   2))),
+        'package_b_humans' => max(0, min(8, (int) input('package_b_humans', 1))),
+        'package_b_pets'   => max(0, min(8, (int) input('package_b_pets',   1))),
+        'intake_type'      => in_array(input('intake_type'), ['none','pet'], true) ? input('intake_type') : 'none',
         'experience_id'   => ($v = (int) input('experience_id', 0)) > 0 ? $v : null,
         'referral_reward_amount' => (($ra = trim((string) input('referral_reward_amount', ''))) !== '' && (float) $ra > 0) ? (float) $ra : null,
         'audience'        => in_array(input('audience'), ['public','private'], true) ? input('audience') : 'public',
@@ -159,6 +169,9 @@ if (is_post()) {
                  package_a_label=:pal, package_a_perks=:pap,
                  package_b_label=:pbl, package_b_perks=:pbp,
                  package_b_enabled=:pbe,
+                 package_a_humans=:pah, package_a_pets=:pap2,
+                 package_b_humans=:pbh, package_b_pets=:pbp2,
+                 intake_type=:itype,
                  experience_id=:xid,
                  referral_reward_amount=:rra,
                  audience=:aud, credit_eligible=:cel
@@ -179,6 +192,11 @@ if (is_post()) {
                 ':pbl' => $event['package_b_label'] ?: null,
                 ':pbp' => $event['package_b_perks'] ?: null,
                 ':pbe' => (int) $event['package_b_enabled'],
+                ':pah'  => (int) $event['package_a_humans'],
+                ':pap2' => (int) $event['package_a_pets'],
+                ':pbh'  => (int) $event['package_b_humans'],
+                ':pbp2' => (int) $event['package_b_pets'],
+                ':itype' => (string) $event['intake_type'],
                 ':xid' => $event['experience_id'],
                 ':rra' => $event['referral_reward_amount'],
                 ':aud' => $event['audience'],
@@ -208,7 +226,10 @@ if (is_post()) {
                         c.referral_reward_amount = :rra,
                         c.package_a_label = :pal, c.package_a_perks = :pap,
                         c.package_b_label = :pbl, c.package_b_perks = :pbp,
-                        c.package_b_enabled = :pbe
+                        c.package_b_enabled = :pbe,
+                        c.package_a_humans = :pah, c.package_a_pets = :pap2,
+                        c.package_b_humans = :pbh, c.package_b_pets = :pbp2,
+                        c.intake_type = :itype
                   WHERE c.parent_event_id = :id
                     AND b.id IS NULL"
             )->execute([
@@ -225,6 +246,11 @@ if (is_post()) {
                 ':pbl' => $event['package_b_label'] ?: null,
                 ':pbp' => $event['package_b_perks'] ?: null,
                 ':pbe' => (int) $event['package_b_enabled'],
+                ':pah'  => (int) $event['package_a_humans'],
+                ':pap2' => (int) $event['package_a_pets'],
+                ':pbh'  => (int) $event['package_b_humans'],
+                ':pbp2' => (int) $event['package_b_pets'],
+                ':itype' => (string) $event['intake_type'],
                 ':id' => $id,
             ]);
         } else {
@@ -234,10 +260,15 @@ if (is_post()) {
                                      recurrence, recurrence_until, recurrence_days, custom_dates, time_slots,
                                      package_a_label, package_a_perks, package_b_label, package_b_perks,
                                      package_b_enabled,
+                                     package_a_humans, package_a_pets, package_b_humans, package_b_pets,
+                                     intake_type,
                                      experience_id, referral_reward_amount,
                                      audience, credit_eligible, created_by)
                  VALUES (:slug, :t, :st, :d, :ci, :l, :s, :e, :c, :pp, :pm, :f, :cat, :status,
-                         :rec, :ru, :rd, :cd, :ts, :pal, :pap, :pbl, :pbp, :pbe, :xid, :rra, :aud, :cel, :uid)"
+                         :rec, :ru, :rd, :cd, :ts, :pal, :pap, :pbl, :pbp, :pbe,
+                         :pah, :pap2, :pbh, :pbp2,
+                         :itype,
+                         :xid, :rra, :aud, :cel, :uid)"
             );
             $stmt->execute([
                 ':slug' => $slug, ':t' => $event['title'], ':st' => $event['subtitle'],
@@ -254,6 +285,11 @@ if (is_post()) {
                 ':pbl' => $event['package_b_label'] ?: null,
                 ':pbp' => $event['package_b_perks'] ?: null,
                 ':pbe' => (int) $event['package_b_enabled'],
+                ':pah'  => (int) $event['package_a_humans'],
+                ':pap2' => (int) $event['package_a_pets'],
+                ':pbh'  => (int) $event['package_b_humans'],
+                ':pbp2' => (int) $event['package_b_pets'],
+                ':itype' => (string) $event['intake_type'],
                 ':xid' => $event['experience_id'],
                 ':rra' => $event['referral_reward_amount'],
                 ':aud' => $event['audience'],
@@ -663,6 +699,68 @@ require __DIR__ . '/../includes/admin_layout.php';
             <span class="text-xs uppercase tracking-widest text-beige-100/60">Perks (one per line)</span>
             <textarea name="package_b_perks" rows="5" placeholder="Full sound healing experience&#10;Bring your own mat and blanket" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3"><?= e((string) ($event['package_b_perks'] ?? '')) ?></textarea>
           </label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Intake — extra info collected at booking. Pet workshop mode
+       shows a paw-rent / pet details form; the counts below decide
+       how many human blocks and how many pet blocks appear per
+       package tier. -->
+  <section class="border-t border-white/5 pt-6 space-y-5"
+           x-data="{ intake: '<?= e((string) ($event['intake_type'] ?? 'none')) ?>' }">
+    <div>
+      <h2 class="font-serif text-xl text-gold-400">Intake questions</h2>
+      <p class="text-[11px] text-beige-100/45 mt-1">Extra info collected at booking. Turn on the pet workshop mode when the session includes pets — the numbers below decide the shape of the intake form.</p>
+    </div>
+
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Intake type</span>
+      <select name="intake_type" x-model="intake" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+        <option value="none">None — booking form has no extra questions</option>
+        <option value="pet">Pet workshop — collect pawrent + per-package humans & pets</option>
+      </select>
+    </label>
+
+    <div x-show="intake === 'pet'" x-cloak class="rounded-2xl border border-white/10 bg-navy-950/40 p-5 space-y-5">
+      <p class="text-[11px] uppercase tracking-widest text-beige-100/55">People &amp; pets per package tier</p>
+      <p class="text-[11px] text-beige-100/45">Set to 0 if a tier has none. e.g. "2 humans + 1 pet" or "3 humans + 0 pets" for a human-only tier. Primary attendee is counted in Humans.</p>
+
+      <div class="grid sm:grid-cols-2 gap-5">
+        <div class="space-y-3">
+          <p class="text-[10px] uppercase tracking-widest text-beige-100/55">Package A · <?= e(trim((string) ($event['package_a_label'] ?? '')) ?: 'Comfort') ?></p>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block">
+              <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Humans</span>
+              <input name="package_a_humans" type="number" min="0" max="8"
+                     value="<?= (int) ($event['package_a_humans'] ?? 1) ?>"
+                     class="mt-1 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-2.5">
+            </label>
+            <label class="block">
+              <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Pets</span>
+              <input name="package_a_pets" type="number" min="0" max="8"
+                     value="<?= (int) ($event['package_a_pets'] ?? 2) ?>"
+                     class="mt-1 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-2.5">
+            </label>
+          </div>
+        </div>
+        <div class="space-y-3">
+          <p class="text-[10px] uppercase tracking-widest text-beige-100/55">Package B · <?= e(trim((string) ($event['package_b_label'] ?? '')) ?: 'Bring-Your-Own-Zen') ?></p>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block">
+              <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Humans</span>
+              <input name="package_b_humans" type="number" min="0" max="8"
+                     value="<?= (int) ($event['package_b_humans'] ?? 1) ?>"
+                     class="mt-1 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-2.5">
+            </label>
+            <label class="block">
+              <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Pets</span>
+              <input name="package_b_pets" type="number" min="0" max="8"
+                     value="<?= (int) ($event['package_b_pets'] ?? 1) ?>"
+                     class="mt-1 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-2.5">
+            </label>
+          </div>
         </div>
       </div>
     </div>

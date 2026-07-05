@@ -172,22 +172,52 @@ if (is_post()) {
     $unitPrice = $package === 'byo' ? $byoPrice : $comfortPrice;
     $packageLabel = $package === 'byo' ? $byoName : $comfortName;
 
-    // Per-event intake — currently only the pet workshop uses this.
+    // Per-event intake — pet workshop mode. Composition (how many
+    // humans + how many pets to collect) comes from the event row,
+    // per package tier, so a workshop can be 2 humans + 1 pet,
+    // 3 humans + 0 pets, all pets, etc. — no hardcoding.
     $intakeData = null;
     if (($event['intake_type'] ?? 'none') === 'pet') {
         $i = (array) ($_POST['intake'] ?? []);
+        // How many humans + pets this package requests. Primary
+        // attendee is counted in humansNeeded, so humansNeeded=1
+        // means "just the pawrent"; humansNeeded=3 means "pawrent +
+        // 2 extras".
+        $humansNeeded = $package === 'byo'
+            ? max(0, (int) ($event['package_b_humans'] ?? 1))
+            : max(0, (int) ($event['package_a_humans'] ?? 1));
+        $petsNeeded = $package === 'byo'
+            ? max(0, (int) ($event['package_b_pets'] ?? 1))
+            : max(0, (int) ($event['package_a_pets'] ?? 2));
+
         $intake = [
             'pawrent' => [
                 'name'   => trim((string) ($i['pawrent_name'] ?? '')),
                 'mobile' => trim((string) ($i['pawrent_mobile'] ?? '')),
                 'email'  => trim((string) ($i['pawrent_email'] ?? '')),
             ],
-            'pets' => [],
+            'humans' => [],
+            'pets'   => [],
         ];
-        if ($intake['pawrent']['name'] === '' || $intake['pawrent']['mobile'] === '' || $intake['pawrent']['email'] === '') {
+        // Primary attendee — required whenever the package includes
+        // at least one human. Human-free packages skip these fields.
+        if ($humansNeeded > 0 && (
+            $intake['pawrent']['name'] === '' ||
+            $intake['pawrent']['mobile'] === '' ||
+            $intake['pawrent']['email'] === ''
+        )) {
             $errors[] = 'Please share your name, mobile and email so we can welcome you.';
         }
-        $petsNeeded = $package === 'comfort' ? 2 : 1;
+        // Extra humans beyond the primary attendee. Just capture
+        // names; the primary attendee handles contact info.
+        for ($h = 2; $h <= $humansNeeded; $h++) {
+            $name = trim((string) ($i["human_{$h}_name"] ?? ''));
+            if ($name === '') {
+                $errors[] = "Please tell us guest #{$h}'s name.";
+            }
+            $intake['humans'][] = ['name' => $name];
+        }
+        // Pets.
         for ($p = 1; $p <= $petsNeeded; $p++) {
             $pet = [
                 'name'      => trim((string) ($i["pet_{$p}_name"] ?? '')),
@@ -584,6 +614,17 @@ require __DIR__ . '/../includes/header.php';
     <?php endif; ?>
 
     <?php if (($event['intake_type'] ?? 'none') === 'pet'):
+      // Composition per package tier — mirrors the reserve POST
+      // handler. Take the MAX so the form renders all fields the
+      // customer might need; Alpine hides the ones outside the
+      // currently-selected package.
+      $intakeAHumans = max(0, (int) ($event['package_a_humans'] ?? 1));
+      $intakeAPets   = max(0, (int) ($event['package_a_pets']   ?? 2));
+      $intakeBHumans = max(0, (int) ($event['package_b_humans'] ?? 1));
+      $intakeBPets   = max(0, (int) ($event['package_b_pets']   ?? 1));
+      $maxHumans     = max($intakeAHumans, $intakeBHumans);
+      $maxPets       = max($intakeAPets,   $intakeBPets);
+
       $charOptions = ['playful','friendly','calm','shy','anxious','aggressive'];
       $petFields = function (int $idx) use ($charOptions) {
         $name = $idx === 1 ? "your pet" : "pet #{$idx}";
@@ -631,34 +672,57 @@ require __DIR__ . '/../includes/header.php';
     ?>
     <div class="border border-gold-500/25 rounded-2xl p-5 bg-gold-500/5 space-y-5">
       <div>
-        <p class="text-[10px] uppercase tracking-[0.3em] text-gold-400/80">Pawrent &amp; pet details</p>
-        <p class="text-xs text-beige-100/55 mt-1">So we can welcome you and your fur companion properly.</p>
+        <p class="text-[10px] uppercase tracking-[0.3em] text-gold-400/80">Attendee &amp; pet details</p>
+        <p class="text-xs text-beige-100/55 mt-1">So we can welcome you (and any furry companions) properly.</p>
       </div>
 
-      <div class="grid sm:grid-cols-2 gap-3">
-        <label class="block">
-          <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Your name</span>
-          <input name="intake[pawrent_name]" required value="<?= e((string) ($user['full_name'] ?? '')) ?>" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none">
-        </label>
-        <label class="block">
-          <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Mobile</span>
-          <input name="intake[pawrent_mobile]" required type="tel" placeholder="+60…" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none">
-        </label>
-        <label class="block sm:col-span-2">
-          <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Email</span>
-          <input name="intake[pawrent_email]" required type="email" value="<?= e((string) ($user['email'] ?? '')) ?>" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none">
-        </label>
-      </div>
+      <?php if ($maxHumans > 0): ?>
+        <!-- Primary attendee (counted as human #1). Only shown when the
+             currently-selected package includes at least one human. -->
+        <div x-show="(pkg === 'comfort' ? <?= $intakeAHumans ?> : <?= $intakeBHumans ?>) >= 1" x-cloak class="grid sm:grid-cols-2 gap-3">
+          <label class="block">
+            <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Your name</span>
+            <input name="intake[pawrent_name]" value="<?= e((string) ($user['full_name'] ?? '')) ?>" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none">
+          </label>
+          <label class="block">
+            <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Mobile</span>
+            <input name="intake[pawrent_mobile]" type="tel" placeholder="+60…" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none">
+          </label>
+          <label class="block sm:col-span-2">
+            <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Email</span>
+            <input name="intake[pawrent_email]" type="email" value="<?= e((string) ($user['email'] ?? '')) ?>" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none">
+          </label>
+        </div>
 
-      <div class="border-t border-white/5 pt-4 space-y-3">
-        <p class="text-[10px] uppercase tracking-[0.3em] text-gold-400/80">Pet 1</p>
-        <?php $petFields(1); ?>
-      </div>
+        <!-- Extra humans (guest #2 onward). Alpine hides each block
+             when it exceeds the currently-selected package's count so
+             a customer switching from a 3-human tier to a 1-human tier
+             sees the extras disappear live. -->
+        <?php for ($h = 2; $h <= $maxHumans; $h++): ?>
+          <div class="border-t border-white/5 pt-4 space-y-3"
+               x-show="(pkg === 'comfort' ? <?= $intakeAHumans ?> : <?= $intakeBHumans ?>) >= <?= $h ?>" x-cloak>
+            <p class="text-[10px] uppercase tracking-[0.3em] text-gold-400/80">Guest <?= $h ?></p>
+            <label class="block">
+              <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Name</span>
+              <input name="intake[human_<?= $h ?>_name]" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none">
+            </label>
+          </div>
+        <?php endfor; ?>
+      <?php endif; ?>
 
-      <div class="border-t border-white/5 pt-4 space-y-3" x-show="pkg === 'comfort'" x-cloak>
-        <p class="text-[10px] uppercase tracking-[0.3em] text-gold-400/80">Pet 2 <span class="text-beige-100/40 normal-case tracking-normal">(shown for the 2-pet package)</span></p>
-        <?php $petFields(2); ?>
-      </div>
+      <!-- Pet blocks. Same show/hide pattern — customer sees the pet
+           fields their currently-selected package expects. -->
+      <?php for ($p = 1; $p <= $maxPets; $p++): ?>
+        <div class="border-t border-white/5 pt-4 space-y-3"
+             x-show="(pkg === 'comfort' ? <?= $intakeAPets ?> : <?= $intakeBPets ?>) >= <?= $p ?>" x-cloak>
+          <p class="text-[10px] uppercase tracking-[0.3em] text-gold-400/80">Pet <?= $p ?></p>
+          <?php $petFields($p); ?>
+        </div>
+      <?php endfor; ?>
+
+      <?php if ($maxHumans === 0 && $maxPets === 0): ?>
+        <p class="text-xs text-beige-100/55 italic">No intake fields configured for this event.</p>
+      <?php endif; ?>
     </div>
     <?php endif; ?>
 
