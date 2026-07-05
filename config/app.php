@@ -39,9 +39,7 @@ return [
     'name'        => getenv('APP_NAME') ?: 'jaemie sound bath',
     'tagline'     => '',
     'env'         => getenv('APP_ENV') ?: 'production',
-    // TEMP: debug flipped ON to surface a 500 on /admin/experiences.php?edit=10.
-    // Revert to 'false' once the underlying issue is fixed.
-    'debug'       => filter_var(getenv('APP_DEBUG') ?: 'true', FILTER_VALIDATE_BOOLEAN),
+    'debug'       => filter_var(getenv('APP_DEBUG') ?: 'false', FILTER_VALIDATE_BOOLEAN),
     'url'         => rtrim($envUrl !== '' ? $envUrl : $detectedUrl, '/'),
     'timezone'    => getenv('APP_TIMEZONE') ?: 'Asia/Kuala_Lumpur',
     'currency'    => 'MYR',

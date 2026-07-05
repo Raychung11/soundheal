@@ -102,24 +102,33 @@ if (is_post()) {
         // Auto-claim any orphan events whose title matches this experience
         // (normalised — emojis and punctuation stripped, case-insensitive).
         // Preserves manual links: only touches events with experience_id NULL.
-        $expId    = $id > 0 ? $id : $newId;
-        $normTitle = strtolower(preg_replace('/[^A-Za-z0-9]+/', '', $title));
+        //
+        // Matching is done in PHP rather than SQL because the LIKE
+        // between a normalised column expression and a PHP-bound
+        // parameter blew up with "Illegal mix of collations" on
+        // MariaDB versions that use utf8mb4_uca1400_ai_ci for the
+        // column but bind params as utf8mb4_bin. PHP-side matching
+        // sidesteps the collation dance entirely and the event list
+        // is small enough that a full scan is cheap.
+        $expId     = $id > 0 ? $id : $newId;
+        $normTitle = strtolower((string) preg_replace('/[^A-Za-z0-9]+/', '', $title));
         if ($expId > 0 && $normTitle !== '') {
-            $linked = db()->prepare(
-                "UPDATE events e
-                    SET e.experience_id = :xid
-                  WHERE e.experience_id IS NULL
-                    AND e.parent_event_id IS NULL
-                    AND (
-                         LOWER(REGEXP_REPLACE(e.title, '[^A-Za-z0-9]+', ''))
-                           LIKE CONCAT('%', :nt, '%')
-                      OR :nt2
-                           LIKE CONCAT('%', LOWER(REGEXP_REPLACE(e.title, '[^A-Za-z0-9]+', '')), '%')
-                    )"
-            );
-            $linked->execute([':xid' => $expId, ':nt' => $normTitle, ':nt2' => $normTitle]);
-            if ($linked->rowCount() > 0) {
-                audit_log('experience.autolink', 'experiences', $expId, ['events_linked' => $linked->rowCount()]);
+            $orphans = db()->query(
+                "SELECT id, title FROM events
+                  WHERE experience_id IS NULL AND parent_event_id IS NULL"
+            )->fetchAll();
+            $linkStmt = db()->prepare("UPDATE events SET experience_id = :xid WHERE id = :id");
+            $linkedCount = 0;
+            foreach ($orphans as $ev) {
+                $eventNorm = strtolower((string) preg_replace('/[^A-Za-z0-9]+/', '', (string) $ev['title']));
+                if ($eventNorm === '') continue;
+                if (str_contains($eventNorm, $normTitle) || str_contains($normTitle, $eventNorm)) {
+                    $linkStmt->execute([':xid' => $expId, ':id' => (int) $ev['id']]);
+                    $linkedCount++;
+                }
+            }
+            if ($linkedCount > 0) {
+                audit_log('experience.autolink', 'experiences', $expId, ['events_linked' => $linkedCount]);
             }
         }
 
