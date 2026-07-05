@@ -638,7 +638,7 @@ require __DIR__ . '/../includes/header.php';
       <div class="grid sm:grid-cols-2 gap-3">
         <label class="block">
           <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Your name</span>
-          <input name="intake[pawrent_name]" required value="<?= e((string) $user['full_name']) ?>" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none">
+          <input name="intake[pawrent_name]" required value="<?= e((string) ($user['full_name'] ?? '')) ?>" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none">
         </label>
         <label class="block">
           <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Mobile</span>
@@ -646,7 +646,7 @@ require __DIR__ . '/../includes/header.php';
         </label>
         <label class="block sm:col-span-2">
           <span class="text-[11px] uppercase tracking-widest text-beige-100/60">Email</span>
-          <input name="intake[pawrent_email]" required type="email" value="<?= e((string) $user['email']) ?>" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none">
+          <input name="intake[pawrent_email]" required type="email" value="<?= e((string) ($user['email'] ?? '')) ?>" class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-2.5 focus:border-gold-500/50 focus:outline-none">
         </label>
       </div>
 
