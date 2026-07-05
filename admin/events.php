@@ -20,6 +20,10 @@ if (is_post()) {
 // until they pay or the hold times out, so they should count in the
 // "seats taken" display too. Cancelled/refunded/no_show bookings free
 // the seat and are excluded.
+// Only list top-level events (templates + one-offs). Materialised
+// child instances of recurring templates are managed via the debug
+// tool / session sheet; showing them here duplicated the parent row
+// once per slot and confused admins into editing children directly.
 $events = db()->query(
     "SELECT e.*,
             x.title AS experience_title, x.slug AS experience_slug,
@@ -30,11 +34,31 @@ $events = db()->query(
             (SELECT COALESCE(SUM(quantity), 0)
                FROM event_bookings
                WHERE event_id = e.id
-                 AND status IN ('paid','attended')) AS seats_paid
+                 AND status IN ('paid','attended')) AS seats_paid,
+            (SELECT COALESCE(SUM(quantity), 0)
+               FROM event_bookings b JOIN events c ON c.id = b.event_id
+               WHERE c.parent_event_id = e.id
+                 AND b.status IN ('pending','paid','attended')) AS child_seats_taken,
+            (SELECT COALESCE(SUM(quantity), 0)
+               FROM event_bookings b JOIN events c ON c.id = b.event_id
+               WHERE c.parent_event_id = e.id
+                 AND b.status IN ('paid','attended')) AS child_seats_paid
      FROM events e
      LEFT JOIN experiences x ON x.id = e.experience_id
+     WHERE e.parent_event_id IS NULL
      ORDER BY e.starts_at DESC LIMIT 100"
 )->fetchAll();
+
+// Roll child bookings into the display totals for recurring templates
+// so admins see the true "how many booked across all occurrences"
+// number, not just seats stuck on the template row itself.
+foreach ($events as &$evRow) {
+    if (($evRow['recurrence'] ?? 'none') !== 'none') {
+        $evRow['seats_taken'] = (int) $evRow['seats_taken'] + (int) $evRow['child_seats_taken'];
+        $evRow['seats_paid']  = (int) $evRow['seats_paid']  + (int) $evRow['child_seats_paid'];
+    }
+}
+unset($evRow);
 
 require __DIR__ . '/../includes/admin_layout.php';
 ?>
