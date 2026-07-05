@@ -106,6 +106,13 @@ if (!function_exists('expand_event_occurrences')) {
               WHERE c.parent_event_id = :pid AND c.starts_at = :sa
               LIMIT 1"
         );
+        // Seats taken on a plain (non-recurring) event row — used to
+        // populate seats_taken on one-off pass-throughs so downstream
+        // rendering code doesn't hit an undefined-key warning.
+        $seatsStmt = db()->prepare(
+            "SELECT COALESCE(SUM(quantity),0) FROM event_bookings
+              WHERE event_id = :id AND status IN ('pending','paid','attended')"
+        );
 
         foreach ($rows as $e) {
             $recurrence = (string) ($e['recurrence'] ?? 'none');
@@ -113,6 +120,10 @@ if (!function_exists('expand_event_occurrences')) {
             if (!in_array($recurrence, ['daily','weekly','monthly','custom'], true)) {
                 // One-off — pass through if in the future.
                 if (strtotime((string) $e['starts_at']) >= $now) {
+                    if (!array_key_exists('seats_taken', $e)) {
+                        $seatsStmt->execute([':id' => (int) $e['id']]);
+                        $e['seats_taken'] = (int) $seatsStmt->fetchColumn();
+                    }
                     $e['_template_id']     = 0;
                     $e['_occurrence_date'] = '';
                     $e['_child_id']        = (int) $e['id'];
