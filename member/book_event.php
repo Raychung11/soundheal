@@ -4,8 +4,12 @@ require_login();
 $user = current_user();
 $pageTitle = 'Reserve';
 
-$eventId = (int) input('event_id', 0);
+$eventId  = (int) input('event_id', 0);
 $bookDate = trim((string) input('date', ''));
+// Optional slot picker — HH:MM. Only relevant when the template has
+// events.time_slots set (multiple sessions on the same day). Empty
+// means "the primary starts_at time" and is handled by the resolver.
+$bookSlot = trim((string) input('slot', ''));
 $stmt = db()->prepare("SELECT * FROM events WHERE id = :id AND status = 'published' LIMIT 1");
 $stmt->execute([':id' => $eventId]);
 $event = $stmt->fetch();
@@ -15,19 +19,16 @@ if (!$event) {
 }
 
 // Recurring template: materialise the concrete child event for the picked
-// date and book against it. Without a date param, bounce them back to the
-// calendar so they pick one. Handles daily, weekly, and monthly patterns —
-// earlier versions only special-cased 'daily' and silently booked weekly /
-// monthly bookings against the template row, which ignored the date the
-// user picked and piled every occurrence's bookings onto one seat count.
+// date (and slot, if multi-slot) and book against it. Without a date
+// param, bounce back to the calendar so they pick one.
 if (in_array($event['recurrence'] ?? 'none', ['daily','weekly','monthly','custom'], true)) {
     if ($bookDate === '' || !function_exists('find_or_create_recurring_instance')) {
         flash('booking', 'Please choose a date for this session.', 'error');
         redirect('/public/events.php');
     }
-    $child = find_or_create_recurring_instance((int) $event['id'], $bookDate);
+    $child = find_or_create_recurring_instance((int) $event['id'], $bookDate, $bookSlot ?: null);
     if (!$child) {
-        flash('booking', 'That date is no longer available.', 'error');
+        flash('booking', 'That date or time is no longer available.', 'error');
         redirect('/public/events.php');
     }
     $event = $child;

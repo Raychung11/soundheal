@@ -8,6 +8,7 @@ $event = ['id' => 0, 'slug' => '', 'title' => '', 'subtitle' => '', 'description
           'capacity' => 30, 'price_public' => 0, 'price_member' => 0,
           'facilitator' => '', 'category' => '', 'status' => 'draft',
           'recurrence' => 'none', 'recurrence_until' => '', 'recurrence_days' => '', 'custom_dates' => '',
+          'time_slots' => '',
           'package_a_label' => '', 'package_a_perks' => '',
           'package_b_label' => '', 'package_b_perks' => '',
           'package_b_enabled' => 1,
@@ -85,6 +86,24 @@ if (is_post()) {
             sort($sorted);
             return $sorted ? implode(',', $sorted) : null;
         })(),
+        // Additional time-of-day slots on each occurrence date, HH:MM
+        // CSV. The primary starts_at time is implicit; this list is
+        // extras. Empty = single-slot event (existing behaviour).
+        'time_slots' => (function () {
+            $raw = (string) input('time_slots', '');
+            $out = [];
+            foreach (preg_split('/[\s,;]+/', $raw) ?: [] as $t) {
+                $t = trim($t);
+                if ($t === '') continue;
+                if (!preg_match('/^(\d{1,2}):(\d{2})$/', $t, $m)) continue;
+                $h = (int) $m[1]; $mi = (int) $m[2];
+                if ($h < 0 || $h > 23 || $mi < 0 || $mi > 59) continue;
+                $out[sprintf('%02d:%02d', $h, $mi)] = true;
+            }
+            $sorted = array_keys($out);
+            sort($sorted);
+            return $sorted ? implode(',', $sorted) : null;
+        })(),
         'package_a_label' => trim((string) input('package_a_label', '')),
         'package_a_perks' => trim((string) input('package_a_perks', '')),
         'package_b_label' => trim((string) input('package_b_label', '')),
@@ -124,7 +143,7 @@ if (is_post()) {
                 "UPDATE events SET title=:t, subtitle=:st, description=:d, cover_image=:ci,
                  location=:l, starts_at=:s, ends_at=:e, capacity=:c, price_public=:pp,
                  price_member=:pm, facilitator=:f, category=:cat, status=:status,
-                 recurrence=:rec, recurrence_until=:ru, recurrence_days=:rd, custom_dates=:cd,
+                 recurrence=:rec, recurrence_until=:ru, recurrence_days=:rd, custom_dates=:cd, time_slots=:ts,
                  package_a_label=:pal, package_a_perks=:pap,
                  package_b_label=:pbl, package_b_perks=:pbp,
                  package_b_enabled=:pbe,
@@ -142,6 +161,7 @@ if (is_post()) {
                 ':rec' => $event['recurrence'], ':ru' => $event['recurrence_until'],
                 ':rd'  => $event['recurrence_days'] ?: null,
                 ':cd'  => $event['custom_dates'] ?: null,
+                ':ts'  => $event['time_slots'] ?: null,
                 ':pal' => $event['package_a_label'] ?: null,
                 ':pap' => $event['package_a_perks'] ?: null,
                 ':pbl' => $event['package_b_label'] ?: null,
@@ -199,13 +219,13 @@ if (is_post()) {
             $stmt = db()->prepare(
                 "INSERT INTO events (slug, title, subtitle, description, cover_image, location, starts_at, ends_at,
                                      capacity, price_public, price_member, facilitator, category, status,
-                                     recurrence, recurrence_until, recurrence_days, custom_dates,
+                                     recurrence, recurrence_until, recurrence_days, custom_dates, time_slots,
                                      package_a_label, package_a_perks, package_b_label, package_b_perks,
                                      package_b_enabled,
                                      experience_id, referral_reward_amount,
                                      audience, credit_eligible, created_by)
                  VALUES (:slug, :t, :st, :d, :ci, :l, :s, :e, :c, :pp, :pm, :f, :cat, :status,
-                         :rec, :ru, :rd, :cd, :pal, :pap, :pbl, :pbp, :pbe, :xid, :rra, :aud, :cel, :uid)"
+                         :rec, :ru, :rd, :cd, :ts, :pal, :pap, :pbl, :pbp, :pbe, :xid, :rra, :aud, :cel, :uid)"
             );
             $stmt->execute([
                 ':slug' => $slug, ':t' => $event['title'], ':st' => $event['subtitle'],
@@ -216,6 +236,7 @@ if (is_post()) {
                 ':rec' => $event['recurrence'], ':ru' => $event['recurrence_until'],
                 ':rd'  => $event['recurrence_days'] ?: null,
                 ':cd'  => $event['custom_dates'] ?: null,
+                ':ts'  => $event['time_slots'] ?: null,
                 ':pal' => $event['package_a_label'] ?: null,
                 ':pap' => $event['package_a_perks'] ?: null,
                 ':pbl' => $event['package_b_label'] ?: null,
@@ -332,6 +353,53 @@ require __DIR__ . '/../includes/admin_layout.php';
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Ends at</span>
       <input name="ends_at" type="datetime-local" required value="<?= e(str_replace(' ', 'T', substr((string)$event['ends_at'], 0, 16))) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
     </label>
+
+    <!-- Additional same-day time slots. Applies to recurring templates
+         only (each candidate date generates one occurrence per slot
+         time). Leave empty for a single-slot event — the primary
+         starts_at time is always included implicitly. -->
+    <div class="block sm:col-span-2" x-data="{
+           picker: '',
+           slots: (<?= htmlspecialchars(json_encode(array_values(array_filter(array_map('trim',
+                     preg_split('/[\s,;]+/', (string) ($event['time_slots'] ?? '')))
+                   , fn($t) => (bool) preg_match('/^\d{1,2}:\d{2}$/', $t)))), ENT_QUOTES, 'UTF-8') ?>),
+           add() {
+             if (!/^\d{1,2}:\d{2}$/.test(this.picker)) return;
+             const [h, m] = this.picker.split(':').map(n => parseInt(n, 10));
+             if (h < 0 || h > 23 || m < 0 || m > 59) { this.picker = ''; return; }
+             const t = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+             if (!this.slots.includes(t)) { this.slots.push(t); this.slots.sort(); }
+             this.picker = '';
+           },
+           remove(t) { this.slots = this.slots.filter(x => x !== t); },
+           fmt(t) {
+             const [h, m] = t.split(':').map(n => parseInt(n, 10));
+             const ampm = h >= 12 ? 'PM' : 'AM';
+             const hh = ((h + 11) % 12) + 1;
+             return hh + ':' + String(m).padStart(2, '0') + ' ' + ampm;
+           }
+         }">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Extra same-day slots <span class="text-beige-100/30">(optional)</span></span>
+      <p class="text-[11px] text-beige-100/40 mt-1">Each date runs at the primary "Starts at" time above plus every extra time listed here. Duration is inherited. Use for a 3pm + 6pm double-header on the same day. Recurring events only — single-day events use the starts_at time.</p>
+      <div class="mt-2 flex flex-wrap gap-2 items-center">
+        <input type="time" x-model="picker"
+               class="rounded-2xl bg-navy-900 border border-white/5 px-4 py-2.5 text-sm">
+        <button type="button" @click="add()"
+                class="px-4 py-2 rounded-full bg-gold-500 text-navy-950 font-medium hover:bg-gold-400 transition text-sm">
+          + Add slot
+        </button>
+      </div>
+      <div class="mt-3 flex flex-wrap gap-2">
+        <template x-for="t in slots" :key="t">
+          <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gold-500/40 bg-gold-500/10 text-gold-400 text-xs">
+            <span x-text="fmt(t)"></span>
+            <button type="button" @click="remove(t)" class="text-gold-400/70 hover:text-gold-300" aria-label="Remove">×</button>
+          </span>
+        </template>
+        <span x-show="!slots.length" class="text-[11px] text-beige-100/40 italic">Single slot — event runs once per date at the primary time.</span>
+      </div>
+      <input type="hidden" name="time_slots" :value="slots.join(',')">
+    </div>
     <label class="block">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Location</span>
       <input name="location" value="<?= e($event['location']) ?>" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">

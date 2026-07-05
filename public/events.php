@@ -97,8 +97,9 @@ foreach ($events as $e) {
     if ($img !== '' && !str_starts_with($img, 'http')) $img = $ldBase . '/' . ltrim($img, '/');
     $available = ((int) $e['capacity'] - (int) $e['seats_taken']) > 0;
     $isOcc = !empty($e['_template_id']);
+    $ldSlot = $isOcc && !empty($e['_occurrence_time']) ? '&slot=' . urlencode((string) $e['_occurrence_time']) : '';
     $ldUrl = $isOcc
-        ? $ldBase . '/public/event.php?id=' . (int) $e['_template_id'] . '&date=' . urlencode((string) $e['_occurrence_date'])
+        ? $ldBase . '/public/event.php?id=' . (int) $e['_template_id'] . '&date=' . urlencode((string) $e['_occurrence_date']) . $ldSlot
         : $ldBase . '/public/event.php?id=' . (int) $e['id'];
     $eventsLd[] = array_filter([
         '@context'            => 'https://schema.org',
@@ -162,8 +163,9 @@ require __DIR__ . '/../includes/header.php';
       <?php foreach (array_slice($events, 0, 3) as $fe):
         $feCover    = !empty($fe['cover_image']) ? media_src((string) $fe['cover_image']) : '';
         $feIsOcc    = !empty($fe['_template_id']);
+        $feSlot     = $feIsOcc && !empty($fe['_occurrence_time']) ? '&slot=' . urlencode((string) $fe['_occurrence_time']) : '';
         $feReserve  = $feIsOcc
-            ? '/member/book_event.php?event_id=' . (int) $fe['_template_id'] . '&date=' . urlencode((string) $fe['_occurrence_date'])
+            ? '/member/book_event.php?event_id=' . (int) $fe['_template_id'] . '&date=' . urlencode((string) $fe['_occurrence_date']) . $feSlot
             : '/member/book_event.php?event_id=' . (int) $fe['id'];
         $feRemain   = max(0, (int) $fe['capacity'] - (int) $fe['seats_taken']);
         $feSold     = $feRemain <= 0;
@@ -205,7 +207,7 @@ require __DIR__ . '/../includes/header.php';
               </div>
               <?php if ($feSold):
                 $feWait = $feIsOcc
-                    ? '/public/waitlist.php?event=' . (int) $fe['_template_id'] . '&date=' . urlencode((string) $fe['_occurrence_date'])
+                    ? '/public/waitlist.php?event=' . (int) $fe['_template_id'] . '&date=' . urlencode((string) $fe['_occurrence_date']) . $feSlot
                     : '/public/waitlist.php?event=' . (int) $fe['id'];
               ?>
                 <a href="<?= url($feWait) ?>"
@@ -305,13 +307,18 @@ require __DIR__ . '/../includes/header.php';
             $searchText = strtolower(trim(($event['title'] ?? '') . ' ' . ($event['subtitle'] ?? '') . ' '
                 . ($event['description'] ?? '') . ' ' . ($event['facilitator'] ?? '') . ' ' . ($event['location'] ?? '')));
             $isRecurringOcc = !empty($event['_template_id']);
+            // Multi-slot templates emit one occurrence per (date, slot);
+            // carry the slot time into share and reserve URLs so the
+            // resolver materialises the right child.
+            $occSlot = (string) ($event['_occurrence_time'] ?? '');
+            $slotSuffix = $isRecurringOcc && $occSlot !== '' ? '&slot=' . urlencode($occSlot) : '';
             $cardKey = $isRecurringOcc
-                ? 'event-' . (int) $event['_template_id'] . '-' . str_replace('-', '', (string) $event['_occurrence_date'])
+                ? 'event-' . (int) $event['_template_id'] . '-' . str_replace('-', '', (string) $event['_occurrence_date']) . ($occSlot !== '' ? '-' . str_replace(':', '', $occSlot) : '')
                 : 'event-' . (int) $event['id'];
             $shareEventParam = $isRecurringOcc ? (int) $event['_template_id'] : (int) $event['id'];
-            $shareDateParam  = $isRecurringOcc ? '&date=' . urlencode((string) $event['_occurrence_date']) : '';
+            $shareDateParam  = $isRecurringOcc ? '&date=' . urlencode((string) $event['_occurrence_date']) . $slotSuffix : '';
             $reserveUrl = $isRecurringOcc
-                ? '/member/book_event.php?event_id=' . (int) $event['_template_id'] . '&date=' . urlencode((string) $event['_occurrence_date'])
+                ? '/member/book_event.php?event_id=' . (int) $event['_template_id'] . '&date=' . urlencode((string) $event['_occurrence_date']) . $slotSuffix
                 : '/member/book_event.php?event_id=' . (int) $event['id'];
             $shareUrl = $ldBase . '/public/event.php?id=' . $shareEventParam . $shareDateParam;
             $shareUrlEnc = rawurlencode($shareUrl);

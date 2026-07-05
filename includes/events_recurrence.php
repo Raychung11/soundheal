@@ -64,19 +64,46 @@ if (!function_exists('expand_event_occurrences')) {
         return $cache[$eventId] = $dates;
     }
 
+    /**
+     * Return the sorted list of HH:MM:SS slot times for an event —
+     * always includes the primary time from starts_at, plus any
+     * additional slots parsed out of the CSV events.time_slots. Used
+     * by the expander to yield one occurrence per (date, slot) and
+     * by the resolver to validate a booking's ?slot=HH:MM param.
+     */
+    function event_slot_times(array $e): array
+    {
+        $primary = date('H:i:s', strtotime((string) $e['starts_at']));
+        $times   = [$primary];
+        foreach (preg_split('/[\s,;]+/', (string) ($e['time_slots'] ?? '')) ?: [] as $t) {
+            $t = trim($t);
+            if ($t === '') continue;
+            if (!preg_match('/^(\d{1,2}):(\d{2})$/', $t, $m)) continue;
+            $h = (int) $m[1]; $mi = (int) $m[2];
+            if ($h < 0 || $h > 23 || $mi < 0 || $mi > 59) continue;
+            $normalised = sprintf('%02d:%02d:00', $h, $mi);
+            if (!in_array($normalised, $times, true)) $times[] = $normalised;
+        }
+        sort($times);
+        return $times;
+    }
+
     function expand_event_occurrences(array $rows, int $days = 14): array
     {
         $now      = time();
         $todayDay = strtotime(date('Y-m-d 00:00:00', $now));
         $out      = [];
 
+        // Lookup by exact starts_at now (was DATE-only) so a child
+        // materialised for a specific slot on a date doesn't shadow
+        // another slot on the same date.
         $childStmt = db()->prepare(
             "SELECT c.id,
                     (SELECT COALESCE(SUM(quantity),0) FROM event_bookings b
                        WHERE b.event_id = c.id
                          AND b.status IN ('pending','paid','attended')) AS seats_taken
                FROM events c
-              WHERE c.parent_event_id = :pid AND DATE(c.starts_at) = :d
+              WHERE c.parent_event_id = :pid AND c.starts_at = :sa
               LIMIT 1"
         );
 
@@ -102,6 +129,10 @@ if (!function_exists('expand_event_occurrences')) {
                 ? strtotime($e['recurrence_until'] . ' 23:59:59')
                 : null;
             $exceptions   = load_event_exceptions((int) $e['id']);
+            // Every time-of-day this template runs at, on any given
+            // candidate date. Always includes the primary starts_at
+            // time; may include additional slots from time_slots.
+            $slotTimes    = event_slot_times($e);
 
             // Build the list of candidate dates for this recurrence.
             $candidates = [];
@@ -147,21 +178,28 @@ if (!function_exists('expand_event_occurrences')) {
 
             foreach ($candidates as $occDate) {
                 if (isset($exceptions[$occDate])) continue;
-                $occStart = $occDate . ' ' . $templateTime;
-                $occTs    = strtotime($occStart);
-                if ($occTs <= $now) continue;
-                if ($untilTs !== null && $occTs > $untilTs) continue;
+                foreach ($slotTimes as $slotTime) {
+                    $occStart = $occDate . ' ' . $slotTime;
+                    $occTs    = strtotime($occStart);
+                    if ($occTs <= $now) continue;
+                    if ($untilTs !== null && $occTs > $untilTs) continue;
 
-                $childStmt->execute([':pid' => $e['id'], ':d' => $occDate]);
-                $child = $childStmt->fetch();
+                    $childStmt->execute([':pid' => $e['id'], ':sa' => $occStart]);
+                    $child = $childStmt->fetch();
 
-                $occ = $e;
-                $occ['starts_at']        = $occStart;
-                $occ['seats_taken']      = $child ? (int) $child['seats_taken'] : 0;
-                $occ['_template_id']     = (int) $e['id'];
-                $occ['_occurrence_date'] = $occDate;
-                $occ['_child_id']        = $child ? (int) $child['id'] : 0;
-                $out[] = $occ;
+                    $occ = $e;
+                    $occ['starts_at']        = $occStart;
+                    $occ['seats_taken']      = $child ? (int) $child['seats_taken'] : 0;
+                    $occ['_template_id']     = (int) $e['id'];
+                    $occ['_occurrence_date'] = $occDate;
+                    // HH:MM (5-char) — carried into share URLs and the
+                    // reserve link so the child is materialised for the
+                    // right slot. The full seconds-form lives in
+                    // starts_at.
+                    $occ['_occurrence_time'] = substr($slotTime, 0, 5);
+                    $occ['_child_id']        = $child ? (int) $child['id'] : 0;
+                    $out[] = $occ;
+                }
             }
         }
 
@@ -223,7 +261,14 @@ if (!function_exists('expand_event_occurrences')) {
      * template on a specific date. Idempotent — returns the
      * existing child if one already exists.
      */
-    function find_or_create_recurring_instance(int $templateId, string $date): ?array
+    /**
+     * Materialise the concrete child for (template, date, slot). The
+     * $time param picks which slot on the date to book — must be one
+     * of the template's slot times (event_slot_times). Falls back to
+     * the primary starts_at time when omitted, which is the common
+     * case for single-slot templates.
+     */
+    function find_or_create_recurring_instance(int $templateId, string $date, ?string $time = null): ?array
     {
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) return null;
 
@@ -233,6 +278,20 @@ if (!function_exists('expand_event_occurrences')) {
         if (!$tpl) return null;
         $rec = (string) ($tpl['recurrence'] ?? 'none');
         if (!in_array($rec, ['daily','weekly','monthly','custom'], true)) return null;
+
+        // Resolve which time-of-day to materialise for. If $time is
+        // supplied it must be one of the template's slot times;
+        // otherwise fall back to the primary starts_at time.
+        $slotTimes = event_slot_times($tpl);
+        if ($time !== null && $time !== '') {
+            if (!preg_match('/^(\d{1,2}):(\d{2})$/', $time, $m)) return null;
+            $h = (int) $m[1]; $mi = (int) $m[2];
+            if ($h < 0 || $h > 23 || $mi < 0 || $mi > 59) return null;
+            $wantSlot = sprintf('%02d:%02d:00', $h, $mi);
+            if (!in_array($wantSlot, $slotTimes, true)) return null;
+        } else {
+            $wantSlot = date('H:i:s', strtotime((string) $tpl['starts_at']));
+        }
 
         // Reject any excepted date up-front — the admin explicitly
         // skipped it, so no booking should materialise on that day.
@@ -264,23 +323,45 @@ if (!function_exists('expand_event_occurrences')) {
             if (!in_array($date, $customDates, true)) return null;
         }
 
+        // Look up an existing child for THIS specific (date, slot).
+        // Older calls that predated multi-slot only stored one child
+        // per date at the primary time — that row is still found by
+        // the exact starts_at match below.
+        $wantStartsAt = $date . ' ' . $wantSlot;
         $childStmt = db()->prepare(
             "SELECT * FROM events
-              WHERE parent_event_id = :pid AND DATE(starts_at) = :d LIMIT 1"
+              WHERE parent_event_id = :pid AND starts_at = :sa LIMIT 1"
         );
-        $childStmt->execute([':pid' => $templateId, ':d' => $date]);
+        $childStmt->execute([':pid' => $templateId, ':sa' => $wantStartsAt]);
         $existing = $childStmt->fetch();
         if ($existing) return $existing;
 
         // Honour the cutoff and never materialise a past instance.
         if (!empty($tpl['recurrence_until']) && $date > $tpl['recurrence_until']) return null;
-        $startTime = date('H:i:s', strtotime((string) $tpl['starts_at']));
-        $endTime   = date('H:i:s', strtotime((string) $tpl['ends_at']));
-        $newStarts = $date . ' ' . $startTime;
-        $newEnds   = $date . ' ' . $endTime;
+        // Duration is inherited from the template (ends_at - starts_at)
+        // and applied to the requested slot time.
+        $tplStartTs = strtotime((string) $tpl['starts_at']);
+        $tplEndTs   = strtotime((string) $tpl['ends_at']);
+        $duration   = max(0, $tplEndTs - $tplStartTs);
+        $newStarts  = $wantStartsAt;
+        $newEnds    = date('Y-m-d H:i:s', strtotime($wantStartsAt) + $duration);
         if (strtotime($newStarts) <= time()) return null;
 
+        // Slug includes the slot time when the template has multiple
+        // slots so children for different slots on the same date keep
+        // unique slugs. Single-slot templates keep the original
+        // <parent>-<date> shape for backwards compatibility.
         $childSlug = (string) $tpl['slug'] . '-' . $date;
+        if (count($slotTimes) > 1) {
+            $childSlug .= '-' . str_replace(':', '', substr($wantSlot, 0, 5));
+        }
+        // Guard against a collision if an earlier single-slot child
+        // exists at this date but a different time.
+        $slugCheck = db()->prepare("SELECT 1 FROM events WHERE slug = :s LIMIT 1");
+        $slugCheck->execute([':s' => $childSlug]);
+        if ($slugCheck->fetchColumn()) {
+            $childSlug .= '-' . substr(bin2hex(random_bytes(2)), 0, 4);
+        }
 
         // Child instances need to inherit every per-event configuration
         // from the template — earlier versions of this helper only copied

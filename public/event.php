@@ -43,23 +43,40 @@ if (!$event) {
 
 // If this is a recurring template AND we were given a date, present the
 // occurrence for that date (starts_at/ends_at shifted to the chosen day).
+// Multi-slot templates also accept ?slot=HH:MM to pick a specific time
+// on that date; without it the primary starts_at time is used.
 $isRecurring = in_array($event['recurrence'] ?? 'none', ['daily','weekly','monthly','custom'], true);
 $dateValid   = $isRecurring && $date !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date);
+$slot        = trim((string) input('slot', ''));
+// Compute duration once from the template's own starts/ends so the
+// shifted occurrence carries the same window even on a different day
+// or time-of-day.
+$tplStartTs  = strtotime((string) $event['starts_at']);
+$tplEndTs    = strtotime((string) $event['ends_at']);
+$duration    = max(0, $tplEndTs - $tplStartTs);
 if ($dateValid) {
-    $tStart = date('H:i:s', strtotime((string) $event['starts_at']));
-    $tEnd   = date('H:i:s', strtotime((string) $event['ends_at']));
-    $event['starts_at'] = $date . ' ' . $tStart;
-    $event['ends_at']   = $date . ' ' . $tEnd;
+    $timeOfDay = date('H:i:s', $tplStartTs);
+    // Validate the slot param against the template's declared slots.
+    if ($slot !== '' && preg_match('/^(\d{1,2}):(\d{2})$/', $slot, $m)) {
+        $sh = (int) $m[1]; $sm = (int) $m[2];
+        if ($sh >= 0 && $sh <= 23 && $sm >= 0 && $sm <= 59) {
+            $candidate = sprintf('%02d:%02d:00', $sh, $sm);
+            $validSlots = function_exists('event_slot_times') ? event_slot_times($event) : [$timeOfDay];
+            if (in_array($candidate, $validSlots, true)) $timeOfDay = $candidate;
+        }
+    }
+    $event['starts_at'] = $date . ' ' . $timeOfDay;
+    $event['ends_at']   = date('Y-m-d H:i:s', strtotime($event['starts_at']) + $duration);
 }
 
 // Seats-taken — if a concrete child event already exists for the picked
-// recurring date, use its bookings; otherwise there are none yet.
+// (date, slot), use its bookings; otherwise there are none yet.
 $seatsEventId = (int) $event['id'];
 if ($isRecurring && $dateValid) {
     $c = db()->prepare(
-        "SELECT id FROM events WHERE parent_event_id = :p AND DATE(starts_at) = :d LIMIT 1"
+        "SELECT id FROM events WHERE parent_event_id = :p AND starts_at = :sa LIMIT 1"
     );
-    $c->execute([':p' => (int) $event['id'], ':d' => $date]);
+    $c->execute([':p' => (int) $event['id'], ':sa' => $event['starts_at']]);
     $child = $c->fetch();
     if ($child) $seatsEventId = (int) $child['id'];
 }
@@ -91,8 +108,9 @@ $bEnabled = !array_key_exists('package_b_enabled', $event) || (int) $event['pack
 // Reserve link — /member/book_event.php gates itself with require_login,
 // which stores REQUEST_URI in $_SESSION['_intended'] and bounces to
 // login; the URL params survive that round-trip.
+$slotSuffix = ($isRecurring && $dateValid && $slot !== '') ? '&slot=' . urlencode($slot) : '';
 $reserveUrl = '/member/book_event.php?event_id=' . (int) $event['id']
-            . ($isRecurring && $dateValid ? '&date=' . urlencode($date) : '');
+            . ($isRecurring && $dateValid ? '&date=' . urlencode($date) . $slotSuffix : '');
 
 // Open Graph / Twitter meta so the WhatsApp / Facebook preview uses
 // this event's cover + short description.
@@ -112,7 +130,7 @@ if ($rawDesc !== '') $pageDescription = $rawDesc;
 // exact URL when someone taps "Copy link").
 $base = rtrim((string) config('app.url'), '/');
 $shareUrl     = $base . '/public/event.php?id=' . (int) $event['id']
-              . ($isRecurring && $dateValid ? '&date=' . urlencode($date) : '');
+              . ($isRecurring && $dateValid ? '&date=' . urlencode($date) . $slotSuffix : '');
 $shareUrlEnc  = rawurlencode($shareUrl);
 $shareTextEnc = rawurlencode($event['title'] . ' · ' . brand_name());
 
