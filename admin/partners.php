@@ -24,6 +24,16 @@ if (is_post()) {
         $notes          = trim((string) input('notes', ''));
         $logoUrl        = trim((string) input('logo_url', ''));
         $coverImage     = trim((string) input('cover_image', ''));
+        // Focal point for the cover crop. Sanitised as "X% Y%" with
+        // both values clamped 0-100 so a hand-crafted POST can't
+        // inject arbitrary CSS.
+        $coverPosRaw = trim((string) input('cover_position', '50% 50%'));
+        $coverPosition = '50% 50%';
+        if (preg_match('/^\s*(\d{1,3})\s*%\s+(\d{1,3})\s*%\s*$/', $coverPosRaw, $m)) {
+            $x = max(0, min(100, (int) $m[1]));
+            $y = max(0, min(100, (int) $m[2]));
+            $coverPosition = $x . '% ' . $y . '%';
+        }
 
         // Image uploads — either or both files are optional. The file
         // input wins when both a file and a URL are submitted; a URL
@@ -93,7 +103,7 @@ if (is_post()) {
                                 commission_type = :ct, commission_rate = :cr,
                                 first_visit_promo_code = :fp, landing_path = :lp,
                                 status = :status, notes = :notes,
-                                logo_url = :logo, cover_image = :cov,
+                                logo_url = :logo, cover_image = :cov, cover_position = :cpos,
                                 show_on_public_page = :spp, category = :cat,
                                 description = :desc, website_url = :web,
                                 sort_order = :so
@@ -106,6 +116,7 @@ if (is_post()) {
                         ':status' => $status, ':notes' => $notes ?: null,
                         ':logo' => $logoUrl ?: null,
                         ':cov'  => $coverImage ?: null,
+                        ':cpos' => $coverPosition,
                         ':spp'  => $showPublic,
                         ':cat'  => $category ?: null,
                         ':desc' => $description ?: null,
@@ -120,10 +131,10 @@ if (is_post()) {
                         "INSERT INTO partners
                             (name, slug, contact_name, contact_email, contact_phone,
                              commission_type, commission_rate, first_visit_promo_code,
-                             landing_path, status, notes, logo_url, cover_image,
+                             landing_path, status, notes, logo_url, cover_image, cover_position,
                              show_on_public_page, category, description, website_url, sort_order,
                              created_by)
-                         VALUES (:name, :slug, :cn, :ce, :cp, :ct, :cr, :fp, :lp, :status, :notes, :logo, :cov,
+                         VALUES (:name, :slug, :cn, :ce, :cp, :ct, :cr, :fp, :lp, :status, :notes, :logo, :cov, :cpos,
                                  :spp, :cat, :desc, :web, :so,
                                  :u)"
                     )->execute([
@@ -134,6 +145,7 @@ if (is_post()) {
                         ':status' => $status, ':notes' => $notes ?: null,
                         ':logo' => $logoUrl ?: null,
                         ':cov'  => $coverImage ?: null,
+                        ':cpos' => $coverPosition,
                         ':spp'  => $showPublic,
                         ':cat'  => $category ?: null,
                         ':desc' => $description ?: null,
@@ -189,6 +201,7 @@ $row = $editing ?: [
     'first_visit_promo_code' => '',
     'landing_path' => '/public/events.php',
     'status' => 'active', 'notes' => '', 'logo_url' => '', 'cover_image' => '',
+    'cover_position' => '50% 50%',
     'show_on_public_page' => 0, 'category' => '', 'description' => '',
     'website_url' => '', 'sort_order' => 100,
     'scan_count' => 0, 'last_scan_at' => null,
@@ -407,22 +420,84 @@ require __DIR__ . '/../includes/admin_layout.php';
                     placeholder="A short blurb shown under the partner name."
                     class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3"><?= e((string) ($row['description'] ?? '')) ?></textarea>
         </label>
-        <!-- Cover photo — fills the top of the public partner card. -->
-        <div class="block sm:col-span-2">
+        <?php
+          $existingCover = (string) ($row['cover_image'] ?? '');
+          $coverSrcHost  = $existingCover === '' ? ''
+              : (str_starts_with($existingCover, '/') ? url($existingCover) : $existingCover);
+          // Split the stored "X% Y%" into two ints for the picker init.
+          $posSaved = trim((string) ($row['cover_position'] ?? '50% 50%'));
+          $posX = 50; $posY = 50;
+          if (preg_match('/^(\d{1,3})\s*%\s+(\d{1,3})\s*%$/', $posSaved, $m)) {
+              $posX = max(0, min(100, (int) $m[1]));
+              $posY = max(0, min(100, (int) $m[2]));
+          }
+        ?>
+
+        <!-- Cover photo + focal-point picker. Drag anywhere on the
+             preview and the crosshair moves; the live card mock below
+             re-crops around that point so admins see exactly what the
+             public card will look like. -->
+        <div class="block sm:col-span-2"
+             x-data="{
+               posX: <?= (int) $posX ?>,
+               posY: <?= (int) $posY ?>,
+               dragging: false,
+               set(e) {
+                 const box = this.$refs.picker.getBoundingClientRect();
+                 const pt = e.touches ? e.touches[0] : e;
+                 const x = ((pt.clientX - box.left) / box.width)  * 100;
+                 const y = ((pt.clientY - box.top)  / box.height) * 100;
+                 this.posX = Math.max(0, Math.min(100, Math.round(x)));
+                 this.posY = Math.max(0, Math.min(100, Math.round(y)));
+               },
+               get position() { return this.posX + '% ' + this.posY + '%'; }
+             }">
           <span class="text-xs uppercase tracking-widest text-beige-100/60">Cover photo <span class="text-beige-100/30">(top of the card · JPG / PNG / WebP, up to 5 MB)</span></span>
-          <?php if (!empty($row['cover_image'])): ?>
-            <div class="mt-2 flex items-center gap-4">
-              <img src="<?= e(str_starts_with((string) $row['cover_image'], '/') ? url($row['cover_image']) : (string) $row['cover_image']) ?>"
-                   alt="" class="h-24 w-40 rounded-xl object-cover border border-white/10">
-              <label class="inline-flex items-center gap-2 text-xs text-red-300/80 hover:text-red-200">
-                <input type="checkbox" name="remove_cover" value="1" class="accent-red-400">
-                Remove this photo
-              </label>
+
+          <?php if ($coverSrcHost !== ''): ?>
+            <p class="mt-3 text-[11px] uppercase tracking-widest text-beige-100/55">Focal point <span class="text-beige-100/30 normal-case tracking-normal">— drag on the photo to pick which part shows on the card.</span></p>
+
+            <!-- The picker — full source photo, click / drag to move
+                 the crosshair. Prevents the browser's native image
+                 drag so the pointer stays with the user's finger. -->
+            <div class="mt-2 relative rounded-2xl overflow-hidden border border-white/10 bg-navy-950/60 cursor-crosshair select-none"
+                 x-ref="picker"
+                 @mousedown.prevent="dragging = true; set($event)"
+                 @mousemove.window="dragging && set($event)"
+                 @mouseup.window="dragging = false"
+                 @touchstart.prevent="dragging = true; set($event)"
+                 @touchmove.window.prevent="dragging && set($event)"
+                 @touchend.window="dragging = false">
+              <img src="<?= e($coverSrcHost) ?>" alt="" draggable="false"
+                   class="block w-full h-auto max-h-72 object-contain pointer-events-none">
+              <!-- Crosshair marker at the picked point. -->
+              <span class="absolute h-6 w-6 rounded-full border-2 border-gold-400 bg-gold-500/30 -translate-x-1/2 -translate-y-1/2 pointer-events-none shadow-[0_0_0_2px_rgba(11,18,32,0.85)]"
+                    :style="`left: ${posX}%; top: ${posY}%;`"></span>
             </div>
+
+            <!-- Live preview of the actual card crop at the picked
+                 focal point. object-position takes X% Y% directly. -->
+            <p class="mt-4 text-[11px] uppercase tracking-widest text-beige-100/55">Card preview <span class="text-beige-100/30 normal-case tracking-normal">— what visitors will see.</span></p>
+            <div class="mt-2 aspect-[16/10] max-w-md rounded-2xl overflow-hidden border border-white/10 bg-navy-950/40">
+              <img src="<?= e($coverSrcHost) ?>" alt="" draggable="false"
+                   class="w-full h-full object-cover" :style="`object-position: ${position};`">
+            </div>
+
+            <label class="mt-3 inline-flex items-center gap-2 text-xs text-red-300/80 hover:text-red-200">
+              <input type="checkbox" name="remove_cover" value="1" class="accent-red-400">
+              Remove this photo
+            </label>
+
+            <!-- Hidden inputs the form actually posts. -->
+            <input type="hidden" name="cover_position" :value="position">
+          <?php else: ?>
+            <input type="hidden" name="cover_position" value="50% 50%">
           <?php endif; ?>
+
+          <span class="mt-4 block text-[11px] text-beige-100/40"><?= $coverSrcHost !== '' ? 'Replace the photo:' : 'Upload a photo:' ?></span>
           <input type="file" name="cover_file" accept="image/jpeg,image/png,image/webp"
-                 class="mt-2 w-full text-sm text-beige-100/70 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-gold-500/20 file:text-gold-400 hover:file:bg-gold-500/30">
-          <input type="hidden" name="cover_image" value="<?= e((string) ($row['cover_image'] ?? '')) ?>">
+                 class="mt-1 w-full text-sm text-beige-100/70 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-gold-500/20 file:text-gold-400 hover:file:bg-gold-500/30">
+          <input type="hidden" name="cover_image" value="<?= e($existingCover) ?>">
         </div>
 
         <!-- Logo — small mark used on the poster + optional card badge. -->

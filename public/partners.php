@@ -3,7 +3,7 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 $pageTitle = trim((string) setting('partners_page_headline', 'Our partners'));
 
 $partners = db()->query(
-    "SELECT id, name, slug, category, description, website_url, logo_url, cover_image, sort_order
+    "SELECT id, name, slug, category, description, website_url, logo_url, cover_image, cover_position, sort_order
        FROM partners
       WHERE show_on_public_page = 1
         AND status = 'active'
@@ -61,11 +61,21 @@ require __DIR__ . '/../includes/header.php';
           ?>
             <<?= $tag ?><?php if ($isLink): ?> href="<?= e($web) ?>" target="_blank" rel="noopener"<?php endif; ?>
               class="group block border border-white/5 rounded-3xl bg-navy-900/40 <?= $isLink ? 'hover:border-gold-500/40 hover:bg-navy-900/70 transition' : '' ?> overflow-hidden flex flex-col">
-              <?php if ($coverSrc !== ''): ?>
+              <?php if ($coverSrc !== ''):
+                // Sanitise the stored focal point defensively — the
+                // input path already clamps, but rendering user-provided
+                // CSS deserves the belt-and-braces treatment.
+                $rawPos = (string) ($p['cover_position'] ?? '50% 50%');
+                $safePos = '50% 50%';
+                if (preg_match('/^(\d{1,3})\s*%\s+(\d{1,3})\s*%$/', trim($rawPos), $mm)) {
+                    $safePos = max(0, min(100, (int) $mm[1])) . '% ' . max(0, min(100, (int) $mm[2])) . '%';
+                }
+              ?>
                 <!-- Cover photo fills the card top edge-to-edge. -->
                 <div class="relative aspect-[16/10] overflow-hidden bg-navy-950/50">
                   <img src="<?= e($coverSrc) ?>" alt="<?= e($p['name']) ?>" loading="lazy"
                        onerror="this.style.display='none'"
+                       style="object-position: <?= e($safePos) ?>;"
                        class="absolute inset-0 w-full h-full object-cover transition duration-500 <?= $isLink ? 'group-hover:scale-[1.03]' : '' ?>">
                   <?php if ($logoSrc !== ''): ?>
                     <!-- Logo badge in the corner when both cover + logo are set. -->
