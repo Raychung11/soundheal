@@ -3,7 +3,7 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 $pageTitle = trim((string) setting('partners_page_headline', 'Our partners'));
 
 $partners = db()->query(
-    "SELECT id, name, slug, category, description, website_url, logo_url, sort_order
+    "SELECT id, name, slug, category, description, website_url, logo_url, cover_image, sort_order
        FROM partners
       WHERE show_on_public_page = 1
         AND status = 'active'
@@ -48,17 +48,36 @@ require __DIR__ . '/../includes/header.php';
         <p class="text-[11px] uppercase tracking-[0.3em] text-gold-400/80"><?= e($cat) ?></p>
         <div class="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <?php foreach ($rows as $p):
-            $desc = trim((string) ($p['description'] ?? ''));
-            $web  = trim((string) ($p['website_url'] ?? ''));
-            $logo = trim((string) ($p['logo_url'] ?? ''));
+            $desc  = trim((string) ($p['description'] ?? ''));
+            $web   = trim((string) ($p['website_url'] ?? ''));
+            $cover = trim((string) ($p['cover_image'] ?? ''));
+            $logo  = trim((string) ($p['logo_url']    ?? ''));
+            $normalise = fn(string $src): string =>
+                $src === '' ? '' : (str_starts_with($src, '/') ? url($src) : $src);
+            $coverSrc = $normalise($cover);
+            $logoSrc  = $normalise($logo);
             $isLink = $web !== '';
             $tag = $isLink ? 'a' : 'div';
           ?>
             <<?= $tag ?><?php if ($isLink): ?> href="<?= e($web) ?>" target="_blank" rel="noopener"<?php endif; ?>
               class="group block border border-white/5 rounded-3xl bg-navy-900/40 <?= $isLink ? 'hover:border-gold-500/40 hover:bg-navy-900/70 transition' : '' ?> overflow-hidden flex flex-col">
-              <?php if ($logo !== ''): ?>
+              <?php if ($coverSrc !== ''): ?>
+                <!-- Cover photo fills the card top edge-to-edge. -->
+                <div class="relative aspect-[16/10] overflow-hidden bg-navy-950/50">
+                  <img src="<?= e($coverSrc) ?>" alt="<?= e($p['name']) ?>" loading="lazy"
+                       onerror="this.style.display='none'"
+                       class="absolute inset-0 w-full h-full object-cover transition duration-500 <?= $isLink ? 'group-hover:scale-[1.03]' : '' ?>">
+                  <?php if ($logoSrc !== ''): ?>
+                    <!-- Logo badge in the corner when both cover + logo are set. -->
+                    <span class="absolute top-3 left-3 h-10 w-10 rounded-full bg-navy-950/85 backdrop-blur border border-white/10 flex items-center justify-center overflow-hidden">
+                      <img src="<?= e($logoSrc) ?>" alt="" onerror="this.style.display='none'" class="max-h-7 max-w-7 object-contain">
+                    </span>
+                  <?php endif; ?>
+                </div>
+              <?php elseif ($logoSrc !== ''): ?>
+                <!-- Logo-only: pad + centre it on the card top area. -->
                 <div class="relative aspect-[16/10] bg-navy-950/50 flex items-center justify-center overflow-hidden">
-                  <img src="<?= e($logo) ?>" alt="<?= e($p['name']) ?>" loading="lazy"
+                  <img src="<?= e($logoSrc) ?>" alt="<?= e($p['name']) ?>" loading="lazy"
                        onerror="this.style.display='none'"
                        class="max-h-full max-w-[75%] object-contain transition duration-500 <?= $isLink ? 'group-hover:scale-[1.03]' : '' ?>">
                 </div>

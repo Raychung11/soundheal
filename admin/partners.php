@@ -23,6 +23,37 @@ if (is_post()) {
         $status         = in_array(input('status'), ['active','inactive'], true) ? input('status') : 'active';
         $notes          = trim((string) input('notes', ''));
         $logoUrl        = trim((string) input('logo_url', ''));
+        $coverImage     = trim((string) input('cover_image', ''));
+
+        // Image uploads — either or both files are optional. The file
+        // input wins when both a file and a URL are submitted; a URL
+        // pasted alone is kept as-is (useful for hosted assets).
+        try {
+            if (($uploadedLogo = handle_upload('logo_file', 'partners')) !== null) {
+                if ($logoUrl !== '' && str_starts_with($logoUrl, '/uploads/')) {
+                    delete_upload($logoUrl);
+                }
+                $logoUrl = $uploadedLogo;
+            }
+            if (($uploadedCover = handle_upload('cover_file', 'partners')) !== null) {
+                if ($coverImage !== '' && str_starts_with($coverImage, '/uploads/')) {
+                    delete_upload($coverImage);
+                }
+                $coverImage = $uploadedCover;
+            }
+        } catch (RuntimeException $e) {
+            $errors[] = $e->getMessage();
+        }
+        // Explicit remove checkboxes so admins can clear an image
+        // without waiting for a save-with-new-file replacement.
+        if (!empty($_POST['remove_logo']) && $logoUrl !== '') {
+            if (str_starts_with($logoUrl, '/uploads/')) delete_upload($logoUrl);
+            $logoUrl = '';
+        }
+        if (!empty($_POST['remove_cover']) && $coverImage !== '') {
+            if (str_starts_with($coverImage, '/uploads/')) delete_upload($coverImage);
+            $coverImage = '';
+        }
 
         // Public-listing fields (surface on /public/partners.php).
         $showPublic  = !empty($_POST['show_on_public_page']) ? 1 : 0;
@@ -62,7 +93,7 @@ if (is_post()) {
                                 commission_type = :ct, commission_rate = :cr,
                                 first_visit_promo_code = :fp, landing_path = :lp,
                                 status = :status, notes = :notes,
-                                logo_url = :logo,
+                                logo_url = :logo, cover_image = :cov,
                                 show_on_public_page = :spp, category = :cat,
                                 description = :desc, website_url = :web,
                                 sort_order = :so
@@ -74,6 +105,7 @@ if (is_post()) {
                         ':fp' => $firstPromo ?: null, ':lp' => $landingPath,
                         ':status' => $status, ':notes' => $notes ?: null,
                         ':logo' => $logoUrl ?: null,
+                        ':cov'  => $coverImage ?: null,
                         ':spp'  => $showPublic,
                         ':cat'  => $category ?: null,
                         ':desc' => $description ?: null,
@@ -88,10 +120,10 @@ if (is_post()) {
                         "INSERT INTO partners
                             (name, slug, contact_name, contact_email, contact_phone,
                              commission_type, commission_rate, first_visit_promo_code,
-                             landing_path, status, notes, logo_url,
+                             landing_path, status, notes, logo_url, cover_image,
                              show_on_public_page, category, description, website_url, sort_order,
                              created_by)
-                         VALUES (:name, :slug, :cn, :ce, :cp, :ct, :cr, :fp, :lp, :status, :notes, :logo,
+                         VALUES (:name, :slug, :cn, :ce, :cp, :ct, :cr, :fp, :lp, :status, :notes, :logo, :cov,
                                  :spp, :cat, :desc, :web, :so,
                                  :u)"
                     )->execute([
@@ -101,6 +133,7 @@ if (is_post()) {
                         ':fp' => $firstPromo ?: null, ':lp' => $landingPath,
                         ':status' => $status, ':notes' => $notes ?: null,
                         ':logo' => $logoUrl ?: null,
+                        ':cov'  => $coverImage ?: null,
                         ':spp'  => $showPublic,
                         ':cat'  => $category ?: null,
                         ':desc' => $description ?: null,
@@ -155,7 +188,7 @@ $row = $editing ?: [
     'commission_rate' => (float) setting('partner_default_commission', 10.00),
     'first_visit_promo_code' => '',
     'landing_path' => '/public/events.php',
-    'status' => 'active', 'notes' => '', 'logo_url' => '',
+    'status' => 'active', 'notes' => '', 'logo_url' => '', 'cover_image' => '',
     'show_on_public_page' => 0, 'category' => '', 'description' => '',
     'website_url' => '', 'sort_order' => 100,
     'scan_count' => 0, 'last_scan_at' => null,
@@ -236,7 +269,7 @@ require __DIR__ . '/../includes/admin_layout.php';
 </div>
 
 <!-- Create / edit form -->
-<form method="post" class="mt-10 border border-white/5 rounded-3xl p-6 bg-navy-900/40 space-y-5">
+<form method="post" enctype="multipart/form-data" class="mt-10 border border-white/5 rounded-3xl p-6 bg-navy-900/40 space-y-5">
   <?= csrf_field() ?>
   <input type="hidden" name="action" value="save">
   <input type="hidden" name="id" value="<?= (int) $row['id'] ?>">
@@ -374,13 +407,45 @@ require __DIR__ . '/../includes/admin_layout.php';
                     placeholder="A short blurb shown under the partner name."
                     class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3"><?= e((string) ($row['description'] ?? '')) ?></textarea>
         </label>
-        <label class="block sm:col-span-2">
-          <span class="text-xs uppercase tracking-widest text-beige-100/60">Logo URL <span class="text-beige-100/30">(shared with the poster generator)</span></span>
+        <!-- Cover photo — fills the top of the public partner card. -->
+        <div class="block sm:col-span-2">
+          <span class="text-xs uppercase tracking-widest text-beige-100/60">Cover photo <span class="text-beige-100/30">(top of the card · JPG / PNG / WebP, up to 5 MB)</span></span>
+          <?php if (!empty($row['cover_image'])): ?>
+            <div class="mt-2 flex items-center gap-4">
+              <img src="<?= e(str_starts_with((string) $row['cover_image'], '/') ? url($row['cover_image']) : (string) $row['cover_image']) ?>"
+                   alt="" class="h-24 w-40 rounded-xl object-cover border border-white/10">
+              <label class="inline-flex items-center gap-2 text-xs text-red-300/80 hover:text-red-200">
+                <input type="checkbox" name="remove_cover" value="1" class="accent-red-400">
+                Remove this photo
+              </label>
+            </div>
+          <?php endif; ?>
+          <input type="file" name="cover_file" accept="image/jpeg,image/png,image/webp"
+                 class="mt-2 w-full text-sm text-beige-100/70 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-gold-500/20 file:text-gold-400 hover:file:bg-gold-500/30">
+          <input type="hidden" name="cover_image" value="<?= e((string) ($row['cover_image'] ?? '')) ?>">
+        </div>
+
+        <!-- Logo — small mark used on the poster + optional card badge. -->
+        <div class="block sm:col-span-2">
+          <span class="text-xs uppercase tracking-widest text-beige-100/60">Logo <span class="text-beige-100/30">(small mark · used on the printed QR poster · JPG / PNG / WebP, up to 5 MB)</span></span>
+          <?php if (!empty($row['logo_url'])): ?>
+            <div class="mt-2 flex items-center gap-4">
+              <img src="<?= e(str_starts_with((string) $row['logo_url'], '/') ? url($row['logo_url']) : (string) $row['logo_url']) ?>"
+                   alt="" class="h-16 w-16 rounded-xl object-contain border border-white/10 bg-navy-950/50 p-1">
+              <label class="inline-flex items-center gap-2 text-xs text-red-300/80 hover:text-red-200">
+                <input type="checkbox" name="remove_logo" value="1" class="accent-red-400">
+                Remove this logo
+              </label>
+            </div>
+          <?php endif; ?>
+          <input type="file" name="logo_file" accept="image/jpeg,image/png,image/webp"
+                 class="mt-2 w-full text-sm text-beige-100/70 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-gold-500/20 file:text-gold-400 hover:file:bg-gold-500/30">
+          <span class="mt-2 block text-[11px] text-beige-100/40">Or paste a URL:</span>
           <input name="logo_url" type="url" maxlength="255"
                  value="<?= e((string) ($row['logo_url'] ?? '')) ?>"
                  placeholder="https://…/logo.png"
-                 class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3 font-mono text-sm">
-        </label>
+                 class="mt-1 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3 font-mono text-sm">
+        </div>
       </div>
     </div>
 
