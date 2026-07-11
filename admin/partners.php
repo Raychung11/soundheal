@@ -22,6 +22,17 @@ if (is_post()) {
         $landingPath    = trim((string) input('landing_path', '/public/events.php'));
         $status         = in_array(input('status'), ['active','inactive'], true) ? input('status') : 'active';
         $notes          = trim((string) input('notes', ''));
+        $logoUrl        = trim((string) input('logo_url', ''));
+
+        // Public-listing fields (surface on /public/partners.php).
+        $showPublic  = !empty($_POST['show_on_public_page']) ? 1 : 0;
+        $category    = trim((string) input('category', ''));
+        $description = trim((string) input('description', ''));
+        $websiteUrl  = trim((string) input('website_url', ''));
+        $sortOrder   = (int) input('sort_order', 100);
+        if ($websiteUrl !== '' && !preg_match('~^https?://~', $websiteUrl)) {
+            $websiteUrl = 'https://' . $websiteUrl;
+        }
 
         if ($name === '') $errors[] = 'Partner name is required.';
         if ($slug === '') $slug = generate_partner_slug($name);
@@ -50,7 +61,11 @@ if (is_post()) {
                                 contact_email = :ce, contact_phone = :cp,
                                 commission_type = :ct, commission_rate = :cr,
                                 first_visit_promo_code = :fp, landing_path = :lp,
-                                status = :status, notes = :notes
+                                status = :status, notes = :notes,
+                                logo_url = :logo,
+                                show_on_public_page = :spp, category = :cat,
+                                description = :desc, website_url = :web,
+                                sort_order = :so
                           WHERE id = :id"
                     )->execute([
                         ':name' => $name, ':slug' => $slug,
@@ -58,6 +73,12 @@ if (is_post()) {
                         ':ct' => $commissionType, ':cr' => $commissionRate,
                         ':fp' => $firstPromo ?: null, ':lp' => $landingPath,
                         ':status' => $status, ':notes' => $notes ?: null,
+                        ':logo' => $logoUrl ?: null,
+                        ':spp'  => $showPublic,
+                        ':cat'  => $category ?: null,
+                        ':desc' => $description ?: null,
+                        ':web'  => $websiteUrl ?: null,
+                        ':so'   => $sortOrder,
                         ':id' => $id,
                     ]);
                     audit_log('partner.update', 'partners', $id);
@@ -67,14 +88,24 @@ if (is_post()) {
                         "INSERT INTO partners
                             (name, slug, contact_name, contact_email, contact_phone,
                              commission_type, commission_rate, first_visit_promo_code,
-                             landing_path, status, notes, created_by)
-                         VALUES (:name, :slug, :cn, :ce, :cp, :ct, :cr, :fp, :lp, :status, :notes, :u)"
+                             landing_path, status, notes, logo_url,
+                             show_on_public_page, category, description, website_url, sort_order,
+                             created_by)
+                         VALUES (:name, :slug, :cn, :ce, :cp, :ct, :cr, :fp, :lp, :status, :notes, :logo,
+                                 :spp, :cat, :desc, :web, :so,
+                                 :u)"
                     )->execute([
                         ':name' => $name, ':slug' => $slug,
                         ':cn' => $contactName ?: null, ':ce' => $contactEmail ?: null, ':cp' => $contactPhone ?: null,
                         ':ct' => $commissionType, ':cr' => $commissionRate,
                         ':fp' => $firstPromo ?: null, ':lp' => $landingPath,
                         ':status' => $status, ':notes' => $notes ?: null,
+                        ':logo' => $logoUrl ?: null,
+                        ':spp'  => $showPublic,
+                        ':cat'  => $category ?: null,
+                        ':desc' => $description ?: null,
+                        ':web'  => $websiteUrl ?: null,
+                        ':so'   => $sortOrder,
                         ':u' => current_user_id(),
                     ]);
                     $newId = (int) db()->lastInsertId();
@@ -124,7 +155,9 @@ $row = $editing ?: [
     'commission_rate' => (float) setting('partner_default_commission', 10.00),
     'first_visit_promo_code' => '',
     'landing_path' => '/public/events.php',
-    'status' => 'active', 'notes' => '',
+    'status' => 'active', 'notes' => '', 'logo_url' => '',
+    'show_on_public_page' => 0, 'category' => '', 'description' => '',
+    'website_url' => '', 'sort_order' => 100,
     'scan_count' => 0, 'last_scan_at' => null,
 ];
 
@@ -294,6 +327,70 @@ require __DIR__ . '/../includes/admin_layout.php';
       <textarea name="notes" rows="3"
                 class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3"><?= e((string) $row['notes']) ?></textarea>
     </label>
+  </div>
+
+  <!-- Public listing — when on, the partner appears as a card on
+       /public/partners.php. Independent from the QR referral flow so
+       a business can be either / both / neither. -->
+  <div class="border-t border-white/5 pt-6 space-y-4"
+       x-data="{ pub: <?= (int) ($row['show_on_public_page'] ?? 0) === 1 ? 'true' : 'false' ?> }">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div>
+        <h3 class="font-serif text-lg text-gold-400">Public listing</h3>
+        <p class="text-[11px] text-beige-100/45 mt-1">Appears as a card on <a href="<?= url('/public/partners.php') ?>" target="_blank" class="text-gold-400/85 hover:text-gold-300">/public/partners.php</a>.</p>
+      </div>
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" name="show_on_public_page" value="1" x-model="pub" class="accent-gold-500">
+        <span class="text-sm text-beige-100">Show on the public partners page</span>
+      </label>
+    </div>
+
+    <div x-show="pub" x-cloak class="space-y-4">
+      <div class="grid sm:grid-cols-2 gap-4">
+        <label class="block">
+          <span class="text-xs uppercase tracking-widest text-beige-100/60">Category</span>
+          <input name="category" list="partner-cat-list" maxlength="80"
+                 value="<?= e((string) ($row['category'] ?? '')) ?>"
+                 placeholder="e.g. Cafés · Wellness studios · Retreat centres"
+                 class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3">
+          <span class="text-[11px] text-beige-100/40 mt-1 block">Cards group under their category on the public page.</span>
+        </label>
+        <label class="block">
+          <span class="text-xs uppercase tracking-widest text-beige-100/60">Sort order</span>
+          <input name="sort_order" type="number" value="<?= (int) ($row['sort_order'] ?? 100) ?>"
+                 class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3">
+          <span class="text-[11px] text-beige-100/40 mt-1 block">Lower = appears first within its category.</span>
+        </label>
+        <label class="block sm:col-span-2">
+          <span class="text-xs uppercase tracking-widest text-beige-100/60">Website URL</span>
+          <input name="website_url" type="url" maxlength="255"
+                 value="<?= e((string) ($row['website_url'] ?? '')) ?>"
+                 placeholder="https://www.example.com"
+                 class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3 font-mono text-sm">
+        </label>
+        <label class="block sm:col-span-2">
+          <span class="text-xs uppercase tracking-widest text-beige-100/60">Description</span>
+          <textarea name="description" rows="4"
+                    placeholder="A short blurb shown under the partner name."
+                    class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3"><?= e((string) ($row['description'] ?? '')) ?></textarea>
+        </label>
+        <label class="block sm:col-span-2">
+          <span class="text-xs uppercase tracking-widest text-beige-100/60">Logo URL <span class="text-beige-100/30">(shared with the poster generator)</span></span>
+          <input name="logo_url" type="url" maxlength="255"
+                 value="<?= e((string) ($row['logo_url'] ?? '')) ?>"
+                 placeholder="https://…/logo.png"
+                 class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3 font-mono text-sm">
+        </label>
+      </div>
+    </div>
+
+    <datalist id="partner-cat-list">
+      <?php
+        $catSuggest = db()->query("SELECT DISTINCT category FROM partners WHERE category IS NOT NULL AND category <> '' ORDER BY category")->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($catSuggest as $c): ?>
+        <option value="<?= e($c) ?>">
+      <?php endforeach; ?>
+    </datalist>
   </div>
 
   <div class="pt-2 flex items-center gap-3">
