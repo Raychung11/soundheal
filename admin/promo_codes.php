@@ -217,6 +217,7 @@ require __DIR__ . '/../includes/admin_layout.php';
             <span class="text-xs px-2 py-1 rounded-full <?= $c['status'] === 'active' ? 'bg-gold-500/20 text-gold-400' : 'bg-white/5 text-beige-100/50' ?>"><?= e($c['status']) ?></span>
           </td>
           <td class="text-right pr-4 whitespace-nowrap">
+            <a href="<?= url('/admin/promo_share.php?code=' . rawurlencode((string) $c['code'])) ?>" class="text-xs text-gold-400/85 hover:text-gold-300 mr-3">Share →</a>
             <a href="<?= url('/admin/promo_codes.php?edit=' . (int) $c['id']) ?>" class="text-xs text-gold-400 hover:text-gold-300">Edit</a>
             <form method="post" class="inline ml-2">
               <?= csrf_field() ?>
