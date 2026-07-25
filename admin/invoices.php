@@ -3,6 +3,22 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 require_staff_or_admin();
 $pageTitle = 'Invoices';
 
+// Mark-paid action for manual invoices — offline bank-transfer path.
+if (is_post()) {
+    csrf_verify();
+    $act = (string) input('action', '');
+    $id  = (int) input('id', 0);
+    if ($act === 'mark_paid' && $id > 0) {
+        $note = trim((string) input('note', ''));
+        if (mark_invoice_paid_manually($id, $note !== '' ? $note : null)) {
+            flash('invoice', 'Invoice marked paid.', 'success');
+        } else {
+            flash('invoice', 'Invoice could not be updated (already paid or voided?).', 'error');
+        }
+    }
+    redirect('/admin/invoices.php');
+}
+
 $filterType   = input('type');
 $filterStatus = input('status');
 $search       = trim((string) input('q', ''));
@@ -40,8 +56,9 @@ require __DIR__ . '/../includes/admin_layout.php';
 <div class="flex items-center justify-between gap-4 flex-wrap">
   <div>
     <h1 class="font-serif text-3xl text-beige-100">Invoices &amp; receipts</h1>
-    <p class="text-beige-100/60 mt-1 text-sm">Auto-issued on every booking + membership. Click a row to view / print.</p>
+    <p class="text-beige-100/60 mt-1 text-sm">Auto-issued on every booking + membership. Manual B2B invoices (speaker fees, sponsorships) can be created below.</p>
   </div>
+  <a href="<?= url('/admin/invoice_new.php') ?>" class="px-5 py-2.5 rounded-full bg-gold-500 text-navy-950 hover:bg-gold-400 transition text-sm">+ New invoice</a>
 </div>
 
 <form method="get" class="mt-6 flex flex-wrap gap-2 items-center text-sm">
@@ -79,16 +96,30 @@ require __DIR__ . '/../includes/admin_layout.php';
       </tr>
     </thead>
     <tbody class="divide-y divide-white/5">
-      <?php foreach ($rows as $r): ?>
+      <?php foreach ($rows as $r):
+        // Manual (company) invoices carry the bill-to name in the
+        // customer_snapshot JSON — user_id points at the admin who
+        // created it, not the invoicee, so we surface the snapshot.
+        $isManual = ($r['bill_to_type'] ?? 'user') === 'company' || ($r['purpose'] ?? '') === 'manual';
+        $displayName = $r['full_name'] ?? '—';
+        $displayEmail = $r['email'] ?? '';
+        if ($isManual) {
+            $snap = json_decode((string) ($r['customer_snapshot'] ?? ''), true) ?: [];
+            $displayName  = (string) ($snap['name']  ?? $displayName);
+            $displayEmail = (string) ($snap['email'] ?? '');
+        }
+      ?>
         <tr>
           <td class="px-4 py-3 font-mono text-beige-100"><?= e($r['doc_number'] ?? '—') ?></td>
-          <td class="capitalize"><?= e($r['doc_type']) ?></td>
+          <td class="capitalize"><?= e($r['doc_type']) ?><?php if ($isManual): ?><span class="ml-2 text-[10px] uppercase tracking-widest text-gold-400/70 border border-gold-500/30 rounded-full px-2 py-0.5">B2B</span><?php endif; ?></td>
           <td>
-            <p class="text-beige-100"><?= e($r['full_name'] ?? '—') ?></p>
-            <p class="text-xs text-beige-100/45"><?= e($r['email'] ?? '') ?></p>
+            <p class="text-beige-100"><?= e($displayName) ?></p>
+            <p class="text-xs text-beige-100/45"><?= e($displayEmail) ?></p>
           </td>
           <td><?= e(format_datetime($r['issued_at'], 'd M Y')) ?></td>
-          <td class="capitalize text-beige-100/65"><?= e($r['purpose']) ?> #<?= (int) $r['reference_id'] ?></td>
+          <td class="capitalize text-beige-100/65">
+            <?= e($r['purpose']) ?><?php if (!$isManual && $r['reference_id']): ?> #<?= (int) $r['reference_id'] ?><?php endif; ?>
+          </td>
           <td class="text-right"><?= e(format_money((float) $r['total'], (string) $r['currency'])) ?></td>
           <td>
             <span class="text-xs px-2 py-1 rounded-full <?= $r['status'] === 'paid' ? 'bg-gold-500/20 text-gold-400' : 'bg-white/5 text-beige-100/65' ?>">
@@ -97,7 +128,15 @@ require __DIR__ . '/../includes/admin_layout.php';
           </td>
           <td class="text-right pr-4 whitespace-nowrap">
             <a href="<?= url('/member/document.php?id=' . (int) $r['id'] . '&t=' . urlencode((string) $r['access_token'])) ?>"
-               class="text-gold-400/85 hover:text-gold-300 text-sm" target="_blank">View →</a>
+               class="text-gold-400/85 hover:text-gold-300 text-sm mr-3" target="_blank">View →</a>
+            <?php if ($isManual && $r['status'] === 'due'): ?>
+              <form method="post" class="inline" onsubmit="return confirm('Mark this invoice as paid?');">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="mark_paid">
+                <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
+                <button class="text-xs text-gold-400/85 hover:text-gold-300">Mark paid</button>
+              </form>
+            <?php endif; ?>
           </td>
         </tr>
       <?php endforeach; ?>

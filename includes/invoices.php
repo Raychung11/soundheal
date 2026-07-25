@@ -141,6 +141,94 @@ if (!function_exists('issue_invoice')) {
     }
 
     /**
+     * Issue a B2B / speaker-fee / consulting invoice to an arbitrary
+     * billing entity that isn't a registered member — e.g. a hospital
+     * paying for a wellness session or a corporate sponsor.
+     *
+     * $billTo is an assoc array — name (required), attention, address,
+     * email, phone, tax_id, notes. Snapshot stored verbatim into
+     * customer_snapshot so the printed invoice always matches what
+     * the admin typed at issue time, even if the company later
+     * changes address.
+     *
+     * $lineItems is the same shape issue_invoice() takes:
+     *   [ ['description' => 'Speaker fee — Gong Bath', 'quantity' => 1, 'unit_price' => 2000, 'amount' => 2000] ]
+     *
+     * $createdBy is the admin user_id (invoices.user_id is NOT NULL
+     * so we still need someone — the admin is the sensible audit
+     * anchor).
+     *
+     * Returns the new invoice id.
+     */
+    function issue_manual_invoice(array $billTo, array $lineItems, int $createdBy, float $tax = 0.0, string $currency = 'MYR', ?string $notes = null): int
+    {
+        if (trim((string) ($billTo['name'] ?? '')) === '') {
+            throw new InvalidArgumentException('Bill-to name is required.');
+        }
+
+        $subtotal = 0.0;
+        foreach ($lineItems as $li) {
+            $subtotal += (float) ($li['amount'] ?? 0);
+        }
+        $total = $subtotal + $tax;
+
+        db()->prepare(
+            "INSERT INTO invoices
+                (doc_type, access_token, user_id, bill_to_type, purpose, reference_id,
+                 subtotal, tax, total, currency, status,
+                 line_items, customer_snapshot, company_snapshot, notes, issued_at)
+             VALUES
+                ('invoice', :tok, :u, 'company', 'manual', NULL,
+                 :sub, :tax, :tot, :cur, 'due',
+                 :li, :bill, :co, :notes, NOW())"
+        )->execute([
+            ':tok'   => bin2hex(random_bytes(20)),
+            ':u'     => $createdBy,
+            ':sub'   => $subtotal,
+            ':tax'   => $tax,
+            ':tot'   => $total,
+            ':cur'   => $currency,
+            ':li'    => json_encode($lineItems, JSON_UNESCAPED_UNICODE),
+            ':bill'  => json_encode($billTo, JSON_UNESCAPED_UNICODE),
+            ':co'    => json_encode(_company_snapshot_for_invoice(), JSON_UNESCAPED_UNICODE),
+            ':notes' => $notes,
+        ]);
+        $id = (int) db()->lastInsertId();
+        _assign_doc_number($id, 'invoice');
+        if (function_exists('audit_log')) {
+            audit_log('invoice.manual', 'invoices', $id, [
+                'bill_to' => (string) $billTo['name'],
+                'total'   => $total,
+                'by'      => $createdBy,
+            ]);
+        }
+        return $id;
+    }
+
+    /**
+     * Mark a manual invoice as paid without going through Billplz.
+     * Used when the company pays offline (bank transfer, cheque).
+     */
+    function mark_invoice_paid_manually(int $invoiceId, ?string $note = null): bool
+    {
+        $stmt = db()->prepare(
+            "UPDATE invoices
+                SET status = 'paid', paid_at = NOW(),
+                    notes = TRIM(CONCAT(COALESCE(notes,''), :sep, :add))
+              WHERE id = :id AND status IN ('due','refunded')"
+        );
+        $stmt->execute([
+            ':sep' => $note !== null ? "\n" : '',
+            ':add' => $note !== null ? '[paid ' . date('Y-m-d') . '] ' . $note : '',
+            ':id'  => $invoiceId,
+        ]);
+        if ($stmt->rowCount() > 0 && function_exists('audit_log')) {
+            audit_log('invoice.mark_paid', 'invoices', $invoiceId, ['note' => $note]);
+        }
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
      * Settles the open invoice for this payment and emits a paired receipt.
      * Idempotent — returns the existing receipt id if already issued.
      */
