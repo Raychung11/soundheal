@@ -3,19 +3,37 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 $pageTitle = 'Gallery';
 
 $photos = db()->query(
-    "SELECT g.id, g.image, g.video_url, g.caption, g.category, g.event_id, g.created_at,
-            e.title AS event_title, e.slug AS event_slug
+    "SELECT g.id, g.image, g.video_url, g.caption, g.category, g.event_id, g.experience_id, g.created_at,
+            e.title AS event_title, e.slug AS event_slug,
+            x.title AS experience_title, x.slug AS experience_slug
        FROM gallery_photos g
-       LEFT JOIN events e ON e.id = g.event_id
+       LEFT JOIN events      e ON e.id = g.event_id
+       LEFT JOIN experiences x ON x.id = g.experience_id
       WHERE g.status = 'visible'
-      ORDER BY g.sort_order ASC, g.id DESC"
+      ORDER BY (g.experience_id IS NULL), g.experience_id, g.sort_order ASC, g.id DESC"
 )->fetchAll();
 
-// Distinct categories → filter chips at the top.
+// Distinct categories + experiences → two filter chip rows at the top.
 $categories = array_values(array_unique(array_filter(array_map(
     fn($p) => trim((string) ($p['category'] ?? '')), $photos
 ))));
 sort($categories);
+
+// Experiences ordered by their first appearance in the list (which
+// itself is sort_order-driven), so the chip order matches the grid
+// visual flow. Dedup by id.
+$experiences = [];
+foreach ($photos as $p) {
+    $xid = (int) ($p['experience_id'] ?? 0);
+    if ($xid <= 0) continue;
+    if (isset($experiences[$xid])) continue;
+    $experiences[$xid] = [
+        'id'    => $xid,
+        'title' => (string) $p['experience_title'],
+        'slug'  => (string) $p['experience_slug'],
+    ];
+}
+$experiences = array_values($experiences);
 
 // Alpine-ready photo list. We hand the client only the fields it
 // needs for the grid + lightbox so nothing sensitive leaks.
@@ -23,16 +41,16 @@ $appBase = rtrim((string) config('app.url'), '/');
 $photosLite = array_map(function ($p) use ($appBase) {
     $videoUrl = (string) ($p['video_url'] ?? '');
     return [
-        'id'        => (int) $p['id'],
-        'src'       => gallery_thumbnail_url($p),
-        'caption'   => (string) ($p['caption']  ?? ''),
-        'category'  => (string) ($p['category'] ?? ''),
-        'event'     => $p['event_title'] ? (string) $p['event_title'] : '',
-        'is_video'  => $videoUrl !== '',
-        'embed_url' => $videoUrl !== '' ? gallery_video_embed_url($videoUrl) : '',
-        // Canonical share URL for this specific item — social crawlers
-        // that hit it will see the per-item OG tags below.
-        'share_url' => $appBase . '/public/gallery.php?item=' . (int) $p['id'],
+        'id'            => (int) $p['id'],
+        'src'           => gallery_thumbnail_url($p),
+        'caption'       => (string) ($p['caption']  ?? ''),
+        'category'      => (string) ($p['category'] ?? ''),
+        'experience_id' => (int) ($p['experience_id'] ?? 0),
+        'experience'    => (string) ($p['experience_title'] ?? ''),
+        'event'         => $p['event_title'] ? (string) $p['event_title'] : '',
+        'is_video'      => $videoUrl !== '',
+        'embed_url'     => $videoUrl !== '' ? gallery_video_embed_url($videoUrl) : '',
+        'share_url'     => $appBase . '/public/gallery.php?item=' . (int) $p['id'],
     ];
 }, $photos);
 
@@ -84,16 +102,32 @@ require __DIR__ . '/../includes/header.php';
          x-data="galleryPage(<?= htmlspecialchars(json_encode($photosLite, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8') ?>, <?= (int) $shareItemId ?>)">
 
   <?php if ($photos): ?>
-    <!-- Category filter chips. 'All' resets. -->
-    <?php if (count($categories) > 0): ?>
+    <!-- Experience filter — the primary sort dimension. Each pill
+         narrows the grid to photos tagged with that experience. -->
+    <?php if (count($experiences) > 0): ?>
       <div class="flex flex-wrap gap-2">
+        <button type="button" @click="activeExp = 0"
+                :class="!activeExp ? 'border-gold-500/50 bg-gold-500/10 text-gold-400' : 'border-white/10 text-beige-100/70 hover:border-gold-500/40 hover:text-gold-400'"
+                class="text-xs uppercase tracking-[0.2em] px-4 py-2 rounded-full border transition">All experiences</button>
+        <?php foreach ($experiences as $x): ?>
+          <button type="button" @click="activeExp = <?= (int) $x['id'] ?>"
+                  :class="activeExp === <?= (int) $x['id'] ?> ? 'border-gold-500/50 bg-gold-500/10 text-gold-400' : 'border-white/10 text-beige-100/70 hover:border-gold-500/40 hover:text-gold-400'"
+                  class="text-xs uppercase tracking-[0.2em] px-4 py-2 rounded-full border transition"><?= e($x['title']) ?></button>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+
+    <!-- Category filter chips — secondary axis. AND'd with the
+         experience filter above so admins can narrow by both. -->
+    <?php if (count($categories) > 0): ?>
+      <div class="mt-3 flex flex-wrap gap-2">
         <button type="button" @click="activeCat = ''"
                 :class="!activeCat ? 'border-gold-500/50 bg-gold-500/10 text-gold-400' : 'border-white/10 text-beige-100/70 hover:border-gold-500/40 hover:text-gold-400'"
-                class="text-xs uppercase tracking-[0.2em] px-4 py-2 rounded-full border transition">All</button>
+                class="text-[10px] uppercase tracking-[0.2em] px-3 py-1.5 rounded-full border transition">All categories</button>
         <?php foreach ($categories as $cat): ?>
           <button type="button" @click="activeCat = <?= htmlspecialchars(json_encode($cat), ENT_QUOTES, 'UTF-8') ?>"
                   :class="activeCat === <?= htmlspecialchars(json_encode($cat), ENT_QUOTES, 'UTF-8') ?> ? 'border-gold-500/50 bg-gold-500/10 text-gold-400' : 'border-white/10 text-beige-100/70 hover:border-gold-500/40 hover:text-gold-400'"
-                  class="text-xs uppercase tracking-[0.2em] px-4 py-2 rounded-full border transition capitalize"><?= e($cat) ?></button>
+                  class="text-[10px] uppercase tracking-[0.2em] px-3 py-1.5 rounded-full border transition capitalize"><?= e($cat) ?></button>
         <?php endforeach; ?>
       </div>
     <?php endif; ?>
@@ -126,7 +160,9 @@ require __DIR__ . '/../includes/header.php';
             <div class="absolute inset-0 bg-gradient-to-t from-navy-950/85 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition"></div>
             <div class="absolute bottom-3 left-3 right-3 opacity-0 group-hover:opacity-100 transition">
               <p x-show="p.caption" x-text="p.caption" class="text-xs text-beige-100 drop-shadow"></p>
-              <p x-show="p.category || p.event" class="text-[10px] uppercase tracking-widest text-gold-400/85 mt-1">
+              <p x-show="p.experience || p.category || p.event" class="text-[10px] uppercase tracking-widest text-gold-400/85 mt-1">
+                <span x-show="p.experience" x-text="p.experience"></span>
+                <template x-if="p.experience && (p.category || p.event)"><span class="text-beige-100/40"> · </span></template>
                 <span x-show="p.category" x-text="p.category"></span>
                 <template x-if="p.category && p.event"><span class="text-beige-100/40"> · </span></template>
                 <span x-show="p.event" x-text="p.event"></span>
@@ -180,8 +216,10 @@ require __DIR__ . '/../includes/header.php';
       </div>
       <div class="px-6 pb-8 text-center">
         <p x-show="current?.caption" x-text="current?.caption" class="text-beige-100"></p>
-        <p x-show="current?.category || current?.event"
+        <p x-show="current?.experience || current?.category || current?.event"
            class="mt-1 text-[10px] uppercase tracking-widest text-gold-400/85">
+          <span x-show="current?.experience" x-text="current?.experience"></span>
+          <template x-if="current?.experience && (current?.category || current?.event)"><span class="text-beige-100/40"> · </span></template>
           <span x-show="current?.category" x-text="current?.category"></span>
           <template x-if="current?.category && current?.event"><span class="text-beige-100/40"> · </span></template>
           <span x-show="current?.event" x-text="current?.event"></span>
@@ -221,6 +259,7 @@ function galleryPage(all, deepLinkId) {
   return {
     all: all || [],
     activeCat: '',
+    activeExp: 0,
     lightbox: null,
     copyState: '',
     init() {
@@ -235,8 +274,13 @@ function galleryPage(all, deepLinkId) {
       }
     },
     get visible() {
-      if (!this.activeCat) return this.all;
-      return this.all.filter(p => p.category === this.activeCat);
+      // Combined filter — experience AND category. Both empty = show
+      // everything.
+      return this.all.filter(p => {
+        if (this.activeExp && p.experience_id !== this.activeExp) return false;
+        if (this.activeCat && p.category !== this.activeCat) return false;
+        return true;
+      });
     },
     get current() { return this.lightbox === null ? null : this.visible[this.lightbox] || null; },
     openAt(i)  { this.lightbox = i; document.body.style.overflow = 'hidden'; },

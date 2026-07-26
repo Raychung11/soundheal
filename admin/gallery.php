@@ -9,10 +9,26 @@ if (is_post()) {
     csrf_verify();
     $action = (string) input('action');
 
+    // Resolves the experience tag from the form. If the admin picks
+    // an experience directly, use it. Otherwise, derive from the
+    // linked event so photos tagged with an event still inherit the
+    // right experience group on the public page.
+    $resolveExperience = function (): ?int {
+        $picked = (int) input('experience_id', 0);
+        if ($picked > 0) return $picked;
+        $evId = (int) input('event_id', 0);
+        if ($evId <= 0) return null;
+        $s = db()->prepare("SELECT experience_id FROM events WHERE id = :id LIMIT 1");
+        $s->execute([':id' => $evId]);
+        $x = (int) ($s->fetchColumn() ?: 0);
+        return $x > 0 ? $x : null;
+    };
+
     if ($action === 'upload') {
         $caption    = trim((string) input('caption', ''));
         $category   = trim((string) input('category', ''));
         $eventId    = (int) input('event_id', 0) ?: null;
+        $experienceId = $resolveExperience();
         $sortOrder  = (int) input('sort_order', 100);
 
         // Accept a multi-file upload — the browser posts the files as
@@ -46,13 +62,14 @@ if (is_post()) {
                 $path = handle_upload($field, 'gallery');
                 if (!$path) continue;
                 db()->prepare(
-                    "INSERT INTO gallery_photos (image, caption, category, event_id, sort_order, created_by)
-                     VALUES (:i, :c, :cat, :e, :s, :u)"
+                    "INSERT INTO gallery_photos (image, caption, category, event_id, experience_id, sort_order, created_by)
+                     VALUES (:i, :c, :cat, :e, :x, :s, :u)"
                 )->execute([
                     ':i'   => $path,
                     ':c'   => $caption ?: null,
                     ':cat' => $category ?: null,
                     ':e'   => $eventId,
+                    ':x'   => $experienceId,
                     ':s'   => $sortOrder,
                     ':u'   => current_user_id(),
                 ]);
@@ -71,6 +88,7 @@ if (is_post()) {
         $caption   = trim((string) input('caption', ''));
         $category  = trim((string) input('category', ''));
         $eventId   = (int) input('event_id', 0) ?: null;
+        $experienceId = $resolveExperience();
         $sortOrder = (int) input('sort_order', 100);
 
         // Reject anything we can't turn into a playable embed. Reusing
@@ -97,14 +115,15 @@ if (is_post()) {
 
         if (!$errors) {
             db()->prepare(
-                "INSERT INTO gallery_photos (image, video_url, caption, category, event_id, sort_order, created_by)
-                 VALUES (:i, :v, :c, :cat, :e, :s, :u)"
+                "INSERT INTO gallery_photos (image, video_url, caption, category, event_id, experience_id, sort_order, created_by)
+                 VALUES (:i, :v, :c, :cat, :e, :x, :s, :u)"
             )->execute([
                 ':i'   => $thumbPath,
                 ':v'   => $videoUrl,
                 ':c'   => $caption ?: null,
                 ':cat' => $category ?: null,
                 ':e'   => $eventId,
+                ':x'   => $experienceId,
                 ':s'   => $sortOrder,
                 ':u'   => current_user_id(),
             ]);
@@ -117,21 +136,22 @@ if (is_post()) {
         $caption   = trim((string) input('caption', ''));
         $category  = trim((string) input('category', ''));
         $eventId   = (int) input('event_id', 0) ?: null;
+        $experienceId = $resolveExperience();
         $sortOrder = (int) input('sort_order', 100);
         $status    = in_array(input('status'), ['visible','hidden'], true) ? input('status') : 'visible';
         $videoUrl  = trim((string) input('video_url', ''));
-        // Empty string means "clear the video" — treat as NULL.
         if ($videoUrl !== '' && gallery_video_embed_url($videoUrl) === '') {
             $errors[] = 'Video URL must be a YouTube or Vimeo link.';
         }
         if ($id > 0 && !$errors) {
             db()->prepare(
                 "UPDATE gallery_photos SET caption = :c, category = :cat, event_id = :e,
-                    sort_order = :s, status = :st, video_url = :v WHERE id = :id"
+                    experience_id = :x, sort_order = :s, status = :st, video_url = :v WHERE id = :id"
             )->execute([
                 ':c'   => $caption ?: null,
                 ':cat' => $category ?: null,
                 ':e'   => $eventId,
+                ':x'   => $experienceId,
                 ':s'   => $sortOrder,
                 ':st'  => $status,
                 ':v'   => $videoUrl ?: null,
@@ -160,18 +180,42 @@ if (is_post()) {
     }
 }
 
-$photos = db()->query(
-    "SELECT g.*, e.title AS event_title
+// Filter — top row of pills lets admins narrow by experience.
+$filterExperienceId = (int) input('experience', 0);
+$where  = '';
+$params = [];
+if ($filterExperienceId > 0) {
+    $where  = 'WHERE g.experience_id = :xid';
+    $params[':xid'] = $filterExperienceId;
+}
+
+$photosStmt = db()->prepare(
+    "SELECT g.*, e.title AS event_title, x.title AS experience_title
        FROM gallery_photos g
-       LEFT JOIN events e ON e.id = g.event_id
+       LEFT JOIN events      e ON e.id = g.event_id
+       LEFT JOIN experiences x ON x.id = g.experience_id
+       $where
       ORDER BY g.sort_order ASC, g.id DESC"
-)->fetchAll();
+);
+$photosStmt->execute($params);
+$photos = $photosStmt->fetchAll();
 
 $eventOptions = db()->query(
     "SELECT id, title, starts_at FROM events
       WHERE status IN ('published','archived') AND parent_event_id IS NULL
       ORDER BY starts_at DESC LIMIT 100"
 )->fetchAll();
+
+$experienceOptions = db()->query(
+    "SELECT id, title, status FROM experiences ORDER BY status DESC, sort_order ASC, title ASC"
+)->fetchAll();
+
+// Counts per experience for the filter pills — quick heads-up on
+// where the photos actually live.
+$xCountRows = db()->query(
+    "SELECT experience_id, COUNT(*) AS c FROM gallery_photos GROUP BY experience_id"
+)->fetchAll(PDO::FETCH_KEY_PAIR);
+$totalPhotos = array_sum(array_map('intval', $xCountRows));
 
 // Distinct existing categories → surface them as a datalist for the
 // upload form so admins reuse the same tag spelling.
@@ -224,6 +268,20 @@ require __DIR__ . '/../includes/admin_layout.php';
         <?php endforeach; ?>
       </datalist>
     </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Experience <span class="text-beige-100/30">(sorts + filters on the public page)</span></span>
+      <select name="experience_id" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+        <option value="">— auto-detect from event —</option>
+        <?php foreach ($experienceOptions as $xo): ?>
+          <option value="<?= (int) $xo['id'] ?>"><?= e($xo['title']) ?><?= $xo['status'] === 'inactive' ? ' · inactive' : '' ?></option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Sort order</span>
+      <input name="sort_order" type="number" value="100" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+      <span class="text-[11px] text-beige-100/40 mt-1 block">Lower = appears first.</span>
+    </label>
     <label class="block sm:col-span-2">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">From event <span class="text-beige-100/30">(optional)</span></span>
       <select name="event_id" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
@@ -232,11 +290,6 @@ require __DIR__ . '/../includes/admin_layout.php';
           <option value="<?= (int) $eo['id'] ?>"><?= e($eo['title']) ?> · <?= e(format_datetime($eo['starts_at'], 'd M Y')) ?></option>
         <?php endforeach; ?>
       </select>
-    </label>
-    <label class="block">
-      <span class="text-xs uppercase tracking-widest text-beige-100/60">Sort order</span>
-      <input name="sort_order" type="number" value="100" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
-      <span class="text-[11px] text-beige-100/40 mt-1 block">Lower = appears first.</span>
     </label>
   </div>
 
@@ -286,6 +339,15 @@ require __DIR__ . '/../includes/admin_layout.php';
       </select>
     </label>
     <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Experience</span>
+      <select name="experience_id" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
+        <option value="">— auto-detect from event —</option>
+        <?php foreach ($experienceOptions as $xo): ?>
+          <option value="<?= (int) $xo['id'] ?>"><?= e($xo['title']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+    <label class="block">
       <span class="text-xs uppercase tracking-widest text-beige-100/60">Sort order</span>
       <input name="sort_order" type="number" value="100" class="mt-2 w-full rounded-2xl bg-navy-900 border border-white/5 px-4 py-3">
     </label>
@@ -299,7 +361,35 @@ require __DIR__ . '/../includes/admin_layout.php';
 <!-- Photo grid. Compact tiles with per-photo controls. Clicking Edit
      opens an inline form; keeps the page single-URL. -->
 <div class="mt-10">
-  <h2 class="font-serif text-2xl text-beige-100">All photos (<?= count($photos) ?>)</h2>
+  <div class="flex items-center justify-between gap-4 flex-wrap">
+    <h2 class="font-serif text-2xl text-beige-100">All photos (<?= count($photos) ?>)</h2>
+  </div>
+
+  <!-- Filter pills — narrow the grid to one experience. "All"
+       counts every gallery row; each experience pill shows its
+       own count in parentheses. -->
+  <?php if ($experienceOptions): ?>
+    <div class="mt-4 flex flex-wrap gap-2">
+      <a href="<?= url('/admin/gallery.php') ?>"
+         class="text-xs uppercase tracking-[0.2em] px-4 py-2 rounded-full border transition <?= $filterExperienceId === 0 ? 'border-gold-500/50 bg-gold-500/10 text-gold-400' : 'border-white/10 text-beige-100/70 hover:border-gold-500/40 hover:text-gold-400' ?>">
+        All <span class="text-beige-100/40 normal-case tracking-normal">(<?= (int) $totalPhotos ?>)</span>
+      </a>
+      <?php
+        $noneCount = (int) ($xCountRows[''] ?? 0);
+        if (isset($xCountRows[null])) $noneCount = (int) $xCountRows[null];
+      ?>
+      <?php foreach ($experienceOptions as $xo):
+        $c = (int) ($xCountRows[(int) $xo['id']] ?? 0);
+        if ($c === 0 && $filterExperienceId !== (int) $xo['id']) continue;
+        $on = $filterExperienceId === (int) $xo['id'];
+      ?>
+        <a href="<?= url('/admin/gallery.php?experience=' . (int) $xo['id']) ?>"
+           class="text-xs uppercase tracking-[0.2em] px-4 py-2 rounded-full border transition <?= $on ? 'border-gold-500/50 bg-gold-500/10 text-gold-400' : 'border-white/10 text-beige-100/70 hover:border-gold-500/40 hover:text-gold-400' ?>">
+          <?= e($xo['title']) ?> <span class="text-beige-100/40 normal-case tracking-normal">(<?= $c ?>)</span>
+        </a>
+      <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
   <?php if (!$photos): ?>
     <p class="mt-4 text-beige-100/60 italic">No photos yet. Upload the first ones above.</p>
   <?php else: ?>
@@ -332,7 +422,9 @@ require __DIR__ . '/../includes/admin_layout.php';
           <div class="p-3 space-y-1">
             <p class="text-xs text-beige-100 truncate"><?= e((string) ($p['caption'] ?? 'Untitled')) ?></p>
             <p class="text-[11px] text-beige-100/50">
-              <?php if (!empty($p['category'])): ?><?= e($p['category']) ?><?php else: ?><span class="italic">no category</span><?php endif; ?>
+              <?php if (!empty($p['experience_title'])): ?><span class="text-gold-400/85"><?= e($p['experience_title']) ?></span><?php endif; ?>
+              <?php if (!empty($p['experience_title']) && !empty($p['category'])): ?> · <?php endif; ?>
+              <?php if (!empty($p['category'])): ?><?= e($p['category']) ?><?php elseif (empty($p['experience_title'])): ?><span class="italic">untagged</span><?php endif; ?>
               <?php if (!empty($p['event_title'])): ?> · <span class="text-beige-100/40">from <?= e($p['event_title']) ?></span><?php endif; ?>
             </p>
             <div class="pt-2 flex items-center justify-between text-[11px]">
@@ -369,6 +461,15 @@ require __DIR__ . '/../includes/admin_layout.php';
                 <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Category</span>
                 <input name="category" list="gallery-category-list" maxlength="80" value="<?= e((string) ($p['category'] ?? '')) ?>"
                        class="mt-1 w-full rounded-xl bg-navy-900 border border-white/5 px-3 py-2">
+              </label>
+              <label class="block">
+                <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Experience</span>
+                <select name="experience_id" class="mt-1 w-full rounded-xl bg-navy-900 border border-white/5 px-3 py-2">
+                  <option value="">— auto from event —</option>
+                  <?php foreach ($experienceOptions as $xo): ?>
+                    <option value="<?= (int) $xo['id'] ?>" <?= (int) ($p['experience_id'] ?? 0) === (int) $xo['id'] ? 'selected' : '' ?>><?= e($xo['title']) ?></option>
+                  <?php endforeach; ?>
+                </select>
               </label>
               <label class="block">
                 <span class="text-[10px] uppercase tracking-widest text-beige-100/50">Video URL <span class="text-beige-100/30">(YouTube / Vimeo — leave blank for photo-only)</span></span>
