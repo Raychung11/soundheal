@@ -266,7 +266,21 @@ if ($isReceipt && !empty($doc['invoice_id'])) {
     // that still owes money and has a bank block on the company
     // snapshot. Snapshotted at issue time so a printed invoice always
     // shows the account number the payer was originally told to use.
+    //
+    // Older invoices issued BEFORE the snapshot started carrying the
+    // bank block have no 'bank' key on the company snapshot. In that
+    // case we fall back to the current live bank settings so the payer
+    // still gets a payable invoice.
     $bank = is_array($company['bank'] ?? null) ? $company['bank'] : [];
+    if (empty($bank)) {
+        $bank = array_filter([
+            'bank_name'     => (string) setting('company_bank_name', ''),
+            'account_name'  => (string) setting('company_bank_account_name', ''),
+            'account_no'    => (string) setting('company_bank_account_no', ''),
+            'swift'         => (string) setting('company_bank_swift', ''),
+            'payment_notes' => (string) setting('company_payment_notes', ''),
+        ], fn ($v) => trim((string) $v) !== '');
+    }
     $showBank = !$isReceipt
         && in_array($doc['status'] ?? '', ['due','refunded'], true)
         && !empty($bank);
