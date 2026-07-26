@@ -342,9 +342,6 @@ if ($isReceipt && !empty($doc['invoice_id'])) {
   </div>
 
   <div class="footer">
-    <?php if (!$isReceipt): ?>
-      <p>Please complete payment via the original checkout link. If you have already paid, the matching receipt will be issued automatically once the payment is confirmed.</p>
-    <?php endif; ?>
     <p>This is a computer-generated document and does not require a signature. Questions? Please email <a href="mailto:<?= e($company['email'] ?? setting('company_email', '')) ?>" style="color: var(--gold);"><?= e($company['email'] ?? setting('company_email', '')) ?></a>.</p>
     <?php if (!empty($company['registration'])): ?>
       <p style="color: var(--muted); margin-top: 12px;">Issued by <?= e($company['legal_name'] ?? ($company['brand'] ?? '')) ?>, Reg. <?= e($company['registration']) ?>.</p>
