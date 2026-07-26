@@ -26,6 +26,13 @@ $textKeys = [
     'company_social_whatsapp'   => 'string',
     // Footer micro-copy
     'footer_about_blurb'        => 'text',
+    // Bank details — printed on B2B / due invoices so payers know
+    // where to bank the money in.
+    'company_bank_name'         => 'string',
+    'company_bank_account_name' => 'string',
+    'company_bank_account_no'   => 'string',
+    'company_bank_swift'        => 'string',
+    'company_payment_notes'     => 'text',
 ];
 
 if (is_post()) {
@@ -108,6 +115,29 @@ function text_field(string $key, string $label, string $placeholder = '', string
       <?php text_field('company_privacy_email', 'Privacy email',   'privacy@soundheal.com', 'email'); ?>
       <?php text_field('business_hours',        'Business hours',  'Tuesday – Sunday · 10am – 8pm (closed Mondays)'); ?>
     </div>
+  </section>
+
+  <!-- Bank details for invoices -->
+  <section class="border border-white/5 rounded-3xl p-6 bg-navy-900/40 space-y-5">
+    <div>
+      <h2 class="font-serif text-2xl text-gold-400">Bank details for invoices</h2>
+      <p class="text-xs text-beige-100/50 mt-1">Printed at the bottom of every B2B / due invoice so the payer knows where to bank in. Leave blank if you don't accept bank transfer.</p>
+    </div>
+
+    <div class="grid sm:grid-cols-2 gap-5">
+      <?php text_field('company_bank_name',          'Bank',                 'Maybank'); ?>
+      <?php text_field('company_bank_account_name',  'Account name',         'JLC Management Sdn. Bhd.'); ?>
+      <?php text_field('company_bank_account_no',    'Account number',       '5123 4567 8901'); ?>
+      <?php text_field('company_bank_swift',         'SWIFT / BIC (optional)', 'MBBEMYKL'); ?>
+    </div>
+
+    <label class="block">
+      <span class="text-xs uppercase tracking-widest text-beige-100/60">Payment notes <span class="text-beige-100/30">(optional)</span></span>
+      <textarea name="company_payment_notes" rows="3"
+                placeholder="DuitNow ID · reference format · anything the payer should include on the transfer."
+                class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3"><?= e((string) setting('company_payment_notes', '')) ?></textarea>
+      <span class="text-[11px] text-beige-100/40 mt-1 block">Free text — appears under the bank block on the invoice. Good place for DuitNow, reference instructions, or a note about foreign transfers.</span>
+    </label>
   </section>
 
   <!-- Socials -->

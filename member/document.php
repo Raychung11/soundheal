@@ -195,8 +195,31 @@ if ($isReceipt && !empty($doc['invoice_id'])) {
       <p class="label">Billed to</p>
       <div class="party">
         <strong><?= e($customer['name'] ?? '') ?></strong>
-        <?php if (!empty($customer['email'])): ?><div><?= e($customer['email']) ?></div><?php endif; ?>
+        <?php if (!empty($customer['attention'])): ?>
+          <div>Attn: <?= e($customer['attention']) ?></div>
+        <?php endif; ?>
+        <?php
+          // Manual invoices store address as a free-text block; older
+          // customer snapshots may store it as an array of lines. Handle
+          // both without losing formatting.
+          $addr = $customer['address'] ?? null;
+          if (is_array($addr)) {
+              foreach ($addr as $line) {
+                  if (trim((string) $line) === '') continue;
+                  echo '<div>' . e((string) $line) . '</div>';
+              }
+          } elseif (is_string($addr) && trim($addr) !== '') {
+              foreach (preg_split('/\r?\n/', $addr) as $line) {
+                  if (trim((string) $line) === '') continue;
+                  echo '<div>' . e((string) $line) . '</div>';
+              }
+          }
+        ?>
         <?php if (!empty($customer['phone'])): ?><div><?= e($customer['phone']) ?></div><?php endif; ?>
+        <?php if (!empty($customer['email'])): ?><div><?= e($customer['email']) ?></div><?php endif; ?>
+        <?php if (!empty($customer['tax_id'])): ?>
+          <div style="margin-top:6px; color: var(--muted); font-size: 12px;">Tax / Reg. no.: <?= e($customer['tax_id']) ?></div>
+        <?php endif; ?>
       </div>
     </div>
   </div>
@@ -238,8 +261,57 @@ if ($isReceipt && !empty($doc['invoice_id'])) {
     <span class="total"><?= e(format_money((float) $doc['total'], $currency)) ?></span>
   </div>
 
+  <?php
+    // Payment / bank block. Rendered for any invoice (not receipts)
+    // that still owes money and has a bank block on the company
+    // snapshot. Snapshotted at issue time so a printed invoice always
+    // shows the account number the payer was originally told to use.
+    $bank = is_array($company['bank'] ?? null) ? $company['bank'] : [];
+    $showBank = !$isReceipt
+        && in_array($doc['status'] ?? '', ['due','refunded'], true)
+        && !empty($bank);
+    // Manual invoices also include admin-entered notes (payment
+    // instructions, terms, etc.).
+    $adminNotes = trim((string) ($doc['notes'] ?? ''));
+  ?>
+  <?php if ($showBank): ?>
+    <section style="margin-top: 30px; border: 1px solid var(--hairline); border-radius: 10px; padding: 20px 22px; background: var(--warm);">
+      <p class="label" style="margin-bottom: 10px;">Payment details · bank transfer</p>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 24px; font-size: 13px; line-height: 1.7;">
+        <?php if (!empty($bank['bank_name'])): ?>
+          <div><span style="color: var(--muted); text-transform: uppercase; letter-spacing: 0.18em; font-size: 10px;">Bank</span><br><strong><?= e($bank['bank_name']) ?></strong></div>
+        <?php endif; ?>
+        <?php if (!empty($bank['account_name'])): ?>
+          <div><span style="color: var(--muted); text-transform: uppercase; letter-spacing: 0.18em; font-size: 10px;">Account name</span><br><strong><?= e($bank['account_name']) ?></strong></div>
+        <?php endif; ?>
+        <?php if (!empty($bank['account_no'])): ?>
+          <div><span style="color: var(--muted); text-transform: uppercase; letter-spacing: 0.18em; font-size: 10px;">Account number</span><br><strong style="font-family: 'Inter', monospace; letter-spacing: 0.05em;"><?= e($bank['account_no']) ?></strong></div>
+        <?php endif; ?>
+        <?php if (!empty($bank['swift'])): ?>
+          <div><span style="color: var(--muted); text-transform: uppercase; letter-spacing: 0.18em; font-size: 10px;">SWIFT / BIC</span><br><strong style="font-family: 'Inter', monospace;"><?= e($bank['swift']) ?></strong></div>
+        <?php endif; ?>
+      </div>
+      <?php if (!empty($bank['payment_notes'])): ?>
+        <p style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--hairline); color: var(--muted); font-size: 12px; line-height: 1.6; white-space: pre-wrap;"><?= e($bank['payment_notes']) ?></p>
+      <?php endif; ?>
+      <p style="margin-top: 12px; color: var(--muted); font-size: 12px;">
+        Please use invoice <strong style="color: var(--ink);"><?= e((string) ($doc['doc_number'] ?? '')) ?></strong> as the transfer reference so we can match your payment quickly.
+      </p>
+    </section>
+  <?php endif; ?>
+
+  <?php if ($adminNotes !== ''): ?>
+    <section style="margin-top: 22px; padding: 16px 18px; border: 1px dashed var(--hairline); border-radius: 10px; color: var(--muted); font-size: 12px; line-height: 1.7; white-space: pre-wrap;">
+      <?= e($adminNotes) ?>
+    </section>
+  <?php endif; ?>
+
   <div class="meta-row">
-    <span><strong>Payment method:</strong> Billplz</span>
+    <?php if (($doc['purpose'] ?? '') === 'manual'): ?>
+      <span><strong>Payment method:</strong> Bank transfer</span>
+    <?php else: ?>
+      <span><strong>Payment method:</strong> Billplz</span>
+    <?php endif; ?>
     <?php if ($isReceipt && !empty($doc['payment_id'])): ?>
       <?php
         $pm = db()->prepare("SELECT gateway_bill_id FROM payments WHERE id = :id");

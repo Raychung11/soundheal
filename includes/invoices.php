@@ -22,6 +22,18 @@ if (!function_exists('issue_invoice')) {
 
     function _company_snapshot_for_invoice(): array
     {
+        // Bank block — snapshotted so a printed invoice always shows
+        // the account number the payer was originally told to use.
+        // If the company changes bank later, old invoices still point
+        // at the old account (correct for accounting reconciliation).
+        $bank = array_filter([
+            'bank_name'     => (string) setting('company_bank_name', ''),
+            'account_name'  => (string) setting('company_bank_account_name', ''),
+            'account_no'    => (string) setting('company_bank_account_no', ''),
+            'swift'         => (string) setting('company_bank_swift', ''),
+            'payment_notes' => (string) setting('company_payment_notes', ''),
+        ], fn ($v) => trim((string) $v) !== '');
+
         return [
             'brand'        => brand_name(),
             'legal_name'   => (string) setting('company_legal_name', ''),
@@ -35,6 +47,7 @@ if (!function_exists('issue_invoice')) {
             'phone'         => (string) setting('company_phone', ''),
             'email'         => (string) setting('company_email', ''),
             'billing_email' => (string) setting('company_billing_email', ''),
+            'bank'          => $bank,
         ];
     }
 
