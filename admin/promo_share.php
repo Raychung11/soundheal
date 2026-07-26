@@ -170,7 +170,7 @@ require __DIR__ . '/../includes/admin_layout.php';
 
       <div class="rounded-2xl border border-white/10 bg-navy-950/60 p-4"
            x-data="{ copied: false, copy() {
-             navigator.clipboard.writeText(<?= json_encode($shareUrl) ?>).then(() => {
+             navigator.clipboard.writeText(<?= htmlspecialchars(json_encode($shareUrl), ENT_QUOTES, 'UTF-8') ?>).then(() => {
                this.copied = true; setTimeout(() => this.copied = false, 1600);
              });
            } }">

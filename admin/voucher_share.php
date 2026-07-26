@@ -3,6 +3,30 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 require_staff_or_admin();
 $pageTitle = 'Share a gift voucher';
 
+// Save the editable message template. POST-only + CSRF; leaves
+// the URL query params (?code=, ?event_id=) alone so the admin
+// stays on the same voucher after save.
+if (is_post()) {
+    csrf_verify();
+    if ((string) input('action', '') === 'save_template') {
+        // Bypass input() (which would trim the trailing blank lines
+        // that make the message read nicely). Cap length as a light
+        // guard; anything over 4KB is definitely not a message.
+        $tpl = is_string($_POST['voucher_share_message'] ?? null)
+            ? substr((string) $_POST['voucher_share_message'], 0, 4000)
+            : '';
+        set_setting('voucher_share_message', $tpl, 'text');
+        audit_log('voucher_share.template.update', 'site_settings', null);
+        flash('vshare', 'Message template saved.', 'success');
+    }
+    // Preserve the current voucher / event selection on redirect.
+    $qs = http_build_query(array_filter([
+        'code'     => (string) input('code', ''),
+        'event_id' => (int) input('event_id', 0) ?: '',
+    ]));
+    redirect('/admin/voucher_share.php' . ($qs ? '?' . $qs : ''));
+}
+
 $codeInput = strtoupper(trim((string) input('code', '')));
 $eventIdIn = (int) input('event_id', 0);
 
@@ -59,13 +83,29 @@ $qrImageUrl = $shareUrl !== ''
 $recipient = $voucher ? trim((string) ($voucher['recipient_name'] ?? '')) : '';
 $greetingName = $recipient !== '' ? $recipient : 'friend';
 
-$waTextEnc = $voucher
-    ? rawurlencode(
-        'Hi ' . $greetingName . ' — a small gift from ' . brand_name() . '. ' .
-        'Your voucher code is ' . (string) $voucher['code'] . ' (worth ' .
-        format_money((float) $voucher['amount']) . '). Redeem here: ' . $shareUrl
-    )
-    : '';
+// Editable message template. Placeholders get substituted at render
+// time; the raw template stays in site_settings so the admin's copy
+// choices survive across every voucher share.
+$messageTemplate = (string) setting(
+    'voucher_share_message',
+    "Hi {NAME} — a small gift from {BRAND}.\n\nYour voucher code is {CODE} (worth {AMOUNT}).\n\nRedeem here: {URL}\n\nWarm regards,\n{BRAND}"
+);
+$messageBody = '';
+if ($voucher) {
+    $expiryText = !empty($voucher['expires_at'])
+        ? format_datetime($voucher['expires_at'], 'd M Y')
+        : '';
+    $messageBody = strtr($messageTemplate, [
+        '{NAME}'   => $greetingName,
+        '{BRAND}'  => brand_name(),
+        '{CODE}'   => (string) $voucher['code'],
+        '{AMOUNT}' => format_money((float) $voucher['amount']),
+        '{URL}'    => $shareUrl,
+        '{EXPIRY}' => $expiryText,
+    ]);
+}
+
+$waTextEnc = $messageBody !== '' ? rawurlencode($messageBody) : '';
 
 require __DIR__ . '/../includes/admin_layout.php';
 ?>
@@ -163,7 +203,7 @@ require __DIR__ . '/../includes/admin_layout.php';
 
       <div class="rounded-2xl border border-white/10 bg-navy-950/60 p-4"
            x-data="{ copied: false, copy() {
-             navigator.clipboard.writeText(<?= json_encode($shareUrl) ?>).then(() => {
+             navigator.clipboard.writeText(<?= htmlspecialchars(json_encode($shareUrl), ENT_QUOTES, 'UTF-8') ?>).then(() => {
                this.copied = true; setTimeout(() => this.copied = false, 1600);
              });
            } }">
@@ -174,28 +214,37 @@ require __DIR__ . '/../includes/admin_layout.php';
           </button>
           <a href="https://wa.me/?text=<?= $waTextEnc ?>" target="_blank" rel="noopener"
              class="px-4 py-2 rounded-full border border-white/10 text-beige-100/85 text-sm hover:border-gold-500/40 hover:text-gold-400">WhatsApp</a>
-          <a href="mailto:<?= e((string) ($voucher['recipient_email'] ?? '')) ?>?subject=<?= rawurlencode('A gift from ' . brand_name()) ?>&body=<?= rawurlencode('Hi ' . $greetingName . ",\n\nA small gift from " . brand_name() . '.\n\nYour voucher code is ' . $voucher['code'] . ' (worth ' . format_money((float) $voucher['amount']) . ").\n\nRedeem here: " . $shareUrl . "\n\nWarm regards,\n" . brand_name()) ?>"
+          <a href="mailto:<?= e((string) ($voucher['recipient_email'] ?? '')) ?>?subject=<?= rawurlencode('A gift from ' . brand_name()) ?>&body=<?= rawurlencode($messageBody) ?>"
              class="px-4 py-2 rounded-full border border-white/10 text-beige-100/85 text-sm hover:border-gold-500/40 hover:text-gold-400">Email<?= !empty($voucher['recipient_email']) ? ' →' : '' ?></a>
           <a href="<?= e($shareUrl) ?>" target="_blank" rel="noopener"
              class="px-4 py-2 rounded-full border border-white/10 text-beige-100/60 text-sm hover:border-gold-500/40 hover:text-gold-400">Preview →</a>
         </div>
       </div>
 
+      <!-- Preview of the message with placeholders substituted. This
+           is exactly what the WhatsApp / Email buttons above will
+           send. Updates live when the template below is saved. -->
       <div class="rounded-2xl border border-white/10 bg-navy-950/40 p-5">
         <p class="text-[10px] uppercase tracking-widest text-gold-400/80">Ready-to-paste message</p>
-        <pre class="mt-3 whitespace-pre-wrap text-sm text-beige-100/85 font-sans leading-relaxed">Hi <?= e($greetingName) ?> — a small gift from <?= e(brand_name()) ?>.
-
-Your voucher code is <?= e($voucher['code']) ?> (worth <?= e(format_money((float) $voucher['amount'])) ?>).
-
-Redeem here: <?= e($shareUrl) ?><?php if (!empty($voucher['expires_at'])): ?>
-
-
-Valid until <?= e(format_datetime($voucher['expires_at'], 'd M Y')) ?>.<?php endif; ?>
-
-
-Warm regards,
-<?= e(brand_name()) ?></pre>
+        <pre class="mt-3 whitespace-pre-wrap text-sm text-beige-100/85 font-sans leading-relaxed"><?= e($messageBody) ?></pre>
       </div>
+
+      <!-- Editable template. Saves back to site_settings so every
+           subsequent voucher share uses the new copy. Placeholders
+           in {CURLY_BRACES} are substituted at send time. -->
+      <form method="post" class="rounded-2xl border border-gold-500/20 bg-gold-500/5 p-5">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="save_template">
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <p class="text-[10px] uppercase tracking-widest text-gold-400/80">Message template · edit &amp; save</p>
+            <p class="text-[11px] text-beige-100/50 mt-1">Placeholders substitute per-voucher when sending: <code class="text-gold-400/85">{NAME}</code> <code class="text-gold-400/85">{BRAND}</code> <code class="text-gold-400/85">{CODE}</code> <code class="text-gold-400/85">{AMOUNT}</code> <code class="text-gold-400/85">{URL}</code> <code class="text-gold-400/85">{EXPIRY}</code></p>
+          </div>
+        </div>
+        <textarea name="voucher_share_message" rows="10"
+                  class="mt-3 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3 text-sm text-beige-100 font-sans leading-relaxed"><?= e($messageTemplate) ?></textarea>
+        <button class="mt-3 px-5 py-2 rounded-full bg-gold-500 text-navy-950 text-sm font-medium hover:bg-gold-400">Save template</button>
+      </form>
     </div>
 
     <div class="text-center">
