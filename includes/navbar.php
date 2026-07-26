@@ -32,6 +32,37 @@ $firstName = $user ? trim(explode(' ', (string) $user['full_name'])[0]) : '';
 
     <!-- Account / CTA (md and up) -->
     <div class="hidden md:flex items-center gap-3">
+      <!-- Theme toggle — one-tap flip between dark and light. POSTs
+           the opposite theme; the server sets sh-theme cookie and
+           redirects back to the current URL so the next render picks
+           it up. -->
+      <?php
+        $currentTheme = ($_COOKIE['sh-theme'] ?? '') !== ''
+            ? (string) $_COOKIE['sh-theme']
+            : (string) setting('site_theme', 'dark');
+        if (!in_array($currentTheme, ['dark','light'], true)) $currentTheme = 'dark';
+        $flipTo = $currentTheme === 'dark' ? 'light' : 'dark';
+        $currentPath = (string) ($_SERVER['REQUEST_URI'] ?? '/');
+      ?>
+      <form method="post" action="<?= url('/public/theme.php') ?>" class="inline">
+        <?= csrf_field() ?>
+        <input type="hidden" name="theme" value="<?= e($flipTo) ?>">
+        <input type="hidden" name="next"  value="<?= e($currentPath) ?>">
+        <button type="submit" title="Switch to <?= e($flipTo) ?> theme"
+                aria-label="Switch to <?= e($flipTo) ?> theme"
+                class="p-2 rounded-full text-beige-100/70 hover:text-gold-400 hover:bg-white/5 transition">
+          <?php if ($currentTheme === 'dark'): // show sun (offers switch to light) ?>
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="4"/>
+              <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>
+            </svg>
+          <?php else: // show moon (offers switch to dark) ?>
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+            </svg>
+          <?php endif; ?>
+        </button>
+      </form>
       <?php if ($user): ?>
         <div class="relative" @click.outside="account = false">
           <button type="button" @click="account = !account"
@@ -98,6 +129,22 @@ $firstName = $user ? trim(explode(' ', (string) $user['full_name'])[0]) : '';
             <a href="<?= url('/public/login.php') ?>"    class="text-beige-100/90">Sign in</a>
             <a href="<?= url('/public/register.php') ?>" class="text-gold-400">Begin journey</a>
           <?php endif; ?>
+
+          <!-- Mobile theme toggle. Same POST as the desktop button. -->
+          <form method="post" action="<?= url('/public/theme.php') ?>" class="pt-2 border-t border-white/5">
+            <?= csrf_field() ?>
+            <input type="hidden" name="theme" value="<?= e($flipTo) ?>">
+            <input type="hidden" name="next"  value="<?= e($currentPath) ?>">
+            <button type="submit" class="text-beige-100/85 text-left flex items-center gap-2">
+              <?php if ($currentTheme === 'dark'): ?>
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+                Switch to light theme
+              <?php else: ?>
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+                Switch to dark theme
+              <?php endif; ?>
+            </button>
+          </form>
         </div>
       </div>
     </div>

@@ -42,6 +42,13 @@ if (is_post()) {
     set_setting('home_story_enabled', !empty($_POST['home_story_enabled']) ? '1' : '0', 'bool');
     set_setting('home_video_enabled', !empty($_POST['home_video_enabled']) ? '1' : '0', 'bool');
 
+    // Site theme default. Individual visitors can still override via
+    // the navbar toggle (persisted in the sh-theme cookie); this is
+    // only the fallback when a visitor hasn't chosen one.
+    $themeIn = (string) input('site_theme', 'dark');
+    if (!in_array($themeIn, ['dark','light'], true)) $themeIn = 'dark';
+    set_setting('site_theme', $themeIn, 'string');
+
     // File uploads → /uploads/home/...
     foreach ([
         ['hero_image_path_file', 'hero_image_path'],
@@ -136,6 +143,44 @@ function media_block(string $key, string $label, string $accept, string $type = 
 
 <form method="post" enctype="multipart/form-data" action="<?= url('/admin/home_settings.php') ?>" class="mt-8 space-y-10 max-w-4xl">
   <?= csrf_field() ?>
+
+  <!-- Site theme default. Visitors can still flip via the navbar
+       toggle — the cookie wins over this setting. -->
+  <?php $currentTheme = (string) setting('site_theme', 'dark'); ?>
+  <section class="border border-white/5 rounded-3xl p-6 bg-navy-900/40 space-y-5">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div>
+        <h2 class="font-serif text-2xl text-gold-400">Site theme</h2>
+        <p class="text-[11px] text-beige-100/45 mt-1">The default palette new visitors see. Anyone can still flip their own view via the sun / moon toggle in the top nav.</p>
+      </div>
+    </div>
+    <div class="grid sm:grid-cols-2 gap-4">
+      <label class="cursor-pointer">
+        <input type="radio" name="site_theme" value="dark" <?= $currentTheme === 'dark' ? 'checked' : '' ?> class="peer sr-only">
+        <div class="rounded-2xl border border-white/10 p-5 flex items-center gap-4 peer-checked:border-gold-500/50 peer-checked:bg-gold-500/10 hover:border-gold-500/30 transition">
+          <div class="w-16 h-12 rounded-lg bg-[#0a1027] border border-white/10 flex items-center justify-center">
+            <span class="text-[10px] uppercase tracking-widest text-[#c9a46a]">Sound</span>
+          </div>
+          <div>
+            <p class="text-beige-100">Dark</p>
+            <p class="text-[11px] text-beige-100/50 mt-1">Navy base with cream text. The original.</p>
+          </div>
+        </div>
+      </label>
+      <label class="cursor-pointer">
+        <input type="radio" name="site_theme" value="light" <?= $currentTheme === 'light' ? 'checked' : '' ?> class="peer sr-only">
+        <div class="rounded-2xl border border-white/10 p-5 flex items-center gap-4 peer-checked:border-gold-500/50 peer-checked:bg-gold-500/10 hover:border-gold-500/30 transition">
+          <div class="w-16 h-12 rounded-lg bg-[#faf5ea] border border-black/10 flex items-center justify-center">
+            <span class="text-[10px] uppercase tracking-widest text-[#a67d3b]">Sound</span>
+          </div>
+          <div>
+            <p class="text-beige-100">Light</p>
+            <p class="text-[11px] text-beige-100/50 mt-1">Warm cream base with deep navy text.</p>
+          </div>
+        </div>
+      </label>
+    </div>
+  </section>
 
   <section class="border border-white/5 rounded-3xl p-6 bg-navy-900/40 space-y-5">
     <h2 class="font-serif text-2xl text-gold-400">Hero</h2>
