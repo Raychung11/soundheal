@@ -66,8 +66,11 @@ if (is_post()) {
                     ]
                 );
             }
-            flash('gv', 'Issued voucher ' . $code . '.', 'success');
-            redirect('/admin/gift_vouchers.php');
+            flash('gv', 'Issued voucher ' . $code . '. Share link ready below.', 'success');
+            // Jump straight to the share panel for this new voucher —
+            // "one click, get the share link" instead of fishing through
+            // the list.
+            redirect('/admin/voucher_share.php?code=' . rawurlencode($code));
         }
     } elseif ($action === 'revoke') {
         $id = (int) input('id', 0);
@@ -235,6 +238,8 @@ require __DIR__ . '/../includes/admin_layout.php';
           </td>
           <td class="text-beige-100/60 text-xs"><?= $v['expires_at'] ? e(format_datetime($v['expires_at'], 'd M Y')) : '—' ?></td>
           <td class="text-right pr-4 whitespace-nowrap">
+            <a href="<?= url('/admin/voucher_share.php?code=' . rawurlencode((string) $v['code'])) ?>"
+               class="text-xs text-gold-400/85 hover:text-gold-300 mr-3">Share →</a>
             <?php if ($v['status'] === 'issued'): ?>
               <?php if (!empty($v['recipient_email'])): ?>
                 <form method="post" class="inline">
