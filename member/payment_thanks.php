@@ -73,6 +73,12 @@ if ($payment) {
         );
         $r->execute([':id' => $payment['reference_id']]);
         $ref = $r->fetch() ?: null;
+    } elseif ($payment['purpose'] === 'order') {
+        $r = db()->prepare(
+            "SELECT order_ref, total, status AS o_status, has_preorder FROM orders WHERE id = :id LIMIT 1"
+        );
+        $r->execute([':id' => $payment['reference_id']]);
+        $ref = $r->fetch() ?: null;
     }
 }
 
@@ -129,6 +135,15 @@ require __DIR__ . '/../includes/header.php';
         <p class="text-sm text-beige-100/70 mt-1 capitalize"><?= e($ref['billing_cycle']) ?> · renews <?= e(format_datetime($ref['expires_at'], 'd M Y')) ?></p>
         <a href="<?= url('/member/my_membership.php') ?>"
            class="mt-6 inline-block px-5 py-3 rounded-full bg-gold-500 text-navy-950 text-sm font-medium hover:bg-gold-400 transition">Manage membership →</a>
+      <?php elseif ($ref && $payment['purpose'] === 'order'): ?>
+        <p class="text-[11px] uppercase tracking-[0.3em] text-gold-400/80">Your order</p>
+        <h2 class="font-serif text-2xl text-beige-100 mt-2"><?= e((string)$ref['order_ref']) ?></h2>
+        <p class="text-sm text-beige-100/70 mt-1"><?= e(format_money((float)$ref['total'], (string)$payment['currency'])) ?></p>
+        <?php if ((int)$ref['has_preorder']): ?>
+          <p class="text-sm text-amber-300 mt-2">This order includes a pre-order piece — we'll message the moment it's ready to ship.</p>
+        <?php endif; ?>
+        <a href="<?= url('/member/my_orders.php') ?>"
+           class="mt-6 inline-block px-5 py-3 rounded-full bg-gold-500 text-navy-950 text-sm font-medium hover:bg-gold-400 transition">View your order →</a>
       <?php else: ?>
         <p class="text-sm text-beige-100/70">Reference: <span class="font-mono"><?= e($billId) ?></span></p>
       <?php endif; ?>

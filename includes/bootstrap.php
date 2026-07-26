@@ -53,6 +53,7 @@ require_once __DIR__ . '/gift_vouchers.php';
 require_once __DIR__ . '/payments.php';
 require_once __DIR__ . '/invoices.php';
 require_once __DIR__ . '/class_packs.php';
+require_once __DIR__ . '/products.php';
 require_once __DIR__ . '/revenue.php';
 require_once __DIR__ . '/events_recurrence.php';
 require_once __DIR__ . '/event_packages.php';

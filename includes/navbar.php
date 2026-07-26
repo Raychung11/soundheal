@@ -5,12 +5,14 @@ $brandTagline = (string) setting('company_tagline', (string) config('app.tagline
 $nav = [
     ['Experiences', '/public/experiences.php'],
     ['Sessions',    '/public/events.php'],
+    ['Shop',        '/public/shop.php'],
     ['Gallery',     '/public/gallery.php'],
     ['Partners',    '/public/partners.php'],
     ['Membership',  '/public/membership.php'],
     ['About',       '/public/about.php'],
     ['Contact',     '/public/contact.php'],
 ];
+$cartQty = function_exists('cart_count') ? cart_count() : 0;
 $firstName = $user ? trim(explode(' ', (string) $user['full_name'])[0]) : '';
 ?>
 <header class="border-b border-white/5 bg-navy-950/80 backdrop-blur sticky top-0 z-40">
@@ -32,6 +34,17 @@ $firstName = $user ? trim(explode(' ', (string) $user['full_name'])[0]) : '';
 
     <!-- Account / CTA (md and up) -->
     <div class="hidden md:flex items-center gap-3">
+      <!-- Cart chip: always visible on desktop nav, becomes gold when non-empty -->
+      <a href="<?= url('/public/cart.php') ?>" aria-label="Cart"
+         class="relative p-2 rounded-full text-beige-100/70 hover:text-gold-400 hover:bg-white/5 transition">
+        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 3h2l2.4 12.2A2 2 0 0 0 9.36 17H19a2 2 0 0 0 1.94-1.5L22.5 8H6"/>
+          <circle cx="10" cy="20" r="1.2"/><circle cx="18" cy="20" r="1.2"/>
+        </svg>
+        <?php if ($cartQty > 0): ?>
+          <span class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-gold-500 text-navy-950 text-[10px] font-medium flex items-center justify-center"><?= (int)$cartQty ?></span>
+        <?php endif; ?>
+      </a>
       <!-- Theme toggle — one-tap flip between dark and light. POSTs
            the opposite theme; the server sets sh-theme cookie and
            redirects back to the current URL so the next render picks
@@ -77,6 +90,7 @@ $firstName = $user ? trim(explode(' ', (string) $user['full_name'])[0]) : '';
             <a href="<?= url('/member/dashboard.php') ?>"      class="block px-3 py-2 rounded-lg text-sm text-beige-100/90 hover:bg-gold-500/10 hover:text-gold-400">My Sanctuary</a>
             <a href="<?= url('/member/content.php') ?>"        class="block px-3 py-2 rounded-lg text-sm text-beige-100/90 hover:bg-gold-500/10 hover:text-gold-400">Audio library</a>
             <a href="<?= url('/member/my_bookings.php') ?>"    class="block px-3 py-2 rounded-lg text-sm text-beige-100/90 hover:bg-gold-500/10 hover:text-gold-400">My bookings</a>
+            <a href="<?= url('/member/my_orders.php') ?>"      class="block px-3 py-2 rounded-lg text-sm text-beige-100/90 hover:bg-gold-500/10 hover:text-gold-400">My orders</a>
             <a href="<?= url('/member/my_credits.php') ?>"     class="block px-3 py-2 rounded-lg text-sm text-beige-100/90 hover:bg-gold-500/10 hover:text-gold-400">Class packs</a>
             <a href="<?= url('/member/invoices.php') ?>"       class="block px-3 py-2 rounded-lg text-sm text-beige-100/90 hover:bg-gold-500/10 hover:text-gold-400">Invoices &amp; receipts</a>
             <a href="<?= url('/member/refer.php') ?>"          class="block px-3 py-2 rounded-lg text-sm text-beige-100/90 hover:bg-gold-500/10 hover:text-gold-400">Refer a friend</a>
@@ -109,11 +123,15 @@ $firstName = $user ? trim(explode(' ', (string) $user['full_name'])[0]) : '';
         <?php foreach ($nav as [$label, $path]): ?>
           <a href="<?= url($path) ?>" class="text-beige-100/90"><?= e($label) ?></a>
         <?php endforeach; ?>
+        <a href="<?= url('/public/cart.php') ?>" class="text-beige-100/90 flex items-center gap-2">
+          Cart <?php if ($cartQty > 0): ?><span class="min-w-[18px] h-[18px] px-1 rounded-full bg-gold-500 text-navy-950 text-[10px] font-medium flex items-center justify-center"><?= (int)$cartQty ?></span><?php endif; ?>
+        </a>
         <div class="border-t border-white/5 pt-4 flex flex-col gap-4">
           <?php if ($user): ?>
             <a href="<?= url('/member/dashboard.php') ?>"   class="text-gold-400">My Sanctuary</a>
             <a href="<?= url('/member/content.php') ?>"    class="text-beige-100/90">Audio library</a>
             <a href="<?= url('/member/my_bookings.php') ?>" class="text-beige-100/90">My bookings</a>
+            <a href="<?= url('/member/my_orders.php') ?>"   class="text-beige-100/90">My orders</a>
             <a href="<?= url('/member/my_credits.php') ?>"  class="text-beige-100/90">Class packs</a>
             <a href="<?= url('/member/invoices.php') ?>"    class="text-beige-100/90">Invoices &amp; receipts</a>
             <a href="<?= url('/member/refer.php') ?>"      class="text-beige-100/90">Refer a friend</a>

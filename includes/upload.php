@@ -15,6 +15,7 @@ const UPLOAD_BUCKETS = [
     'gallery'      => ['max' => 8_000_000, 'mimes' => ['image/jpeg','image/png','image/webp']],
     'avatars'      => ['max' => 2_000_000, 'mimes' => ['image/jpeg','image/png','image/webp']],
     'partners'     => ['max' => 5_000_000, 'mimes' => ['image/jpeg','image/png','image/webp']],
+    'products'     => ['max' => 5_000_000, 'mimes' => ['image/jpeg','image/png','image/webp']],
     'home'         => ['max' => 8_000_000, 'mimes' => ['image/jpeg','image/png','image/webp','audio/mpeg','audio/mp4','audio/wav','audio/x-wav','audio/ogg']],
 ];
 

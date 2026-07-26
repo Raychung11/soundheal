@@ -18,6 +18,7 @@ function render_mail_template(string $name, array $vars): array
         'gift_voucher_issued'  => 'mail_template_gift_voucher_issued',
         'contact_received'=> 'mail_template_contact_received',
         'corporate_lead'  => 'mail_template_corporate_lead',
+        'order_confirm'   => 'mail_template_order_confirm',
     ];
     $fn = $renderers[$name] ?? null;
     if (!$fn || !function_exists($fn)) {
@@ -261,6 +262,36 @@ function mail_template_contact_received(array $v): array
 <p style="color:rgba(246,239,229,0.6);">In the meantime, breathe slowly and softly.</p>
 HTML;
     return [mail_layout('We received your note.', $body), "Hi {$name}, we received your note and will reply within two working days."];
+}
+
+function mail_template_order_confirm(array $v): array
+{
+    $ref     = e($v['order_ref'] ?? '');
+    $total   = e($v['total'] ?? '');
+    $summary = trim((string) ($v['summary'] ?? ''));
+    $url     = e($v['app_url']);
+    $isPre   = !empty($v['preorder']);
+
+    $summaryHtml = $summary !== ''
+        ? '<pre style="font-family:Inter,Arial,sans-serif;font-size:14px;line-height:1.7;color:rgba(246,239,229,0.85);background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px 16px;white-space:pre-wrap;margin:20px 0;">' . e($summary) . '</pre>'
+        : '';
+    $preHtml = $isPre
+        ? '<p style="color:rgba(231,210,163,0.9);font-size:14px;">This order includes a pre-order piece. We\'ll message the moment it\'s ready to ship.</p>'
+        : '<p style="color:rgba(246,239,229,0.7);font-size:14px;">We\'ll pack and dispatch within the next working day.</p>';
+
+    $body = <<<HTML
+<p style="font-family:Georgia,'Cormorant Garamond',serif;font-size:22px;color:#e7d2a3;">Order received — thank you.</p>
+<p>Your order <strong style="color:#e7d2a3;">{$ref}</strong> is safely with us.</p>
+{$summaryHtml}
+<p style="font-size:15px;">Total paid: <strong style="color:#e7d2a3;">{$total}</strong></p>
+{$preHtml}
+<p style="margin:24px 0;">
+  <a href="{$url}/member/my_orders.php" style="display:inline-block;background:#c9a46a;color:#0a1027;padding:14px 28px;border-radius:999px;text-decoration:none;font-family:Inter,Arial,sans-serif;font-weight:500;">View your order</a>
+</p>
+<p style="color:rgba(246,239,229,0.65);">Held with care.</p>
+HTML;
+    $text = "Order {$ref} received. Total: {$total}.\n\n" . $summary;
+    return [mail_layout('Order received — thank you.', $body), $text];
 }
 
 function mail_template_corporate_lead(array $v): array

@@ -24,6 +24,10 @@ $adminNav = [
         ['Members',            '/admin/members.php'],
         ['Marketing',          '/admin/marketing.php'],
     ],
+    'Shop' => [
+        ['Products',           '/admin/products.php'],
+        ['Orders',             '/admin/orders.php'],
+    ],
     'Money' => [
         ['Payments',           '/admin/payments.php'],
         ['Invoices',           '/admin/invoices.php'],

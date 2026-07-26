@@ -128,6 +128,77 @@ if (!function_exists('settle_payment')) {
             if (function_exists('grant_pack_credits')) {
                 grant_pack_credits((int) $payment['reference_id']);
             }
+        } elseif ($payment['purpose'] === 'order') {
+            // Only decrement stock on the first settle. An order that
+            // was already flipped past 'pending' has had its stock
+            // decremented; a duplicate webhook call must not re-decrement.
+            $chk = db()->prepare(
+                "SELECT status, has_preorder FROM orders WHERE id = :id LIMIT 1"
+            );
+            $chk->execute([':id' => $payment['reference_id']]);
+            $order = $chk->fetch();
+            if ($order && $order['status'] === 'pending') {
+                $newStatus = (int) $order['has_preorder'] ? 'preorder' : 'paid';
+                db()->prepare(
+                    "UPDATE orders
+                        SET status = :s,
+                            payment_id = :p,
+                            paid_at = COALESCE(paid_at, NOW())
+                      WHERE id = :id"
+                )->execute([
+                    ':s'  => $newStatus,
+                    ':p'  => $paymentId,
+                    ':id' => (int) $payment['reference_id'],
+                ]);
+                if (function_exists('decrement_stock_for_order')) {
+                    decrement_stock_for_order((int) $payment['reference_id']);
+                }
+
+                // Issue an invoice + fire order confirmation email.
+                if (function_exists('issue_invoice') && function_exists('order_get')
+                    && function_exists('build_order_line_items')) {
+                    $orderRow = order_get((int) $payment['reference_id'], 0);
+                    if ($orderRow) {
+                        $lineItems = build_order_line_items($orderRow);
+                        if ($lineItems) {
+                            issue_invoice(
+                                (int) $payment['user_id'],
+                                'order',
+                                (int) $payment['reference_id'],
+                                $lineItems,
+                                (float) ($orderRow['tax'] ?? 0),
+                                (string) ($orderRow['currency'] ?? 'MYR')
+                            );
+                        }
+                        if (function_exists('send_mail')) {
+                            $u = db()->prepare("SELECT email, full_name FROM users WHERE id = :u");
+                            $u->execute([':u' => (int) $payment['user_id']]);
+                            $usr = $u->fetch();
+                            if ($usr) {
+                                $summary = [];
+                                foreach ($orderRow['items'] as $it) {
+                                    $summary[] = (int) $it['quantity'] . ' × ' . $it['title_snapshot']
+                                        . ((int) $it['is_preorder']
+                                            ? ' (pre-order' . ($it['preorder_eta'] ? ': ' . $it['preorder_eta'] : '') . ')'
+                                            : '');
+                                }
+                                send_mail(
+                                    (string) $usr['email'],
+                                    (string) $usr['full_name'],
+                                    'Order received · ' . $orderRow['order_ref'],
+                                    'order_confirm',
+                                    [
+                                        'order_ref' => $orderRow['order_ref'],
+                                        'total'     => format_money((float) $orderRow['total'], (string) $orderRow['currency']),
+                                        'summary'   => implode("\n", $summary),
+                                        'preorder'  => (int) $orderRow['has_preorder'] ? 1 : 0,
+                                    ]
+                                );
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Emit the receipt (and mark the matching invoice paid). Idempotent.

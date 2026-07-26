@@ -41,6 +41,15 @@ if ($purpose === 'booking') {
     $snap   = json_decode((string) ($entity['pack_snapshot'] ?? '{}'), true) ?: [];
     $amount = (float) ($snap['price'] ?? 0);
     $description = 'Class pack · ' . $entity['pack_name'];
+} elseif ($purpose === 'order') {
+    $stmt = db()->prepare(
+        "SELECT * FROM orders WHERE id = :id AND user_id = :u AND status = 'pending' LIMIT 1"
+    );
+    $stmt->execute([':id' => $ref, ':u' => $user['id']]);
+    $entity = $stmt->fetch();
+    if (!$entity) { http_response_code(404); exit('Order not found.'); }
+    $amount = (float) $entity['total'];
+    $description = 'Order ' . $entity['order_ref'];
 } else {
     http_response_code(400); exit('Unknown purpose.');
 }
@@ -74,6 +83,7 @@ if (!$cfg['api_key'] || !$cfg['collection_id']) {
     $demoRedirect = match ($purpose) {
         'membership' => '/member/my_membership.php',
         'class_pack' => '/member/my_credits.php',
+        'order'      => '/member/my_orders.php',
         default      => '/member/my_bookings.php',
     };
     redirect($demoRedirect);
@@ -113,7 +123,13 @@ if ($httpCode >= 200 && $httpCode < 300 && $response) {
 }
 
 flash('payment', 'We could not start your payment. Please try again or contact support.', 'error');
-redirect('/member/my_bookings.php');
+$failRedirect = match ($purpose) {
+    'membership' => '/member/my_membership.php',
+    'class_pack' => '/member/my_credits.php',
+    'order'      => '/member/my_orders.php',
+    default      => '/member/my_bookings.php',
+};
+redirect($failRedirect);
 
 // settle_payment() now lives in includes/payments.php and is auto-loaded
 // via bootstrap, so admin + member-side callers can reuse it without
