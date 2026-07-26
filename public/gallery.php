@@ -175,22 +175,27 @@ require __DIR__ . '/../includes/header.php';
 
     <p x-show="!visible.length" x-cloak class="mt-16 text-center text-beige-100/55 italic">No photos in this category yet.</p>
 
-    <!-- Lightbox. Arrow keys / swipe to move, Escape to close. -->
+    <!-- Lightbox. Arrow keys / swipe / Escape / backdrop-tap / X
+         button all close it. Body scroll is locked by a $watch so
+         it releases regardless of how the box closes. -->
     <div x-show="lightbox !== null" x-cloak x-transition.opacity
          class="fixed inset-0 z-50 bg-navy-950/95 backdrop-blur flex flex-col"
          @keydown.escape.window="close()"
          @keydown.arrow-left.window="prev()"
-         @keydown.arrow-right.window="next()">
+         @keydown.arrow-right.window="next()"
+         @click.self="close()">
       <div class="flex items-center justify-between p-4 sm:p-6">
         <p class="text-xs uppercase tracking-widest text-beige-100/50">
           <span x-text="(lightbox ?? 0) + 1"></span> / <span x-text="visible.length"></span>
         </p>
-        <button type="button" @click="close()" aria-label="Close"
-                class="p-2 rounded-full border border-white/10 text-beige-100/70 hover:border-gold-500/40 hover:text-gold-400 transition">
-          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        <button type="button" @click="close()" aria-label="Close (Esc)"
+                class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-navy-950/70 border border-white/20 text-beige-100 hover:bg-gold-500 hover:text-navy-950 hover:border-gold-500 transition text-sm font-medium">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          <span>Close</span>
         </button>
       </div>
-      <div class="flex-1 flex items-center justify-center px-4 sm:px-8 pb-6 relative">
+      <div class="flex-1 flex items-center justify-center px-4 sm:px-8 pb-6 relative"
+           @click.self="close()">
         <button type="button" @click="prev()" aria-label="Previous"
                 class="hidden sm:flex absolute left-4 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full border border-white/10 text-beige-100/70 hover:border-gold-500/40 hover:text-gold-400 items-center justify-center transition">
           <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m15 6-6 6 6 6"/></svg>
@@ -263,19 +268,24 @@ function galleryPage(all, deepLinkId) {
     lightbox: null,
     copyState: '',
     init() {
+      // Body-scroll lock lives on a $watch so it always releases
+      // when the lightbox closes — no matter which path (X button,
+      // backdrop tap, Escape key, or Alpine state reset). The old
+      // manual .style.overflow toggle inside openAt/close was fragile
+      // and could leave the page stuck if any branch missed it.
+      this.$watch('lightbox', v => {
+        document.body.style.overflow = (v === null) ? '' : 'hidden';
+      });
       // Deep-link ?item=<id> — auto-open the matching photo in the
       // lightbox so someone arriving via a shared WhatsApp / Facebook
       // link lands directly on the moment that was shared instead of
       // the top of the grid.
-      if (!deepLinkId) return;
-      const idx = (this.all || []).findIndex(p => Number(p.id) === Number(deepLinkId));
-      if (idx >= 0) {
-        this.$nextTick(() => this.openAt(idx));
+      if (deepLinkId) {
+        const idx = (this.all || []).findIndex(p => Number(p.id) === Number(deepLinkId));
+        if (idx >= 0) this.$nextTick(() => this.openAt(idx));
       }
     },
     get visible() {
-      // Combined filter — experience AND category. Both empty = show
-      // everything.
       return this.all.filter(p => {
         if (this.activeExp && p.experience_id !== this.activeExp) return false;
         if (this.activeCat && p.category !== this.activeCat) return false;
@@ -283,8 +293,8 @@ function galleryPage(all, deepLinkId) {
       });
     },
     get current() { return this.lightbox === null ? null : this.visible[this.lightbox] || null; },
-    openAt(i)  { this.lightbox = i; document.body.style.overflow = 'hidden'; },
-    close()    { this.lightbox = null; document.body.style.overflow = ''; this.copyState = ''; },
+    openAt(i)  { this.lightbox = i; },
+    close()    { this.lightbox = null; this.copyState = ''; },
     prev()     { if (this.lightbox === null) return; this.lightbox = (this.lightbox - 1 + this.visible.length) % this.visible.length; this.copyState = ''; },
     next()     { if (this.lightbox === null) return; this.lightbox = (this.lightbox + 1) % this.visible.length; this.copyState = ''; },
     async copyLink() {
