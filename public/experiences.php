@@ -62,24 +62,27 @@ require __DIR__ . '/../includes/header.php';
       <?php foreach ($experiences as $exp): ?>
         <article class="group relative border border-white/5 rounded-3xl bg-navy-900/40 hover:border-gold-500/30 hover:bg-navy-900/70 transition overflow-hidden flex flex-col">
           <?php if (!empty($exp['cover_image'])): ?>
-            <div class="relative aspect-[16/10] overflow-hidden">
+            <div class="relative aspect-[4/3] overflow-hidden">
               <img src="<?= e(str_starts_with((string)$exp['cover_image'], '/') ? url($exp['cover_image']) : $exp['cover_image']) ?>"
                    alt="<?= e($exp['title']) ?>"
                    loading="lazy"
                    class="w-full h-full object-cover transition duration-700 group-hover:scale-[1.03]">
-              <div class="absolute inset-0 bg-gradient-to-t from-navy-950/85 via-navy-950/20 to-transparent"></div>
+              <!-- Subtle bottom-only fade for card-edge legibility.
+                   Keeps most of the artwork untouched (no more blur /
+                   wash-out in light theme). -->
+              <div class="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-navy-950/50 to-transparent pointer-events-none"></div>
             </div>
           <?php endif; ?>
-          <div class="relative p-8 flex-1 flex flex-col">
+          <div class="relative p-5 flex-1 flex flex-col">
             <?php if (empty($exp['cover_image'])): ?>
               <div class="absolute -right-16 -top-16 w-48 h-48 rounded-full border border-gold-500/10 group-hover:border-gold-500/20 transition"></div>
             <?php endif; ?>
             <?php if (!empty($exp['duration'])): ?>
               <p class="text-[11px] uppercase tracking-[0.3em] text-gold-400/70"><?= e($exp['duration']) ?></p>
             <?php endif; ?>
-            <h3 class="font-serif text-3xl text-gold-400 mt-3"><?= e($exp['title']) ?></h3>
+            <h3 class="font-serif text-2xl text-gold-400 mt-2 leading-tight"><?= e($exp['title']) ?></h3>
             <?php if (!empty($exp['description'])): ?>
-              <div class="mt-5 text-beige-100/70 text-sm space-y-3">
+              <div class="mt-3 text-beige-100/70 text-sm leading-relaxed line-clamp-3">
                 <?= render_rich_text((string) $exp['description']) ?>
               </div>
             <?php endif; ?>
@@ -93,7 +96,7 @@ require __DIR__ . '/../includes/header.php';
               $nextLine = $nxt ? format_datetime($nxt['starts_at'], 'D, d M Y · g:i A') : '';
             ?>
 
-            <div class="mt-8 pt-5 border-t border-white/5 flex items-center justify-between gap-3">
+            <div class="mt-4 pt-3 border-t border-white/5 flex items-center justify-between gap-3">
               <div class="min-w-0">
                 <?php if ($nextLine !== ''): ?>
                   <p class="text-[10px] uppercase tracking-[0.25em] text-beige-100/45">Next session</p>
@@ -104,12 +107,12 @@ require __DIR__ . '/../includes/header.php';
               </div>
               <?php if ($nxt): ?>
                 <a href="<?= url($reserveUrl) ?>"
-                   class="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gold-500 text-navy-950 text-sm font-medium hover:bg-gold-400 transition">
+                   class="shrink-0 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-gold-500 text-navy-950 text-xs font-medium hover:bg-gold-400 transition">
                   Reserve →
                 </a>
               <?php else: ?>
                 <a href="<?= url('/public/contact.php') ?>"
-                   class="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full border border-gold-500/40 text-gold-400 text-sm hover:bg-gold-500/10 transition">
+                   class="shrink-0 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-gold-500/40 text-gold-400 text-xs hover:bg-gold-500/10 transition">
                   Notify me
                 </a>
               <?php endif; ?>
