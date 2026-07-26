@@ -16,24 +16,24 @@ $cartQty = function_exists('cart_count') ? cart_count() : 0;
 $firstName = $user ? trim(explode(' ', (string) $user['full_name'])[0]) : '';
 ?>
 <header class="border-b border-white/5 bg-navy-950/80 backdrop-blur sticky top-0 z-40">
-  <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-6" x-data="{ open: false, account: false }">
+  <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-4" x-data="{ open: false, account: false }">
     <!-- Brand -->
-    <a href="<?= url('/public/index.php') ?>" class="flex items-center gap-3 min-w-0">
+    <a href="<?= url('/public/index.php') ?>" class="flex items-center gap-3 min-w-0 shrink-0">
       <span class="font-serif text-2xl text-gold-400 tracking-wide whitespace-nowrap"><?= e($brandName) ?></span>
       <?php if ($brandTagline !== ''): ?>
-        <span class="hidden xl:inline text-[10px] uppercase tracking-[0.3em] text-beige-200/60 whitespace-nowrap"><?= e($brandTagline) ?></span>
+        <span class="hidden 2xl:inline text-[10px] uppercase tracking-[0.3em] text-beige-200/60 whitespace-nowrap"><?= e($brandTagline) ?></span>
       <?php endif; ?>
     </a>
 
-    <!-- Primary nav (md and up) -->
-    <nav class="hidden md:flex items-center gap-6 lg:gap-8 text-sm">
+    <!-- Primary nav (lg and up) -->
+    <nav class="hidden lg:flex items-center gap-5 xl:gap-7 text-sm">
       <?php foreach ($nav as [$label, $path]): ?>
         <a href="<?= url($path) ?>" class="text-beige-100/80 hover:text-gold-400 transition whitespace-nowrap"><?= e($label) ?></a>
       <?php endforeach; ?>
     </nav>
 
-    <!-- Account / CTA (md and up) -->
-    <div class="hidden md:flex items-center gap-3">
+    <!-- Account / CTA (lg and up) -->
+    <div class="hidden lg:flex items-center gap-2 shrink-0">
       <!-- Cart chip: always visible on desktop nav, becomes gold when non-empty -->
       <a href="<?= url('/public/cart.php') ?>" aria-label="Cart"
          class="relative p-2 rounded-full text-beige-100/70 hover:text-gold-400 hover:bg-white/5 transition">
@@ -107,18 +107,32 @@ $firstName = $user ? trim(explode(' ', (string) $user['full_name'])[0]) : '';
           </div>
         </div>
       <?php else: ?>
-        <a href="<?= url('/public/login.php') ?>"    class="text-sm text-beige-100/80 hover:text-gold-400 whitespace-nowrap">Sign in</a>
-        <a href="<?= url('/public/register.php') ?>" class="px-4 py-2 rounded-full bg-gold-500 text-navy-950 text-sm font-medium hover:bg-gold-400 transition whitespace-nowrap">Begin journey</a>
+        <a href="<?= url('/public/login.php') ?>"    class="text-sm text-beige-100/80 hover:text-gold-400 whitespace-nowrap px-2">Sign in</a>
+        <a href="<?= url('/public/register.php') ?>" class="px-3.5 py-2 rounded-full bg-gold-500 text-navy-950 text-sm font-medium hover:bg-gold-400 transition whitespace-nowrap">Begin journey</a>
       <?php endif; ?>
     </div>
 
-    <!-- Mobile toggle -->
-    <button class="md:hidden text-beige-100 -mr-2 p-2" @click="open = !open" aria-label="Menu">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 12h16M4 18h16"/></svg>
-    </button>
+    <!-- Compact toggles for md / below-lg: keep the cart reachable and
+         show the hamburger for the full nav. Hidden once the desktop
+         row can fit at lg. -->
+    <div class="flex lg:hidden items-center gap-1">
+      <a href="<?= url('/public/cart.php') ?>" aria-label="Cart"
+         class="relative p-2 rounded-full text-beige-100/80 hover:text-gold-400 hover:bg-white/5 transition">
+        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 3h2l2.4 12.2A2 2 0 0 0 9.36 17H19a2 2 0 0 0 1.94-1.5L22.5 8H6"/>
+          <circle cx="10" cy="20" r="1.2"/><circle cx="18" cy="20" r="1.2"/>
+        </svg>
+        <?php if ($cartQty > 0): ?>
+          <span class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-gold-500 text-navy-950 text-[10px] font-medium flex items-center justify-center"><?= (int)$cartQty ?></span>
+        <?php endif; ?>
+      </a>
+      <button class="text-beige-100 -mr-2 p-2" @click="open = !open" aria-label="Menu">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+    </div>
 
     <!-- Mobile menu -->
-    <div x-show="open" x-cloak x-transition class="md:hidden absolute top-full left-0 right-0 bg-navy-900 border-b border-white/5">
+    <div x-show="open" x-cloak x-transition class="lg:hidden absolute top-full left-0 right-0 bg-navy-900 border-b border-white/5">
       <div class="px-6 py-5 flex flex-col gap-4">
         <?php foreach ($nav as [$label, $path]): ?>
           <a href="<?= url($path) ?>" class="text-beige-100/90"><?= e($label) ?></a>
