@@ -52,6 +52,7 @@ $adminNav = [
     ],
     'Settings' => [
         ['Payment settings',   '/admin/payment_settings.php'],
+        ['Sign-in providers',  '/admin/oauth_settings.php'],
         ['Mail settings',      '/admin/mail_settings.php'],
         ['Aria (AI)',          '/admin/ai_settings.php'],
     ],
