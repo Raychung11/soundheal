@@ -1,11 +1,22 @@
-# Deploying to Hostinger via Git Auto-Deploy
+# Deploying to Hostinger
 
-This project deploys with **Hostinger's built-in Git integration** — you push to GitHub, Hostinger pulls into `public_html/` automatically.
+Deploy is SSH-driven. After you push to GitHub you SSH into the
+Hostinger box and run `./deploy.sh`. The script fetches the latest
+code, fixes writable-directory permissions, and tells you if any new
+database migrations need applying.
 
-Two one-time setups are needed:
+One-time setup:
 
 1. A **SSH Deploy Key** so Hostinger can read a private GitHub repo.
-2. A **Webhook** so GitHub tells Hostinger when a new commit lands.
+2. Clone the repo into `~/domains/jaemiesoundbath.com/public_html`.
+
+After that, every deploy is just:
+
+```bash
+cd ~/domains/jaemiesoundbath.com/public_html
+./deploy.sh                # pull + chmod + list pending migrations
+./deploy.sh --migrate      # same, then also apply pending migrations
+```
 
 Everything below is a one-time setup unless the SSH key is ever rotated.
 
@@ -65,37 +76,40 @@ Deploy keys are per-repo and read-only by default, which is exactly what a pulle
 
 ---
 
-## 3 · Configure Hostinger's Git panel
+## 3 · Clone the repo into the docroot
 
-**Path in hPanel:** `Websites` → `Manage` on jaemiesoundbath.com → `Advanced` → `Git`.
+Hostinger's Git panel can do this for you, or you can do it by hand:
 
-- **Repository address:** `git@github.com:Raychung11/soundheal.git`
-- **Branch:** `main` (or `claude/setup-php-wellness-platform-mjtkQ` while iterating pre-merge)
-- **Directory:** `public_html`
-- Click **Create**.
+```bash
+cd ~/domains/jaemiesoundbath.com
+git clone -b claude/setup-php-wellness-platform-mjtkQ \
+    git@github.com:Raychung11/soundheal.git public_html
+```
 
-Hostinger will do the initial clone. If it errors on the key, re-run
-`ssh -T git@github.com` from the account and confirm the fingerprint.
+(Swap the branch for `main` once the PR is merged.)
+
+If you already have a `public_html/` you want to keep, back it up
+first — `git clone` refuses to write into a non-empty directory.
 
 ---
 
-## 4 · Wire the webhook so pushes auto-deploy
+## 4 · Deploy on every push
 
-Hostinger shows a **Webhook URL** in the same Git panel after the
-first clone (it looks like `https://webhooks.hostinger.com/deploy/…`).
-Copy it, then:
+After each `git push` from your dev machine, SSH in and run:
 
-1. Open <https://github.com/Raychung11/soundheal/settings/hooks>.
-2. **Add webhook**.
-3. **Payload URL:** paste Hostinger's URL.
-4. **Content type:** `application/json`.
-5. **Which events?** _Just the push event._
-6. **Active:** ticked.
-7. Add webhook.
+```bash
+cd ~/domains/jaemiesoundbath.com/public_html
+./deploy.sh
+```
 
-Push a commit to the branch Hostinger is watching → within a few
-seconds the site should reflect the change. GitHub's webhook page
-shows the delivery status ("✓ 200") so you can debug.
+The script prints what changed, fixes permissions, and lists any
+pending migrations. When migrations show up, re-run with
+`./deploy.sh --migrate` to apply them.
+
+If you want fully-automatic deploys instead of SSH-and-run, wire
+GitHub's push webhook to Hostinger's Git panel URL — but the manual
+`./deploy.sh` gives you a beat of control before schema changes land,
+which matters more than the extra keystroke.
 
 ---
 
@@ -109,29 +123,32 @@ the repo:
 | `.env` | secrets (DB, mail, API keys) | copy `.env.example` → `.env`, fill in |
 | `uploads/**` files | user-uploaded media (photos, audio, PDFs) | already there; back these up |
 | `logs/*.log` | rotating logs | Apache creates on first write |
-| Migrations run once | schema changes | `mysql -u … < database/migrations/xxx.sql` on each new file |
 
-**After any deploy that adds a new `database/migrations/xxx.sql`
-file**, SSH into Hostinger and run it against the live database. There
-is no auto-migrator — this is deliberate so surprising schema changes
-never happen without an explicit human `mysql <` command.
+**Migrations are surfaced by `deploy.sh`** — after a `./deploy.sh`
+pulls in a new `database/migrations/xxx.sql` file, the script prints
+a warning and lists the pending files. Run `./deploy.sh --migrate` to
+apply them. The applied set is tracked in a `schema_migrations` table
+on the DB so each migration only runs once even if you re-invoke.
 
 ---
 
 ## Rolling back
 
-Hostinger's Git panel has a **Pull** button that runs `git pull` on
-demand — useful when the webhook missed a push. To roll back to a
-previous commit, SSH in and run:
+`deploy.sh` always fast-forwards to the tip of the tracked branch.
+To roll back:
 
 ```bash
-cd ~/public_html
+cd ~/domains/jaemiesoundbath.com/public_html
 git fetch origin
 git reset --hard <sha-you-want>
 ```
 
-The webhook won't fight you — it only pulls on new pushes, not on
-manual resets.
+Then don't run `./deploy.sh` again until you're ready to move forward
+— the next invocation will pull the branch tip back in.
+
+If you want to freeze on an older commit for a while, push a hotfix
+branch (`hotfix/rollback-<date>`) to that sha and point `deploy.sh` at
+it by checking that branch out on the server.
 
 ---
 
