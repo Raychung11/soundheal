@@ -65,6 +65,15 @@ else
     ok "moved $before_sha → $after_sha"
     info "changelog:"
     git --no-pager log --oneline "$before_sha..$after_sha" | sed 's/^/      /'
+
+    # Self-modifying-script guard: if this deploy pulled in a new copy
+    # of deploy.sh itself, bash is still reading the OLD content from
+    # its current file-offset (it tracks byte position, not lines).
+    # Re-exec so the rest of the run uses the new file cleanly.
+    if git --no-pager diff --name-only "$before_sha" "$after_sha" | grep -Fxq "deploy.sh"; then
+        info "deploy.sh itself was updated — re-executing"
+        exec "$0" "$@"
+    fi
 fi
 
 # ---- 2. permissions ------------------------------------------------
