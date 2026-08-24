@@ -140,13 +140,28 @@ else
     # deploy.sh lands on an EXISTING database that already carries
     # the historical schema — otherwise --migrate would try to re-run
     # every historical file.
+    #
+    # Batched into ONE INSERT because Hostinger caps rapid-fire
+    # connection creation — the earlier one-connection-per-migration
+    # version tripped their rate limit around row 20.
     if [ "$BASELINE" = true ]; then
         step "Recording all existing migrations as applied (--baseline)"
-        for f in "${pending[@]}"; do
-            base="$(basename "$f")"
-            mysql_cmd -e "INSERT IGNORE INTO schema_migrations (filename) VALUES ('$base')"
-            ok "  baselined $base"
-        done
+        if [ "${#pending[@]}" -eq 0 ]; then
+            ok "nothing to baseline — schema_migrations already up to date"
+        else
+            values=""
+            for f in "${pending[@]}"; do
+                base="$(basename "$f")"
+                # Filenames are already trusted (they come from our
+                # own repo directory) but escape single quotes anyway.
+                base_esc="${base//\'/\\\'}"
+                if [ -n "$values" ]; then values="${values},"; fi
+                values="${values}('${base_esc}')"
+            done
+            mysql_cmd -e "INSERT IGNORE INTO schema_migrations (filename) VALUES $values;"
+            ok "baselined ${#pending[@]} migration(s) in one INSERT"
+            for f in "${pending[@]}"; do info "  $(basename "$f")"; done
+        fi
         info ""
         info "Baseline complete. Future ./deploy.sh runs will only apply new files."
         step "Deploy finished"
