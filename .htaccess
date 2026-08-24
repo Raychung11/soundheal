@@ -13,6 +13,11 @@ DirectoryIndex index.php
 # Block direct web access to sensitive folders.
 RedirectMatch 403 ^/?(config|includes|logs|database)(/|$)
 RedirectMatch 403 ^/?\.env
+# Hostinger's Git Auto-Deploy drops a .git/ folder inside the deploy
+# target. Without this rule, /.git/config leaks the remote URL and
+# packed-refs / objects can be reconstructed into full history.
+RedirectMatch 403 ^/?\.git(/|$)
+RedirectMatch 403 ^/?(composer\.(json|lock)|package\.json|package-lock\.json|README\.md|CHANGELOG\.md|DEPLOY\.md)$
 
 # Force HTTPS at the Apache layer.
 # Disabled on Hostinger because nginx already terminates SSL — leaving this
