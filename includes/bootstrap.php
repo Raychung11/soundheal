@@ -14,6 +14,38 @@ define('SOUNDHEAL_BOOTED', true);
 // Locate root regardless of which subfolder includes this file.
 define('SH_ROOT', dirname(__DIR__));
 
+// Load .env into PHP's env / $_ENV so config/*.php's getenv() calls
+// see the values. This has to run BEFORE any config file is required.
+//
+// Deliberately tiny — supports KEY=value with optional "double" or
+// 'single' quoting and #comments. No variable interpolation, no
+// export prefix stripping, no fancy escapes. Matches the .env.example
+// shape and nothing more.
+$envFile = SH_ROOT . '/.env';
+if (is_readable($envFile)) {
+    foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        $line = ltrim($line);
+        if ($line === '' || $line[0] === '#') continue;
+        if (!str_contains($line, '=')) continue;
+        [$k, $v] = explode('=', $line, 2);
+        $k = trim($k);
+        if ($k === '' || !preg_match('/^[A-Z_][A-Z0-9_]*$/i', $k)) continue;
+        $v = trim($v);
+        // Strip a matching pair of surrounding quotes.
+        if (strlen($v) >= 2
+            && (($v[0] === '"' && $v[-1] === '"') || ($v[0] === "'" && $v[-1] === "'"))) {
+            $v = substr($v, 1, -1);
+        }
+        // Don't clobber a value the host already set (e.g. via
+        // Apache SetEnv / hPanel). Real env wins.
+        if (getenv($k) === false) {
+            putenv($k . '=' . $v);
+            $_ENV[$k]    = $v;
+            $_SERVER[$k] = $v;
+        }
+    }
+}
+
 // Surface errors only in debug mode.
 $appConfig = require SH_ROOT . '/config/app.php';
 date_default_timezone_set($appConfig['timezone']);
