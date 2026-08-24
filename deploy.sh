@@ -6,6 +6,11 @@
 #   cd ~/domains/jaemiesoundbath.com/public_html
 #   ./deploy.sh                # fetch + reset + chmod + list migrations
 #   ./deploy.sh --migrate      # same, then also apply pending migrations
+#   ./deploy.sh --baseline     # record every existing migration file as
+#                              #   already applied — run ONCE on a live
+#                              #   DB that already has the historical
+#                              #   schema, otherwise --migrate would
+#                              #   try to re-run every historical file.
 #
 # The script is deliberately loud on migrations: without --migrate it
 # only PRINTS which files are new, so schema changes never happen
@@ -28,11 +33,13 @@ info() { printf '  %s%s%s\n'   "$c_dim"  "$1" "$c_reset"; }
 
 # ---- args ----------------------------------------------------------
 RUN_MIGRATIONS=false
+BASELINE=false
 for arg in "$@"; do
     case "$arg" in
-        --migrate) RUN_MIGRATIONS=true ;;
+        --migrate)  RUN_MIGRATIONS=true ;;
+        --baseline) BASELINE=true ;;
         -h|--help)
-            sed -n '2,15p' "$0"
+            sed -n '2,20p' "$0"
             exit 0 ;;
         *) warn "Unknown flag: $arg (ignored)"; ;;
     esac
@@ -106,13 +113,37 @@ else
 
     applied="$(mysql_cmd -N -e "SELECT filename FROM schema_migrations" 2>/dev/null || true)"
 
+    # Build the pending list with a plain glob + `printf | grep` — no
+    # process substitution / here-strings, since Hostinger's Bash does
+    # not always expose /dev/fd/N and both idioms silently break there.
     pending=()
-    while IFS= read -r file; do
+    shopt -s nullglob
+    for file in "$MIG_DIR"/*.sql; do
         base="$(basename "$file")"
-        if ! grep -Fxq "$base" <<< "$applied"; then
+        if ! printf '%s\n' "$applied" | grep -Fxq "$base"; then
             pending+=("$file")
         fi
-    done < <(find "$MIG_DIR" -maxdepth 1 -name '*.sql' | sort)
+    done
+    shopt -u nullglob
+
+    # --baseline: record every migration file as "applied" without
+    # actually running any of them. Use this once, right after this
+    # deploy.sh lands on an EXISTING database that already carries
+    # the historical schema — otherwise --migrate would try to re-run
+    # every historical file.
+    if [ "$BASELINE" = true ]; then
+        step "Recording all existing migrations as applied (--baseline)"
+        for f in "${pending[@]}"; do
+            base="$(basename "$f")"
+            mysql_cmd -e "INSERT IGNORE INTO schema_migrations (filename) VALUES ('$base')"
+            ok "  baselined $base"
+        done
+        info ""
+        info "Baseline complete. Future ./deploy.sh runs will only apply new files."
+        step "Deploy finished"
+        ok "site is at $after_sha on branch $BRANCH"
+        exit 0
+    fi
 
     if [ "${#pending[@]}" -eq 0 ]; then
         ok "no pending migrations"
@@ -135,11 +166,11 @@ else
             done
         else
             info ""
-            info "Re-run with:  ./deploy.sh --migrate"
-            info "…to apply them, or run each by hand:"
-            for f in "${pending[@]}"; do
-                info "  mysql -h \"\$DB_HOST\" -u \"\$DB_USER\" -p\"\$DB_PASS\" \"\$DB_NAME\" < $f"
-            done
+            info "First time here? If this DB already carries the historical"
+            info "schema, run:  ./deploy.sh --baseline"
+            info "…to mark every existing migration as already applied."
+            info ""
+            info "Otherwise apply them all with:  ./deploy.sh --migrate"
         fi
     fi
 fi
