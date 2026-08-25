@@ -117,12 +117,29 @@ require __DIR__ . '/../includes/header.php';
     </a>
     <div class="my-6 flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] text-beige-100/40">
       <span class="flex-1 h-px bg-white/10"></span>
-      <span>or with email</span>
+      <span>or</span>
       <span class="flex-1 h-px bg-white/10"></span>
     </div>
   <?php endif; ?>
 
-  <form method="post" class="<?= (function_exists('oauth_google_ready') && oauth_google_ready()) ? '' : 'mt-10 ' ?>space-y-5" x-data="{
+  <!-- Magic-link CTA: single-field "join by email link" — the
+       fastest path for a first-time visitor. Works for existing
+       members too. -->
+  <a href="<?= url('/public/magic_link_request.php') ?>"
+     class="<?= (function_exists('oauth_google_ready') && oauth_google_ready()) ? '' : 'mt-10 ' ?>flex items-center justify-center gap-2 w-full px-5 py-3 rounded-full bg-gold-500 text-navy-950 hover:bg-gold-400 transition text-sm font-medium">
+    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>
+    </svg>
+    Join with an email link
+  </a>
+
+  <div class="my-6 flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] text-beige-100/40">
+    <span class="flex-1 h-px bg-white/10"></span>
+    <span>or full form</span>
+    <span class="flex-1 h-px bg-white/10"></span>
+  </div>
+
+  <form method="post" class="space-y-5" x-data="{
       showPw: false,
       showConfirm: false,
       pw: '',

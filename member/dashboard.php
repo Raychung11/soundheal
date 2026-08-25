@@ -5,6 +5,47 @@ require_login();
 $user = current_user();
 $pageTitle = 'My Sanctuary';
 
+// ---- Nudge handlers (one-shot POSTs, redirect back to keep URLs clean)
+if (is_post()) {
+    csrf_verify();
+    $action = (string) input('action', '');
+
+    if ($action === 'dismiss_welcome') {
+        db()->prepare('UPDATE users SET onboarded_at = NOW() WHERE id = :u')
+            ->execute([':u' => (int) $user['id']]);
+        redirect('/member/dashboard.php');
+    }
+
+    if ($action === 'save_phone') {
+        // Same normalisation the signup / profile forms use so the
+        // phonebook lookups stay consistent.
+        $phone = normalize_phone((string) input('phone', ''));
+        if ($phone !== null) {
+            db()->prepare('UPDATE users SET phone = :p, phone_prompt_dismissed_at = NOW() WHERE id = :u')
+                ->execute([':p' => $phone, ':u' => (int) $user['id']]);
+            flash('dashboard', 'Thanks — we\'ll message you on WhatsApp before each session.', 'success');
+        } else {
+            flash('dashboard', 'Please share a valid phone number, or tap "Not now".', 'error');
+        }
+        redirect('/member/dashboard.php');
+    }
+
+    if ($action === 'dismiss_phone') {
+        db()->prepare('UPDATE users SET phone_prompt_dismissed_at = NOW() WHERE id = :u')
+            ->execute([':u' => (int) $user['id']]);
+        redirect('/member/dashboard.php');
+    }
+}
+
+// ---- Nudge state (evaluated once so the two banners can render below)
+$flags = db()->prepare(
+    'SELECT phone, onboarded_at, phone_prompt_dismissed_at FROM users WHERE id = :u LIMIT 1'
+);
+$flags->execute([':u' => (int) $user['id']]);
+$flagsRow = $flags->fetch() ?: [];
+$showWelcome     = empty($flagsRow['onboarded_at']);
+$showPhonePrompt = empty($flagsRow['phone']) && empty($flagsRow['phone_prompt_dismissed_at']);
+
 $membership = db()->prepare(
     "SELECT m.*, p.name AS plan_name, p.billing_cycle
      FROM memberships m
@@ -93,6 +134,90 @@ $quickTiles = [
       <?= e(strtoupper(substr($firstName, 0, 1) ?: '·')) ?>
     </a>
   </div>
+
+  <?php if ($f = flash('dashboard')): ?>
+    <div class="mt-4 border rounded-2xl px-5 py-3 text-sm
+                <?= ($f['type'] ?? 'info') === 'success'
+                    ? 'border-gold-500/40 bg-gold-500/5 text-gold-400'
+                    : (($f['type'] ?? '') === 'error'
+                        ? 'border-red-400/40 bg-red-500/5 text-red-200'
+                        : 'border-white/10 bg-navy-900/40 text-beige-100/85') ?>">
+      <?= e($f['message'] ?? '') ?>
+    </div>
+  <?php endif; ?>
+
+  <?php if ($showWelcome): ?>
+    <!-- Welcome strip: renders once, on first-ever dashboard visit
+         (onboarded_at IS NULL). Sets the tone and points at the
+         three things this account can do right now. Dismissed on
+         "Got it" — never shown again. -->
+    <section class="mt-6 rounded-3xl border border-gold-500/30 bg-gradient-to-br from-gold-500/10 via-navy-900/60 to-navy-950 p-6 sm:p-7">
+      <p class="text-[10px] uppercase tracking-[0.35em] text-gold-400/80">Welcome — held with care</p>
+      <h2 class="font-serif text-2xl sm:text-3xl text-beige-100 mt-3 leading-tight">Three quiet ways to begin</h2>
+      <div class="mt-5 grid sm:grid-cols-3 gap-3">
+        <a href="<?= url('/public/events.php') ?>"
+           class="group flex flex-col items-start gap-2 rounded-2xl border border-white/10 bg-navy-950/50 p-4 hover:border-gold-500/40 transition">
+          <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gold-500/15 text-gold-400">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3.5v3M16 3.5v3"/></svg>
+          </span>
+          <p class="font-serif text-lg text-beige-100 leading-tight">Reserve a session</p>
+          <p class="text-[12px] text-beige-100/60 leading-relaxed">Pick a sound bath, breathwork or gong bath — held small, held with intention.</p>
+          <span class="text-gold-400 text-xs mt-1 group-hover:translate-x-0.5 transition">Browse →</span>
+        </a>
+        <a href="<?= url('/member/content.php') ?>"
+           class="group flex flex-col items-start gap-2 rounded-2xl border border-white/10 bg-navy-950/50 p-4 hover:border-gold-500/40 transition">
+          <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gold-500/15 text-gold-400">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+          </span>
+          <p class="font-serif text-lg text-beige-100 leading-tight">Your audio library</p>
+          <p class="text-[12px] text-beige-100/60 leading-relaxed">Recorded sound baths and meditations, always here between sessions.</p>
+          <span class="text-gold-400 text-xs mt-1 group-hover:translate-x-0.5 transition">Listen →</span>
+        </a>
+        <a href="<?= url('/member/wellness_journey.php') ?>"
+           class="group flex flex-col items-start gap-2 rounded-2xl border border-white/10 bg-navy-950/50 p-4 hover:border-gold-500/40 transition">
+          <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gold-500/15 text-gold-400">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v12H8l-4 3z"/><path d="M8 10h8M8 13h5"/></svg>
+          </span>
+          <p class="font-serif text-lg text-beige-100 leading-tight">Talk with Aria</p>
+          <p class="text-[12px] text-beige-100/60 leading-relaxed">Our quiet wellness concierge — share how you're arriving today.</p>
+          <span class="text-gold-400 text-xs mt-1 group-hover:translate-x-0.5 transition">Begin →</span>
+        </a>
+      </div>
+      <form method="post" class="mt-5">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="dismiss_welcome">
+        <button class="text-xs text-beige-100/55 hover:text-gold-400 tracking-widest uppercase">Got it, thank you</button>
+      </form>
+    </section>
+  <?php endif; ?>
+
+  <?php if ($showPhonePrompt): ?>
+    <!-- Phone-prompt banner: rendered when phone is NULL and the
+         member hasn't already dismissed it. Recovers the number for
+         Google-first / magic-link members without a form to sign
+         them up. Single field + Save + Not now. -->
+    <form method="post"
+          class="mt-4 rounded-2xl border border-white/10 bg-navy-900/40 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+      <?= csrf_field() ?>
+      <input type="hidden" name="action" value="save_phone">
+      <div class="min-w-0 sm:flex-1">
+        <p class="text-sm text-beige-100">Add your phone for WhatsApp session reminders?</p>
+        <p class="text-[11px] text-beige-100/50 mt-0.5">One-liner only — we never share it, no marketing.</p>
+      </div>
+      <div class="flex items-stretch rounded-2xl bg-navy-950 border border-white/10 focus-within:border-gold-500/50 transition overflow-hidden">
+        <span class="px-3 flex items-center text-gold-400 text-sm bg-navy-950/60 border-r border-white/5">+60</span>
+        <input name="phone" type="tel" inputmode="tel" autocomplete="tel-national"
+               placeholder="12 345 6789" required
+               class="w-40 sm:w-48 bg-transparent px-3 py-2 text-sm focus:outline-none">
+      </div>
+      <button class="px-4 py-2 rounded-full bg-gold-500 text-navy-950 text-sm hover:bg-gold-400 transition">Save</button>
+    </form>
+    <form method="post" class="-mt-1 flex justify-end">
+      <?= csrf_field() ?>
+      <input type="hidden" name="action" value="dismiss_phone">
+      <button class="text-xs text-beige-100/55 hover:text-gold-400 uppercase tracking-widest px-2 py-1">Not now</button>
+    </form>
+  <?php endif; ?>
 
   <!-- Hero: next session, or a "reserve" prompt if none -->
   <?php if ($nextSession): ?>

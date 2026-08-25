@@ -19,6 +19,7 @@ function render_mail_template(string $name, array $vars): array
         'contact_received'=> 'mail_template_contact_received',
         'corporate_lead'  => 'mail_template_corporate_lead',
         'order_confirm'   => 'mail_template_order_confirm',
+        'magic_link'      => 'mail_template_magic_link',
     ];
     $fn = $renderers[$name] ?? null;
     if (!$fn || !function_exists($fn)) {
@@ -262,6 +263,24 @@ function mail_template_contact_received(array $v): array
 <p style="color:rgba(246,239,229,0.6);">In the meantime, breathe slowly and softly.</p>
 HTML;
     return [mail_layout('We received your note.', $body), "Hi {$name}, we received your note and will reply within two working days."];
+}
+
+function mail_template_magic_link(array $v): array
+{
+    $name = e($v['full_name'] ?? 'friend');
+    $link = e($v['magic_url'] ?? '#');
+    $ttl  = e($v['ttl_label'] ?? '30 minutes');
+    $body = <<<HTML
+<p style="font-family:Georgia,'Cormorant Garamond',serif;font-size:24px;color:#e7d2a3;margin:0 0 16px;">Your sanctuary is one tap away, {$name}.</p>
+<p>Tap below to sign in. No password needed.</p>
+<p style="margin:24px 0;">
+  <a href="{$link}" style="display:inline-block;background:#c9a46a;color:#0a1027;padding:14px 28px;border-radius:999px;text-decoration:none;font-family:Inter,Arial,sans-serif;font-weight:500;">Open my sanctuary</a>
+</p>
+<p style="color:rgba(246,239,229,0.6);font-size:13px;">This link expires in {$ttl} and works once.</p>
+<p style="color:rgba(246,239,229,0.55);font-size:12px;margin-top:22px;">If you didn't ask for this, ignore the message — nothing has changed on your account.</p>
+HTML;
+    $text = "Your sanctuary link (valid {$ttl}, one use):\n\n{$link}\n\nIf you didn't request this, ignore this message.";
+    return [mail_layout('Your sign-in link.', $body), $text];
 }
 
 function mail_template_order_confirm(array $v): array
