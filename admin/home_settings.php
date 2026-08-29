@@ -54,6 +54,7 @@ if (is_post()) {
         ['hero_image_path_file', 'hero_image_path'],
         ['hero_audio_path_file', 'hero_audio_path'],
         ['trial_audio_path_file','trial_audio_path'],
+        ['seo_default_image_file','seo_default_image'],
     ] as [$field, $settingKey]) {
         try {
             $uploaded = handle_upload($field, 'home');
@@ -70,7 +71,7 @@ if (is_post()) {
     }
 
     // Allow optional explicit URL input for each media slot — overrides the file.
-    foreach (['hero_image_path','hero_audio_path','trial_audio_path'] as $slot) {
+    foreach (['hero_image_path','hero_audio_path','trial_audio_path','seo_default_image'] as $slot) {
         if (!empty($_POST['_url_' . $slot])) {
             $url = trim((string) $_POST['_url_' . $slot]);
             $existing = (string) setting($slot, '');
@@ -225,6 +226,27 @@ function media_block(string $key, string $label, string $accept, string $type = 
           <span class="text-xs uppercase tracking-widest text-beige-100/60">Audio caption</span>
           <input name="hero_audio_label" value="<?= e((string) setting('hero_audio_label', '')) ?>" class="mt-2 w-full rounded-2xl bg-navy-950 border border-white/5 px-4 py-3">
         </label>
+      </div>
+    </div>
+  </section>
+
+  <section class="border border-white/5 rounded-3xl p-6 bg-navy-900/40 space-y-5">
+    <div>
+      <h2 class="font-serif text-2xl text-gold-400">Social share preview</h2>
+      <p class="text-sm text-beige-100/60 mt-1">
+        The image that appears when someone shares any page from this site on WhatsApp, Facebook, LinkedIn, or Slack.
+        Recommended size <strong class="text-beige-100/80">1200 × 630</strong> (landscape). If empty, the banner image above is used as the fallback.
+      </p>
+    </div>
+    <div class="grid sm:grid-cols-2 gap-5 items-start">
+      <?php media_block('seo_default_image', 'Social share image (OG)', 'image/jpeg,image/png,image/webp', 'image'); ?>
+      <div class="text-sm text-beige-100/70 space-y-3 leading-relaxed">
+        <p class="text-xs uppercase tracking-widest text-gold-400/80">What to know</p>
+        <ul class="space-y-2 list-disc list-inside text-beige-100/70">
+          <li>Landscape crops best — most feeds show a wide preview card.</li>
+          <li>Keep the important subject inside a horizontal band; the top and bottom edges are often trimmed.</li>
+          <li>WhatsApp and Facebook cache aggressively. After changing this, share the link with fresh URL params (or use each platform's link debugger) to force a re-crawl.</li>
+        </ul>
       </div>
     </div>
   </section>
