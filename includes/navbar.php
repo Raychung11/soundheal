@@ -7,6 +7,7 @@ $nav = [
     ['Sessions',    '/public/events.php'],
     ['Shop',        '/public/shop.php'],
     ['Gallery',     '/public/gallery.php'],
+    ['Journal',     '/public/blog.php'],
     ['Partners',    '/public/partners.php'],
     ['Membership',  '/public/membership.php'],
     ['About',       '/public/about.php'],

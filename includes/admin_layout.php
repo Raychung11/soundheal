@@ -16,6 +16,7 @@ $adminNav = [
         ['Class packs',        '/admin/class_packs.php'],
         ['Content',            '/admin/content.php'],
         ['Gallery',            '/admin/gallery.php'],
+        ['Journal',            '/admin/blog.php'],
         ['Testimonials',       '/admin/testimonials.php'],
     ],
     'Operations' => [
