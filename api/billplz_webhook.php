@@ -36,6 +36,20 @@ foreach ($copy as $k => $v) {
 }
 $expected = hash_hmac('sha256', $compact, $cfg['x_signature']);
 if (!hash_equals($expected, (string) $signature)) {
+    // Loud on purpose: an admin poking through logs after a "why
+    // didn't the booking auto-settle" question needs to see WHY
+    // instead of a silent 403. Most common cause: the wrong Billplz
+    // key was pasted into the X-Signature field on
+    // /admin/payment_settings.php (usually the API key instead of
+    // the X-Signature key from the Collection).
+    error_log(sprintf(
+        '[billplz_webhook] rejected: signature mismatch on bill %s (received %s, expected %s). '
+        . 'Check /admin/payment_settings.php X-Signature field matches Billplz Collections '
+        . '→ your collection → X-Signature Key.',
+        (string) ($payload['id'] ?? '?'),
+        substr((string) $signature, 0, 12) . '…',
+        substr((string) $expected,  0, 12) . '…'
+    ));
     http_response_code(403); exit('Invalid signature.');
 }
 
