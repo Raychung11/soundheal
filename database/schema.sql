@@ -308,7 +308,7 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- Default admin: change password immediately after first login.
 -- Password below = "ChangeMe!2026" hashed with PASSWORD_DEFAULT (bcrypt).
 INSERT IGNORE INTO users (id, role_id, full_name, email, password_hash, status, email_verified_at)
-VALUES (1, 1, 'SoundHeal Admin', 'admin@soundheal.local',
+VALUES (1, 1, 'jaemie sound bath Admin', 'admin@jaemiesoundbath.com',
         '$2y$10$wH5oQ1Q7jHv1xL5x9V6m9eZ9bH8nK4oS0Wq2V4xM6tH3JpZ9Ck1Ku', 'active', NOW());
 
 INSERT IGNORE INTO membership_plans (id, code, name, description, price, billing_cycle, duration_days, sort_order, is_active)

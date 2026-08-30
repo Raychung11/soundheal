@@ -35,3 +35,33 @@ input:focus, select:focus, textarea:focus, button:focus { outline: none; }
 /* Soft fade-in for content */
 @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 section { animation: fadeUp 0.6s ease-out both; }
+
+/* Hero sound-ripples */
+.ripple {
+    position: absolute;
+    left: 50%;
+    top: 30%;
+    transform: translate(-50%, -50%);
+    width: 480px;
+    height: 480px;
+    border-radius: 50%;
+    border: 1px solid rgba(201, 164, 106, 0.18);
+    opacity: 0;
+    animation: ripple 9s ease-out infinite;
+    pointer-events: none;
+}
+.ripple-2 { animation-delay: 3s; }
+.ripple-3 { animation-delay: 6s; }
+@keyframes ripple {
+    0%   { opacity: 0;    transform: translate(-50%, -50%) scale(0.4); }
+    20%  { opacity: 0.55; }
+    100% { opacity: 0;    transform: translate(-50%, -50%) scale(2.4); }
+}
+
+/* Line-clamp utility (Tailwind plugin not loaded via CDN config) */
+.line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}

@@ -2,7 +2,10 @@
 require_once __DIR__ . '/../includes/bootstrap.php';
 require_login();
 $pageTitle = 'Wellness Journey';
+$skipAriaWidget = true; // Aria already lives on this page; no floating widget needed.
 $user = current_user();
+$mood = trim((string) input('mood', ''));
+$mood = preg_replace('/[^a-z]/', '', strtolower($mood));
 require __DIR__ . '/../includes/header.php';
 ?>
 <section class="max-w-3xl mx-auto px-6 py-16">
@@ -15,7 +18,8 @@ require __DIR__ . '/../includes/header.php';
       <template x-for="m in messages" :key="m.id">
         <div :class="m.role === 'user' ? 'text-right' : 'text-left'">
           <div :class="m.role === 'user' ? 'inline-block bg-gold-500 text-navy-950' : 'inline-block bg-navy-950 text-beige-100/90 border border-white/5'"
-               class="rounded-2xl px-4 py-3 max-w-[85%] text-sm whitespace-pre-line" x-text="m.content"></div>
+               class="rounded-2xl px-4 py-3 max-w-[85%] text-sm leading-relaxed aria-msg"
+               x-html="renderMarkdown(m.content)"></div>
         </div>
       </template>
       <div x-show="loading" class="text-beige-100/40 text-sm italic">Aria is listening…</div>
@@ -33,9 +37,13 @@ require __DIR__ . '/../includes/header.php';
 
 <script>
 function ariaChat() {
+  const initialMood = <?= json_encode($mood) ?>;
+  const opening = initialMood
+    ? `Thank you for naming that — \"${initialMood}\". Take a slow breath in… and out. Tell me a little more about how that's showing up for you today?`
+    : "Welcome back, <?= e(addslashes($user['full_name'])) ?>. Take a slow breath in… and out. How are you arriving today?";
   return {
-    messages: [{ id: 0, role: 'assistant', content: "Welcome back, <?= e($user['full_name']) ?>. Take a slow breath in… and out. How are you arriving today?" }],
-    draft: '',
+    messages: [{ id: 0, role: 'assistant', content: opening }],
+    draft: initialMood ? `I'm feeling ${initialMood} today.` : '',
     loading: false,
     counter: 1,
     async send() {
@@ -63,8 +71,27 @@ function ariaChat() {
     },
     scroll() {
       this.$nextTick(() => { this.$refs.scroll.scrollTop = this.$refs.scroll.scrollHeight; });
+    },
+    renderMarkdown(text) {
+      if (!text) return '';
+      let s = String(text)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|\/[^\s)]*)\)/g,
+        (_, label, href) => `<a href="${href}" target="${href.startsWith('/') ? '_self' : '_blank'}" rel="noopener">${label}</a>`);
+      s = s.replace(/(^|[^"=])(https?:\/\/[^\s<]+)/g,
+        (_, lead, url) => `${lead}<a href="${url}" target="_blank" rel="noopener">${url}</a>`);
+      s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      s = s.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+      return s.replace(/\n/g, '<br>');
     }
   }
 }
 </script>
+<style>
+  .aria-msg a { color: #d4af37; text-decoration: underline; text-underline-offset: 3px; word-break: break-word; }
+  .aria-msg a:hover { color: #e7c860; }
+  .aria-msg strong { color: #f5ecd6; }
+  .aria-msg em { font-style: italic; opacity: 0.95; }
+</style>
 <?php require __DIR__ . '/../includes/footer.php'; ?>

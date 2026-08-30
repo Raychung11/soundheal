@@ -1,0 +1,214 @@
+<?php
+declare(strict_types=1);
+
+/**
+ * Payment-settlement logic shared by:
+ *   - api/billplz_create.php       (demo / inline settle when no key set)
+ *   - api/billplz_webhook.php      (Billplz callback)
+ *   - member/payment_thanks.php    (redirect rescue when webhook hasn't fired)
+ *   - admin/payments.php           (manual Settle button)
+ *
+ * Kept here so the callers can `require_once` without re-running an
+ * HTTP-endpoint file (which previously leaked "Booking not found." from
+ * billplz_create.php into /admin/payments.php).
+ */
+
+if (!function_exists('settle_payment')) {
+
+    /**
+     * Server-side confirmation of a Billplz bill. Never trust the browser
+     * redirect params (?billplz[paid]=true) — anyone can forge those. This
+     * re-fetches the bill straight from Billplz with the secret API key and
+     * confirms it is genuinely paid AND that the amount matches what we
+     * recorded. Fails closed: any uncertainty returns false.
+     */
+    function billplz_verify_paid(string $billId, float $expectedAmount): bool
+    {
+        $billId = trim($billId);
+        if ($billId === '' || str_starts_with($billId, 'DEMO-')) {
+            return false;
+        }
+        $cfg = payment_config();
+        if (empty($cfg['api_key']) || empty($cfg['api_base'])) {
+            return false; // Can't verify — let the webhook / admin settle it.
+        }
+
+        $ch = curl_init(rtrim($cfg['api_base'], '/') . '/bills/' . rawurlencode($billId));
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_USERPWD        => $cfg['api_key'] . ':',
+            CURLOPT_TIMEOUT        => 15,
+        ]);
+        $body = curl_exec($ch);
+        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($code < 200 || $code >= 300 || !$body) {
+            return false;
+        }
+        $bill = json_decode((string) $body, true);
+        if (!is_array($bill)) {
+            return false;
+        }
+
+        $isPaid = ($bill['paid'] ?? false) === true
+            || ($bill['paid'] ?? '') === 'true'
+            || ($bill['state'] ?? '') === 'paid';
+        if (!$isPaid) {
+            return false;
+        }
+
+        // Billplz returns the amount in cents; compare against our record.
+        $expectedCents = (int) round($expectedAmount * 100);
+        $gotCents      = (int) ($bill['amount'] ?? -1);
+        return $gotCents === $expectedCents;
+    }
+
+    /**
+     * Marks a payment as settled and either:
+     *   - For bookings: flips the booking to paid, issues QR tickets (one per
+     *     seat), and emails the member their confirmation.
+     *   - For memberships: activates the membership.
+     *
+     * Idempotent — calling it twice on the same payment is safe.
+     */
+    function settle_payment(int $paymentId): void
+    {
+        $p = db()->prepare("SELECT * FROM payments WHERE id = :id");
+        $p->execute([':id' => $paymentId]);
+        $payment = $p->fetch();
+        if (!$payment || $payment['status'] !== 'paid') {
+            return;
+        }
+
+        if ($payment['purpose'] === 'booking') {
+            db()->prepare("UPDATE event_bookings SET status='paid', payment_id=:p WHERE id=:id")
+                ->execute([':p' => $paymentId, ':id' => $payment['reference_id']]);
+
+            $b = db()->prepare(
+                "SELECT b.booking_ref, b.quantity, e.title, e.starts_at, e.location, u.email, u.full_name
+                 FROM event_bookings b
+                 JOIN events e ON e.id = b.event_id
+                 JOIN users u ON u.id = b.user_id
+                 WHERE b.id = :id"
+            );
+            $b->execute([':id' => $payment['reference_id']]);
+            $booking = $b->fetch();
+
+            $check = db()->prepare("SELECT COUNT(*) FROM tickets WHERE booking_id = :b");
+            $check->execute([':b' => $payment['reference_id']]);
+
+            if ((int) $check->fetchColumn() === 0 && $booking) {
+                $t = db()->prepare("INSERT INTO tickets (booking_id, ticket_code, qr_token) VALUES (:b, :c, :tok)");
+                for ($i = 0; $i < (int) $booking['quantity']; $i++) {
+                    $t->execute([
+                        ':b'   => $payment['reference_id'],
+                        ':c'   => $booking['booking_ref'] . '-' . ($i + 1),
+                        ':tok' => generate_token(24),
+                    ]);
+                }
+                if (function_exists('send_mail')) {
+                    send_mail($booking['email'], $booking['full_name'],
+                        'Your seat is held',
+                        'booking_confirm', [
+                            'event_title' => $booking['title'],
+                            'starts_at'   => format_datetime($booking['starts_at']),
+                            'location'    => $booking['location'] ?? 'Location TBA',
+                            'booking_ref' => $booking['booking_ref'],
+                        ]);
+                }
+            }
+        } elseif ($payment['purpose'] === 'membership') {
+            db()->prepare("UPDATE memberships SET status='active', last_payment_id=:p WHERE id=:id")
+                ->execute([':p' => $paymentId, ':id' => $payment['reference_id']]);
+        } elseif ($payment['purpose'] === 'class_pack') {
+            // Bind the payment to the pack purchase and grant the credits.
+            db()->prepare("UPDATE pack_purchases SET payment_id = :p WHERE id = :id")
+                ->execute([':p' => $paymentId, ':id' => $payment['reference_id']]);
+            if (function_exists('grant_pack_credits')) {
+                grant_pack_credits((int) $payment['reference_id']);
+            }
+        } elseif ($payment['purpose'] === 'order') {
+            // Only decrement stock on the first settle. An order that
+            // was already flipped past 'pending' has had its stock
+            // decremented; a duplicate webhook call must not re-decrement.
+            $chk = db()->prepare(
+                "SELECT status, has_preorder FROM orders WHERE id = :id LIMIT 1"
+            );
+            $chk->execute([':id' => $payment['reference_id']]);
+            $order = $chk->fetch();
+            if ($order && $order['status'] === 'pending') {
+                $newStatus = (int) $order['has_preorder'] ? 'preorder' : 'paid';
+                db()->prepare(
+                    "UPDATE orders
+                        SET status = :s,
+                            payment_id = :p,
+                            paid_at = COALESCE(paid_at, NOW())
+                      WHERE id = :id"
+                )->execute([
+                    ':s'  => $newStatus,
+                    ':p'  => $paymentId,
+                    ':id' => (int) $payment['reference_id'],
+                ]);
+                if (function_exists('decrement_stock_for_order')) {
+                    decrement_stock_for_order((int) $payment['reference_id']);
+                }
+
+                // Issue an invoice + fire order confirmation email.
+                if (function_exists('issue_invoice') && function_exists('order_get')
+                    && function_exists('build_order_line_items')) {
+                    $orderRow = order_get((int) $payment['reference_id'], 0);
+                    if ($orderRow) {
+                        $lineItems = build_order_line_items($orderRow);
+                        if ($lineItems) {
+                            issue_invoice(
+                                (int) $payment['user_id'],
+                                'order',
+                                (int) $payment['reference_id'],
+                                $lineItems,
+                                (float) ($orderRow['tax'] ?? 0),
+                                (string) ($orderRow['currency'] ?? 'MYR')
+                            );
+                        }
+                        if (function_exists('send_mail')) {
+                            $u = db()->prepare("SELECT email, full_name FROM users WHERE id = :u");
+                            $u->execute([':u' => (int) $payment['user_id']]);
+                            $usr = $u->fetch();
+                            if ($usr) {
+                                $summary = [];
+                                foreach ($orderRow['items'] as $it) {
+                                    $summary[] = (int) $it['quantity'] . ' × ' . $it['title_snapshot']
+                                        . ((int) $it['is_preorder']
+                                            ? ' (pre-order' . ($it['preorder_eta'] ? ': ' . $it['preorder_eta'] : '') . ')'
+                                            : '');
+                                }
+                                send_mail(
+                                    (string) $usr['email'],
+                                    (string) $usr['full_name'],
+                                    'Order received · ' . $orderRow['order_ref'],
+                                    'order_confirm',
+                                    [
+                                        'order_ref' => $orderRow['order_ref'],
+                                        'total'     => format_money((float) $orderRow['total'], (string) $orderRow['currency']),
+                                        'summary'   => implode("\n", $summary),
+                                        'preorder'  => (int) $orderRow['has_preorder'] ? 1 : 0,
+                                    ]
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Emit the receipt (and mark the matching invoice paid). Idempotent.
+        if (function_exists('issue_receipt')) {
+            issue_receipt($paymentId);
+        }
+
+        // Auto-record the company / IT-partner revenue split. Idempotent.
+        if (function_exists('record_revenue_split')) {
+            record_revenue_split($paymentId);
+        }
+    }
+}

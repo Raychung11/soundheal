@@ -23,8 +23,9 @@ if (is_post()) {
             echo json_encode(['ok' => false, 'message' => 'Staff sign-in required.']);
             exit;
         }
-        $sent = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
-        if (!hash_equals($_SESSION['_csrf_token'] ?? '', (string) $sent)) {
+        $sent = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+        $stored = (string) ($_SESSION['_csrf_token'] ?? '');
+        if ($stored === '' || $sent === '' || !hash_equals($stored, $sent)) {
             http_response_code(419);
             echo json_encode(['ok' => false, 'message' => 'Stale session. Please refresh.']);
             exit;
@@ -89,7 +90,22 @@ if ($action === 'checkin') {
         db()->prepare("INSERT INTO checkins (ticket_id, event_id, checked_in_by, method) VALUES (:t, :e, :u, 'qr')")
             ->execute([':t' => $ticket['id'], ':e' => $ticket['event_id'], ':u' => current_user_id()]);
         db()->prepare("UPDATE tickets SET status = 'used' WHERE id = :id")->execute([':id' => $ticket['id']]);
-        db()->prepare("UPDATE event_bookings SET status = 'attended' WHERE id = :id")->execute([':id' => $ticket['booking_id']]);
+        // Only flip the whole booking to attended once every ticket on it
+        // has been scanned — a 4-seat booking isn't "attended" on seat 1.
+        $remaining = db()->prepare(
+            "SELECT COUNT(*) FROM tickets WHERE booking_id = :b AND status = 'valid'"
+        );
+        $remaining->execute([':b' => $ticket['booking_id']]);
+        if ((int) $remaining->fetchColumn() === 0) {
+            db()->prepare("UPDATE event_bookings SET status = 'attended' WHERE id = :id")
+                ->execute([':id' => $ticket['booking_id']]);
+            if (function_exists('earn_referral_reward')) {
+                earn_referral_reward((int) $ticket['booking_id']);
+            }
+            if (function_exists('earn_partner_referral')) {
+                earn_partner_referral((int) $ticket['booking_id']);
+            }
+        }
         db()->commit();
         audit_log('checkin.qr', 'tickets', (int) $ticket['id']);
         echo json_encode([

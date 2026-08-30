@@ -28,11 +28,33 @@ if ($purpose === 'booking') {
     if (!$entity) { http_response_code(404); exit('Membership not found.'); }
     $amount = (float) $entity['price'];
     $description = 'Membership · ' . $entity['name'];
+} elseif ($purpose === 'class_pack') {
+    $stmt = db()->prepare(
+        "SELECT pp.*, cp.name AS pack_name
+           FROM pack_purchases pp
+           JOIN class_packs cp ON cp.id = pp.pack_id
+          WHERE pp.id = :id AND pp.user_id = :u AND pp.status = 'pending' LIMIT 1"
+    );
+    $stmt->execute([':id' => $ref, ':u' => $user['id']]);
+    $entity = $stmt->fetch();
+    if (!$entity) { http_response_code(404); exit('Pack purchase not found.'); }
+    $snap   = json_decode((string) ($entity['pack_snapshot'] ?? '{}'), true) ?: [];
+    $amount = (float) ($snap['price'] ?? 0);
+    $description = 'Class pack · ' . $entity['pack_name'];
+} elseif ($purpose === 'order') {
+    $stmt = db()->prepare(
+        "SELECT * FROM orders WHERE id = :id AND user_id = :u AND status = 'pending' LIMIT 1"
+    );
+    $stmt->execute([':id' => $ref, ':u' => $user['id']]);
+    $entity = $stmt->fetch();
+    if (!$entity) { http_response_code(404); exit('Order not found.'); }
+    $amount = (float) $entity['total'];
+    $description = 'Order ' . $entity['order_ref'];
 } else {
     http_response_code(400); exit('Unknown purpose.');
 }
 
-$cfg = config('payment');
+$cfg = payment_config();
 
 $ins = db()->prepare(
     "INSERT INTO payments (user_id, purpose, reference_id, gateway, amount, currency, status)
@@ -45,11 +67,26 @@ $ins->execute([
 $paymentId = (int) db()->lastInsertId();
 
 if (!$cfg['api_key'] || !$cfg['collection_id']) {
-    flash('payment', 'Payment gateway not yet configured. (Demo mode — booking marked as paid.)', 'info');
+    // Demo auto-settle is a dev convenience only. In a production config
+    // (sandbox=false) missing credentials must fail loudly — never hand
+    // out tickets/membership/credits without taking payment.
+    if (empty($cfg['sandbox'])) {
+        error_log('[billplz_create] live config but Billplz credentials are missing — refusing to auto-settle');
+        flash('payment', 'Payments are temporarily unavailable. Please try again shortly or contact us.', 'error');
+        db()->prepare("UPDATE payments SET status='failed' WHERE id=:id")->execute([':id' => $paymentId]);
+        redirect('/member/my_bookings.php');
+    }
+    flash('payment', 'Payment gateway not yet configured. (Demo mode — marked as paid.)', 'info');
     db()->prepare("UPDATE payments SET status='paid', paid_at=NOW(), gateway_bill_id=:b WHERE id=:id")
         ->execute([':b' => 'DEMO-' . $paymentId, ':id' => $paymentId]);
     settle_payment($paymentId);
-    redirect($purpose === 'membership' ? '/member/my_membership.php' : '/member/my_bookings.php');
+    $demoRedirect = match ($purpose) {
+        'membership' => '/member/my_membership.php',
+        'class_pack' => '/member/my_credits.php',
+        'order'      => '/member/my_orders.php',
+        default      => '/member/my_bookings.php',
+    };
+    redirect($demoRedirect);
 }
 
 $payload = http_build_query([
@@ -86,39 +123,14 @@ if ($httpCode >= 200 && $httpCode < 300 && $response) {
 }
 
 flash('payment', 'We could not start your payment. Please try again or contact support.', 'error');
-redirect('/member/my_bookings.php');
+$failRedirect = match ($purpose) {
+    'membership' => '/member/my_membership.php',
+    'class_pack' => '/member/my_credits.php',
+    'order'      => '/member/my_orders.php',
+    default      => '/member/my_bookings.php',
+};
+redirect($failRedirect);
 
-/**
- * Marks reference as paid and (for bookings) issues tickets.
- */
-function settle_payment(int $paymentId): void
-{
-    $p = db()->prepare("SELECT * FROM payments WHERE id = :id");
-    $p->execute([':id' => $paymentId]);
-    $payment = $p->fetch();
-    if (!$payment || $payment['status'] !== 'paid') {
-        return;
-    }
-    if ($payment['purpose'] === 'booking') {
-        db()->prepare("UPDATE event_bookings SET status='paid', payment_id=:p WHERE id=:id")
-            ->execute([':p' => $paymentId, ':id' => $payment['reference_id']]);
-        $b = db()->prepare("SELECT booking_ref, quantity FROM event_bookings WHERE id = :id");
-        $b->execute([':id' => $payment['reference_id']]);
-        $booking = $b->fetch();
-        $check = db()->prepare("SELECT COUNT(*) FROM tickets WHERE booking_id = :b");
-        $check->execute([':b' => $payment['reference_id']]);
-        if ((int) $check->fetchColumn() === 0 && $booking) {
-            $t = db()->prepare("INSERT INTO tickets (booking_id, ticket_code, qr_token) VALUES (:b, :c, :tok)");
-            for ($i = 0; $i < (int) $booking['quantity']; $i++) {
-                $t->execute([
-                    ':b'   => $payment['reference_id'],
-                    ':c'   => $booking['booking_ref'] . '-' . ($i + 1),
-                    ':tok' => generate_token(24),
-                ]);
-            }
-        }
-    } elseif ($payment['purpose'] === 'membership') {
-        db()->prepare("UPDATE memberships SET status='active', last_payment_id=:p WHERE id=:id")
-            ->execute([':p' => $paymentId, ':id' => $payment['reference_id']]);
-    }
-}
+// settle_payment() now lives in includes/payments.php and is auto-loaded
+// via bootstrap, so admin + member-side callers can reuse it without
+// triggering this endpoint's HTTP flow.
