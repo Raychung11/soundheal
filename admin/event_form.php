@@ -159,7 +159,23 @@ if (is_post()) {
     }
 
     if (!$errors) {
-        $slug = $event['slug'] ?: slugify($event['title']);
+        // slugify() strips non-ASCII to dashes, so a pure-Chinese title
+        // ("人宠共频 …") collapses to '-'. Fall back to a short random
+        // slug when that happens, then make it unique by appending
+        // -2, -3 … if the slug is already taken.
+        $slug = trim((string) ($event['slug'] ?: slugify($event['title'])), '-');
+        if ($slug === '' || !preg_match('/[a-z0-9]/i', $slug)) {
+            $slug = 'event-' . bin2hex(random_bytes(3));
+        }
+        $base = $slug;
+        $n = 1;
+        while (true) {
+            $chk = db()->prepare("SELECT id FROM events WHERE slug = :s AND id <> :id LIMIT 1");
+            $chk->execute([':s' => $slug, ':id' => (int) $id]);
+            if (!$chk->fetchColumn()) break;
+            $n++;
+            $slug = $base . '-' . $n;
+        }
         if ($id) {
             $stmt = db()->prepare(
                 "UPDATE events SET title=:t, subtitle=:st, description=:d, cover_image=:ci,

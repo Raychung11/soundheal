@@ -47,6 +47,12 @@ if (!function_exists('blog_list_published')) {
     function blog_list_published(?string $tag = null): array
     {
         if ($tag !== null && $tag !== '') {
+            // Force both sides of the LIKE to the same collation.
+            // On MariaDB 10.6+ the tags column lands in
+            // utf8mb4_uca1400_ai_ci while bound params arrive as
+            // utf8mb4_bin, which throws "Illegal mix of collations".
+            // utf8mb4_unicode_ci is universally available and matches
+            // what we want semantically (case-insensitive, Unicode-aware).
             $stmt = db()->prepare(
                 "SELECT bp.*, u.full_name AS author_name
                    FROM blog_posts bp
@@ -54,8 +60,8 @@ if (!function_exists('blog_list_published')) {
                   WHERE bp.status = 'published'
                     AND bp.published_at IS NOT NULL
                     AND bp.published_at <= NOW()
-                    AND CONCAT(',', LOWER(REPLACE(bp.tags, ' ', '')), ',')
-                        LIKE CONCAT('%,', LOWER(:tag), ',%')
+                    AND CONCAT(',', LOWER(REPLACE(bp.tags, ' ', '')), ',') COLLATE utf8mb4_unicode_ci
+                        LIKE CONCAT('%,', LOWER(:tag), ',%') COLLATE utf8mb4_unicode_ci
                   ORDER BY bp.published_at DESC"
             );
             $stmt->execute([':tag' => trim($tag)]);
