@@ -33,10 +33,16 @@ uploads/ qr/ logs/
 
 ## Local setup (Hostinger or local LAMP)
 
-1. Create a MySQL database, then import the schema:
+1. Create a MySQL database, then import the schema and apply migrations in order:
    ```bash
    mysql -u root -p soundheal < database/schema.sql
+   mysql -u root -p soundheal < database/migrations/002_phase2.sql
+   mysql -u root -p soundheal < database/migrations/003_phase3.sql
    ```
+   Migration `003_phase3.sql` seeds an admin-controlled `site_settings` table,
+   one demo Crystal Bowl Sound Bath session for the upcoming Saturday at 7pm,
+   a free 5-minute sample audio, an ambient hero loop, and three soft testimonials —
+   so the home page renders something real on first boot.
 2. Copy `.env.example` to `.env` (or set env vars in hPanel) and fill in DB + service credentials.
 3. Point your web root at the project root (`index.php` redirects to `public/`).
 4. Make `uploads/`, `qr/`, and `logs/` writable by PHP:
@@ -77,12 +83,16 @@ uploads/ qr/ logs/
 
 ## Cron jobs (Hostinger → cPanel → Cron)
 
-Suggested cadence:
+One live cron job:
+
 ```
-*/30 * * * *  /usr/bin/php /home/USER/public_html/cron/membership_renewal.php
-0    9 * * *  /usr/bin/php /home/USER/public_html/cron/session_reminders.php
+*/30 * * * *  /usr/bin/curl -fsS "https://<host>/api/send_reminders.php?token=<TOKEN>" >/dev/null
 ```
-*(Cron scripts not yet wired — slot them under a future `/cron` folder.)*
+
+Full setup — token config, cPanel walkthrough, CLI alternative, and the
+pattern for adding new jobs — lives in [`docs/CRON.md`](docs/CRON.md).
+Anything time-triggered on the site is documented there; everything
+else runs inline from a user action.
 
 ## Tone
 

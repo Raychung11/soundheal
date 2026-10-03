@@ -42,6 +42,23 @@ require __DIR__ . '/../includes/admin_layout.php';
   <?php endforeach; ?>
 </div>
 
+<?php if (has_role('admin') && function_exists('revenue_split_summary')):
+  $rsCfg = revenue_split_config();
+  $rsSum = revenue_split_summary();
+?>
+<a href="<?= url('/admin/revenue_splits.php') ?>"
+   class="group mt-4 flex items-center justify-between gap-4 border border-gold-500/30 rounded-2xl p-5 bg-gold-500/5 hover:bg-gold-500/10 transition">
+  <div>
+    <p class="text-xs uppercase tracking-widest text-gold-400/80"><?= e($rsCfg['partner_label']) ?> · owed now</p>
+    <p class="font-serif text-3xl text-gold-400 mt-2"><?= e(format_money((float) $rsSum['partner_unpaid'])) ?></p>
+    <p class="text-[11px] text-beige-100/45 mt-1">
+      <?= (int) $rsSum['unpaid_count'] ?> unpaid split(s) · paid out to date <?= e(format_money((float) $rsSum['partner_paid'])) ?>
+    </p>
+  </div>
+  <span class="text-gold-400/60 text-sm whitespace-nowrap group-hover:translate-x-0.5 transition">Manage →</span>
+</a>
+<?php endif; ?>
+
 <div class="mt-10 border border-white/5 rounded-2xl bg-navy-900/40 p-6">
   <h2 class="font-serif text-xl text-gold-400">Recent bookings</h2>
   <?php if (!$recentBookings): ?>

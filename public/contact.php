@@ -18,37 +18,49 @@ if (is_post()) {
     }
 
     if (!$errors) {
-        if ($type === 'corporate') {
-            $stmt = db()->prepare(
-                'INSERT INTO corporate_inquiries
-                    (company_name, contact_name, contact_email, contact_phone, team_size, interest, message)
-                 VALUES (:co, :n, :e, :p, :ts, :i, :m)'
-            );
-            $stmt->execute([
-                ':co' => input('company', $name),
-                ':n'  => $name,
-                ':e'  => $email,
-                ':p'  => $phone,
-                ':ts' => input('team_size'),
-                ':i'  => input('interest'),
-                ':m'  => $message,
-            ]);
-            audit_log('contact.corporate', 'corporate_inquiries', (int) db()->lastInsertId());
+        if (!throttle('contact:' . client_ip(), 5, 600)) {
+            $errors[] = 'Too many submissions. Please try again shortly.';
         } else {
-            $stmt = db()->prepare(
-                'INSERT INTO contact_leads (name, email, phone, subject, message)
-                 VALUES (:n, :e, :p, :s, :m)'
-            );
-            $stmt->execute([
-                ':n' => $name,
-                ':e' => $email,
-                ':p' => $phone,
-                ':s' => input('subject'),
-                ':m' => $message,
-            ]);
-            audit_log('contact.general', 'contact_leads', (int) db()->lastInsertId());
+            if ($type === 'corporate') {
+                $company = (string) input('company', $name);
+                $stmt = db()->prepare(
+                    'INSERT INTO corporate_inquiries
+                        (company_name, contact_name, contact_email, contact_phone, team_size, interest, message)
+                     VALUES (:co, :n, :e, :p, :ts, :i, :m)'
+                );
+                $stmt->execute([
+                    ':co' => $company,
+                    ':n'  => $name,
+                    ':e'  => $email,
+                    ':p'  => $phone,
+                    ':ts' => input('team_size'),
+                    ':i'  => input('interest'),
+                    ':m'  => $message,
+                ]);
+                audit_log('contact.corporate', 'corporate_inquiries', (int) db()->lastInsertId());
+                send_mail($email, $name, 'We received your inquiry', 'contact_received', ['name' => $name]);
+                $adminTo = config('app.mail.from_address');
+                if ($adminTo) {
+                    send_mail($adminTo, 'SoundHeal Team', '[Corporate] ' . $company,
+                        'corporate_lead', ['company_name' => $company, 'message' => $message]);
+                }
+            } else {
+                $stmt = db()->prepare(
+                    'INSERT INTO contact_leads (name, email, phone, subject, message)
+                     VALUES (:n, :e, :p, :s, :m)'
+                );
+                $stmt->execute([
+                    ':n' => $name,
+                    ':e' => $email,
+                    ':p' => $phone,
+                    ':s' => input('subject'),
+                    ':m' => $message,
+                ]);
+                audit_log('contact.general', 'contact_leads', (int) db()->lastInsertId());
+                send_mail($email, $name, 'We received your note', 'contact_received', ['name' => $name]);
+            }
+            $ok = true;
         }
-        $ok = true;
     }
 }
 require __DIR__ . '/../includes/header.php';

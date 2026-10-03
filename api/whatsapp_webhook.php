@@ -55,8 +55,9 @@ if (!$conversationId) {
 db()->prepare("INSERT INTO ai_messages (conversation_id, role, content) VALUES (:c, 'user', :m)")
     ->execute([':c' => $conversationId, ':m' => $text]);
 
+define('ARIA_CHAT_LIBRARY', true);
 require_once __DIR__ . '/ai_chat.php';
-$reply = ai_reply($conversationId, $text);
+$reply = ai_reply($conversationId, $text, null);
 
 db()->prepare("INSERT INTO ai_messages (conversation_id, role, content) VALUES (:c, 'assistant', :m)")
     ->execute([':c' => $conversationId, ':m' => $reply]);

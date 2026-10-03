@@ -25,7 +25,10 @@ function csrf_verify(): void
 {
     $name = config('app.security.csrf_token_name', '_csrf');
     $sent = $_POST[$name] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
-    if (!is_string($sent) || !hash_equals($_SESSION['_csrf_token'] ?? '', $sent)) {
+    $stored = $_SESSION['_csrf_token'] ?? '';
+    // Reject when either side is empty — otherwise hash_equals('','') is true
+    // and a fresh session (no form rendered yet) bypasses CSRF entirely.
+    if ($stored === '' || !is_string($sent) || $sent === '' || !hash_equals($stored, $sent)) {
         http_response_code(419);
         exit('Invalid CSRF token. Please refresh and try again.');
     }

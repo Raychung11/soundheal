@@ -67,10 +67,126 @@ function asset(string $path): string
     return url('assets/' . ltrim($path, '/'));
 }
 
+/**
+ * Extract an 11-char YouTube video ID from any common URL form
+ * (watch?v=, youtu.be/, /shorts/, /embed/) or a bare ID. Returns
+ * '' if nothing valid is found, so callers can hide empty slots.
+ */
+function youtube_id(string $input): string
+{
+    $input = trim($input);
+    if ($input === '') {
+        return '';
+    }
+    if (preg_match('~^[A-Za-z0-9_-]{11}$~', $input)) {
+        return $input;
+    }
+    if (preg_match('~(?:youtu\.be/|/shorts/|/embed/|[?&]v=)([A-Za-z0-9_-]{11})~', $input, $m)) {
+        return $m[1];
+    }
+    return '';
+}
+
+/**
+ * Vimeo numeric video id from any common URL form (vimeo.com/12345,
+ * player.vimeo.com/video/12345, /manage/videos/12345). Returns '' if
+ * nothing recognisable is present.
+ */
+function vimeo_id(string $input): string
+{
+    $input = trim($input);
+    if ($input === '') return '';
+    if (preg_match('~^\d{6,}$~', $input)) return $input;
+    if (preg_match('~vimeo\.com/(?:video/|manage/videos/)?(\d{6,})~', $input, $m)) return $m[1];
+    return '';
+}
+
+/**
+ * Resolve a gallery item's cover image URL. If the row has an
+ * uploaded image we use it; otherwise, for YouTube URLs we fall
+ * back to the platform-hosted hqdefault thumbnail so admins don't
+ * have to upload a separate cover for every clip.
+ */
+function gallery_thumbnail_url(array $row): string
+{
+    $img = (string) ($row['image'] ?? '');
+    if ($img !== '') {
+        return str_starts_with($img, '/') ? url($img) : $img;
+    }
+    $video = (string) ($row['video_url'] ?? '');
+    if ($video !== '') {
+        $yt = youtube_id($video);
+        if ($yt !== '') return 'https://i.ytimg.com/vi/' . $yt . '/hqdefault.jpg';
+        // Vimeo doesn't expose a free thumbnail URL by ID — needs an
+        // API round-trip we'd rather not bake in. Return empty so the
+        // grid renders a soft placeholder tile instead.
+    }
+    return '';
+}
+
+/**
+ * Embed URL for a gallery video — the src that goes on the <iframe>
+ * inside the lightbox. Empty string when the URL isn't a supported
+ * platform.
+ */
+function gallery_video_embed_url(string $videoUrl): string
+{
+    $yt = youtube_id($videoUrl);
+    if ($yt !== '') return 'https://www.youtube.com/embed/' . $yt . '?rel=0&autoplay=1';
+    $vm = vimeo_id($videoUrl);
+    if ($vm !== '') return 'https://player.vimeo.com/video/' . $vm . '?autoplay=1';
+    return '';
+}
+
 function redirect(string $path, int $code = 302): void
 {
     header('Location: ' . (str_starts_with($path, 'http') ? $path : url($path)), true, $code);
     exit;
+}
+
+/**
+ * Render a multi-line admin-entered description as clean HTML:
+ *   - blank lines  → <p> paragraphs
+ *   - single \n    → <br>
+ *   - a block whose every line begins with an emoji or '-'/'*' marker
+ *     is rendered as a <ul>; the marker stays as the visual bullet.
+ * Always escapes underlying content — safe to pass user input.
+ */
+function render_rich_text(string $text): string
+{
+    $text = trim($text);
+    if ($text === '') {
+        return '';
+    }
+    $text = str_replace(["\r\n", "\r"], "\n", $text);
+    $blocks = preg_split('/\n\s*\n/', $text) ?: [];
+    $html = '';
+    foreach ($blocks as $block) {
+        $block = trim($block);
+        if ($block === '') continue;
+
+        $lines = array_values(array_filter(array_map('trim', preg_split('/\n/', $block) ?: []), fn($l) => $l !== ''));
+        $allBullets = count($lines) >= 2;
+        foreach ($lines as $line) {
+            if (!preg_match('/^([-*•—]|[\x{2600}-\x{27BF}]|[\x{1F300}-\x{1FAFF}]|\p{So}|\p{Sk})\s+/u', $line)) {
+                $allBullets = false;
+                break;
+            }
+        }
+        if ($allBullets) {
+            $html .= '<ul class="mt-1 space-y-1.5 list-none pl-0">';
+            foreach ($lines as $line) {
+                // Strip plain ASCII / em-dash bullets so the visible bullet is
+                // whatever marker the admin chose (emoji stays as-is).
+                $line = preg_replace('/^[-*•—]\s+/u', '', $line);
+                $html .= '<li>' . e((string) $line) . '</li>';
+            }
+            $html .= '</ul>';
+        } else {
+            $html .= '<p class="leading-relaxed">' . nl2br(e($block)) . '</p>';
+        }
+    }
+    return $html;
 }
 
 function flash(string $key, ?string $message = null, string $type = 'info')
@@ -117,6 +233,47 @@ function is_post(): bool
 function generate_token(int $length = 32): string
 {
     return bin2hex(random_bytes($length));
+}
+
+/**
+ * Title-case a person's name: trims, collapses whitespace, capitalises
+ * the first letter of every word, preserves apostrophes and hyphens
+ * ("o'neill" → "O'Neill", "mary-jane" → "Mary-Jane"). Unicode-safe.
+ */
+function format_name(string $raw): string
+{
+    $clean = trim(preg_replace('/\s+/u', ' ', $raw) ?? '');
+    if ($clean === '') return '';
+    return mb_convert_case($clean, MB_CASE_TITLE, 'UTF-8');
+}
+
+/**
+ * Normalise a phone number to E.164-ish format. Local Malaysian numbers
+ * starting with 0 get rewritten to +60…. Bare digits also get +60
+ * prepended. Numbers already containing a + are kept as-is (only the
+ * non-digit characters after the + are stripped).
+ *
+ * Returns null when the input has no digits.
+ */
+function normalize_phone(?string $raw, string $defaultCountryCode = '60'): ?string
+{
+    $raw = trim((string) $raw);
+    if ($raw === '') return null;
+
+    if ($raw[0] === '+') {
+        $digits = preg_replace('/\D/', '', substr($raw, 1));
+        return $digits === '' ? null : '+' . $digits;
+    }
+
+    $digits = preg_replace('/\D/', '', $raw);
+    if ($digits === '') return null;
+
+    if ($digits[0] === '0') {
+        $digits = $defaultCountryCode . substr($digits, 1);
+    } elseif (!str_starts_with($digits, $defaultCountryCode)) {
+        $digits = $defaultCountryCode . $digits;
+    }
+    return '+' . $digits;
 }
 
 function format_money(float $amount, string $currency = 'MYR'): string

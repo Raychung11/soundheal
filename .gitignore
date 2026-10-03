@@ -5,11 +5,16 @@
 logs/*.log
 logs/*.txt
 
-uploads/**/*
+# Ignore user-uploaded media but keep the bucket directories so the
+# app can write into them on a fresh clone. .htaccess is un-ignored
+# too so per-bucket Apache rules ship with the repo
+# (uploads/content/.htaccess relies on this).
+uploads/*
 !uploads/.gitkeep
-!uploads/events/.gitkeep
-!uploads/content/.gitkeep
-!uploads/testimonials/.gitkeep
+!uploads/*/
+uploads/*/*
+!uploads/*/.gitkeep
+!uploads/*/.htaccess
 
 qr/*
 !qr/.gitkeep

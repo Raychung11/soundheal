@@ -16,13 +16,49 @@ if (is_post()) {
     redirect('/admin/events.php');
 }
 
+// Match book_event.php's capacity check: pending bookings hold a seat
+// until they pay or the hold times out, so they should count in the
+// "seats taken" display too. Cancelled/refunded/no_show bookings free
+// the seat and are excluded.
+// Only list top-level events (templates + one-offs). Materialised
+// child instances of recurring templates are managed via the debug
+// tool / session sheet; showing them here duplicated the parent row
+// once per slot and confused admins into editing children directly.
 $events = db()->query(
     "SELECT e.*,
+            x.title AS experience_title, x.slug AS experience_slug,
             (SELECT COALESCE(SUM(quantity), 0)
-               FROM event_bookings WHERE event_id = e.id AND status IN ('paid','attended')) AS seats_taken
+               FROM event_bookings
+               WHERE event_id = e.id
+                 AND status IN ('pending','paid','attended')) AS seats_taken,
+            (SELECT COALESCE(SUM(quantity), 0)
+               FROM event_bookings
+               WHERE event_id = e.id
+                 AND status IN ('paid','attended')) AS seats_paid,
+            (SELECT COALESCE(SUM(quantity), 0)
+               FROM event_bookings b JOIN events c ON c.id = b.event_id
+               WHERE c.parent_event_id = e.id
+                 AND b.status IN ('pending','paid','attended')) AS child_seats_taken,
+            (SELECT COALESCE(SUM(quantity), 0)
+               FROM event_bookings b JOIN events c ON c.id = b.event_id
+               WHERE c.parent_event_id = e.id
+                 AND b.status IN ('paid','attended')) AS child_seats_paid
      FROM events e
+     LEFT JOIN experiences x ON x.id = e.experience_id
+     WHERE e.parent_event_id IS NULL
      ORDER BY e.starts_at DESC LIMIT 100"
 )->fetchAll();
+
+// Roll child bookings into the display totals for recurring templates
+// so admins see the true "how many booked across all occurrences"
+// number, not just seats stuck on the template row itself.
+foreach ($events as &$evRow) {
+    if (($evRow['recurrence'] ?? 'none') !== 'none') {
+        $evRow['seats_taken'] = (int) $evRow['seats_taken'] + (int) $evRow['child_seats_taken'];
+        $evRow['seats_paid']  = (int) $evRow['seats_paid']  + (int) $evRow['child_seats_paid'];
+    }
+}
+unset($evRow);
 
 require __DIR__ . '/../includes/admin_layout.php';
 ?>
@@ -35,7 +71,7 @@ require __DIR__ . '/../includes/admin_layout.php';
   <table class="w-full text-sm">
     <thead class="text-left text-beige-100/50 text-xs uppercase tracking-wider bg-navy-950/40">
       <tr>
-        <th class="px-4 py-3">Title</th><th>When</th><th>Status</th><th>Seats</th><th></th>
+        <th class="px-4 py-3">Title</th><th>Experience</th><th>When</th><th>Status</th><th>Seats</th><th></th>
       </tr>
     </thead>
     <tbody class="divide-y divide-white/5">
@@ -45,10 +81,36 @@ require __DIR__ . '/../includes/admin_layout.php';
             <p class="text-beige-100"><?= e($e['title']) ?></p>
             <p class="text-xs text-beige-100/40"><?= e($e['location'] ?? '') ?></p>
           </td>
+          <td>
+            <?php if (!empty($e['experience_title'])): ?>
+              <span class="text-xs px-2 py-1 rounded-full bg-gold-500/10 text-gold-400 border border-gold-500/25"><?= e($e['experience_title']) ?></span>
+            <?php else: ?>
+              <a href="<?= url('/admin/event_form.php?id=' . (int)$e['id']) ?>#experience_id"
+                 class="text-xs text-beige-100/45 hover:text-gold-400 underline-offset-4 hover:underline">— link</a>
+            <?php endif; ?>
+          </td>
           <td><?= e(format_datetime($e['starts_at'])) ?></td>
-          <td><span class="text-xs px-2 py-1 rounded-full <?= $e['status'] === 'published' ? 'bg-gold-500/20 text-gold-400' : 'bg-white/5 text-beige-100/60' ?>"><?= e($e['status']) ?></span></td>
-          <td><?= (int)$e['seats_taken'] ?> / <?= (int)$e['capacity'] ?></td>
-          <td class="text-right pr-4">
+          <td>
+            <span class="text-xs px-2 py-1 rounded-full <?= $e['status'] === 'published' ? 'bg-gold-500/20 text-gold-400' : 'bg-white/5 text-beige-100/60' ?>"><?= e($e['status']) ?></span>
+            <?php if (($e['audience'] ?? 'public') === 'private'): ?>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-beige-100/55 border border-white/10 ml-1" title="Hidden from public browse">private</span>
+            <?php endif; ?>
+            <?php if (array_key_exists('credit_eligible', $e) && (int) $e['credit_eligible'] === 0): ?>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-beige-100/55 border border-white/10 ml-1" title="Class-pack credits can't book this session">no credits</span>
+            <?php endif; ?>
+          </td>
+          <td>
+            <span class="text-beige-100"><?= (int)$e['seats_taken'] ?></span>
+            <span class="text-beige-100/40">/ <?= (int)$e['capacity'] ?></span>
+            <?php $pending = (int) $e['seats_taken'] - (int) $e['seats_paid']; if ($pending > 0): ?>
+              <span class="ml-2 text-[10px] uppercase tracking-widest text-beige-100/50">
+                <span class="text-gold-400/80"><?= (int)$e['seats_paid'] ?> paid</span> · <?= $pending ?> pending
+              </span>
+            <?php endif; ?>
+          </td>
+          <td class="text-right pr-4 whitespace-nowrap">
+            <a href="<?= url('/admin/session_sheet.php?event_id=' . (int)$e['id']) ?>"
+               class="text-gold-400/80 text-xs hover:text-gold-300 mr-3">Sheet</a>
             <a href="<?= url('/admin/event_form.php?id=' . (int)$e['id']) ?>" class="text-gold-400 text-sm hover:text-gold-300">Edit</a>
             <form method="post" class="inline ml-3" onsubmit="return confirm('Archive this event?');">
               <?= csrf_field() ?>
@@ -60,7 +122,7 @@ require __DIR__ . '/../includes/admin_layout.php';
         </tr>
       <?php endforeach; ?>
       <?php if (!$events): ?>
-        <tr><td colspan="5" class="px-4 py-6 text-beige-100/60">No events yet.</td></tr>
+        <tr><td colspan="6" class="px-4 py-6 text-beige-100/60">No events yet.</td></tr>
       <?php endif; ?>
     </tbody>
   </table>

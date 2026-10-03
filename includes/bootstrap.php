@@ -14,6 +14,38 @@ define('SOUNDHEAL_BOOTED', true);
 // Locate root regardless of which subfolder includes this file.
 define('SH_ROOT', dirname(__DIR__));
 
+// Load .env into PHP's env / $_ENV so config/*.php's getenv() calls
+// see the values. This has to run BEFORE any config file is required.
+//
+// Deliberately tiny — supports KEY=value with optional "double" or
+// 'single' quoting and #comments. No variable interpolation, no
+// export prefix stripping, no fancy escapes. Matches the .env.example
+// shape and nothing more.
+$envFile = SH_ROOT . '/.env';
+if (is_readable($envFile)) {
+    foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        $line = ltrim($line);
+        if ($line === '' || $line[0] === '#') continue;
+        if (!str_contains($line, '=')) continue;
+        [$k, $v] = explode('=', $line, 2);
+        $k = trim($k);
+        if ($k === '' || !preg_match('/^[A-Z_][A-Z0-9_]*$/i', $k)) continue;
+        $v = trim($v);
+        // Strip a matching pair of surrounding quotes.
+        if (strlen($v) >= 2
+            && (($v[0] === '"' && $v[-1] === '"') || ($v[0] === "'" && $v[-1] === "'"))) {
+            $v = substr($v, 1, -1);
+        }
+        // Don't clobber a value the host already set (e.g. via
+        // Apache SetEnv / hPanel). Real env wins.
+        if (getenv($k) === false) {
+            putenv($k . '=' . $v);
+            $_ENV[$k]    = $v;
+            $_SERVER[$k] = $v;
+        }
+    }
+}
+
 // Surface errors only in debug mode.
 $appConfig = require SH_ROOT . '/config/app.php';
 date_default_timezone_set($appConfig['timezone']);
@@ -39,3 +71,33 @@ require_once __DIR__ . '/session.php';
 require_once __DIR__ . '/csrf.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/role.php';
+require_once __DIR__ . '/mail.php';
+require_once __DIR__ . '/upload.php';
+require_once __DIR__ . '/throttle.php';
+require_once __DIR__ . '/site_settings.php';
+require_once __DIR__ . '/marketing.php';
+require_once __DIR__ . '/referrals.php';
+require_once __DIR__ . '/referral_rewards.php';
+require_once __DIR__ . '/partners.php';
+require_once __DIR__ . '/waitlist.php';
+require_once __DIR__ . '/promo_codes.php';
+require_once __DIR__ . '/gift_vouchers.php';
+require_once __DIR__ . '/payments.php';
+require_once __DIR__ . '/invoices.php';
+require_once __DIR__ . '/class_packs.php';
+require_once __DIR__ . '/products.php';
+require_once __DIR__ . '/oauth_google.php';
+require_once __DIR__ . '/magic_link.php';
+require_once __DIR__ . '/blog.php';
+require_once __DIR__ . '/revenue.php';
+require_once __DIR__ . '/events_recurrence.php';
+require_once __DIR__ . '/event_packages.php';
+require_once __DIR__ . '/aria.php';
+require_once __DIR__ . '/aria_tools.php';
+
+// If the visitor arrived with ?ref=<code> on any public page, drop the
+// referral cookie so it can fire on later signup / booking. No-op when
+// no ref param is present.
+if (function_exists('capture_referral_cookie')) {
+    capture_referral_cookie();
+}

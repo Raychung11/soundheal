@@ -1,0 +1,7 @@
+# Audio files in this folder must only be reachable through
+# /api/stream_content.php (which enforces auth + premium gating).
+# Cover images stored alongside the audio should still load directly.
+
+<FilesMatch "\.(mp3|m4a|mp4|wav|ogg|aac|flac)$">
+    Require all denied
+</FilesMatch>
